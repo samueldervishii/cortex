@@ -26,3 +26,5 @@ dist/
 Thumbs.db
 frontend/package-lock.json
 CLAUDE.md
+llm-council-frontend/pnpm-lock.yaml
+.claude/settings.json

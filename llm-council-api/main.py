@@ -10,11 +10,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import COUNCIL_MODELS, CHAIRMAN_MODEL, settings
 from core import setup_logging
-from core.cache import close_redis
 from core.dependencies import (
     get_session_repository,
     get_settings_repository,
-    close_openrouter_client,
+    close_llm_client,
 )
 from core.metrics import init_metrics, track_request
 from db import get_database, close_database, ensure_indexes
@@ -138,16 +137,6 @@ async def lifespan(_app: FastAPI):
     except Exception as e:
         print(f"MongoDB connection failed: {e}")
 
-    # Initialize Redis connection (optional - will fallback to memory if unavailable)
-    if settings.redis_enabled:
-        from core.cache import get_redis_client
-
-        redis_client = get_redis_client()
-        if redis_client is not None:
-            print(f"Redis connected: {settings.redis_url}")
-        else:
-            print("Redis unavailable - using in-memory cache fallback")
-
     yield
     print("LLM Council API shutting down...")
 
@@ -160,13 +149,8 @@ async def lifespan(_app: FastAPI):
             pass
 
     # Close HTTP clients gracefully
-    await close_openrouter_client()
-    print("OpenRouter client closed")
-
-    # Close Redis connection
-    if settings.redis_enabled:
-        await close_redis()
-        print("Redis connection closed")
+    await close_llm_client()
+    print("LLM client closed")
 
     # Close database connection
     await close_database()

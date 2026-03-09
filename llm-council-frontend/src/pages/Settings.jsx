@@ -314,7 +314,7 @@ function Settings({
                       <td className="model-name-cell">{model.name}</td>
                       <td className="model-role-cell">
                         {model.is_chairman ? (
-                          <span className="chairman-badge">Chairman</span>
+                          <span className="chairman-badge">Head</span>
                         ) : (
                           <span className="member-text">Member</span>
                         )}
@@ -498,7 +498,7 @@ function Settings({
             </p>
 
             <div className="about-links">
-              <a
+              {/* <a
                 href="https://llm-council-docs.netlify.app/"
                 target="_blank"
                 rel="noopener noreferrer"
@@ -516,9 +516,9 @@ function Settings({
                   <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
                 </svg>
                 Documentation
-              </a>
+              </a> */}
               <a
-                href="https://github.com/your-repo/llm-council"
+                href="https://github.com/samueldervishii/llm-council"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="about-link"

@@ -29,10 +29,7 @@ export default defineConfig({
   optimizeDeps: {
     include: ['react', 'react-dom', 'react-router-dom', 'axios'],
   },
-  // Enable gzip preview
   server: {
-    headers: {
-      'Cache-Control': 'public, max-age=31536000',
-    },
+    // No aggressive caching in dev mode
   },
 })

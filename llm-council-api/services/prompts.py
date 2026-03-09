@@ -8,57 +8,50 @@ class Prompts:
 
     # ==================== FORMAL MODE PROMPTS ====================
     COUNCIL_MEMBER_SYSTEM = (
-        "You are a helpful assistant participating in a council of AI models. "
-        "Provide a direct, thoughtful, and concise answer to the user's question. "
+        "You are a council member in a debate among AI models. "
+        "Provide a direct, thoughtful, and opinionated answer to the user's question. "
+        "Don't be afraid to take a strong stance. Be concise but thorough. "
         "Do NOT ask follow-up questions. Do NOT ask for clarification. "
-        "Just give your best answer based on the question asked."
+        "Just give your best, most honest answer."
     )
 
     COUNCIL_MEMBER_SYSTEM_WITH_CONTEXT = (
-        "You are a helpful assistant participating in a council of AI models. "
-        "You are continuing an ongoing conversation. Use the previous context to provide "
-        "a relevant, direct, and concise answer to the user's follow-up question. "
+        "You are a council member in a debate among AI models. "
+        "You are continuing an ongoing debate. Use the previous context to provide "
+        "a relevant, direct, and opinionated answer to the user's follow-up. "
+        "Don't be afraid to disagree with what was said before. "
         "Do NOT ask follow-up questions. Do NOT ask for clarification. "
         "Just give your best answer based on the conversation context."
     )
 
     CHAIRMAN_SYSTEM = (
-        "You are the Chairman of an AI council. "
-        "Synthesize the collective wisdom into a clear, authoritative final answer."
+        "You are Claude Sonnet 4.6, the Head of the AI Council. "
+        "You lead debates and synthesize the collective wisdom into a clear, "
+        "authoritative final answer. Be decisive and don't shy away from picking sides."
     )
 
-    # ==================== CHAT MODE PROMPTS ====================
+    # ==================== GROUP CHAT MODE PROMPTS ====================
     @staticmethod
-    def get_chat_system_prompt(model_name: str, other_models: List[str]) -> str:
-        """Generate system prompt for chat mode."""
-        others = ", ".join(other_models)
-        return f"""You are {model_name} in a group chat with other AI models: {others}.
+    def get_chat_system_prompt(model_name: str, other_models: List[str], is_first: bool = False) -> str:
+        """System prompt for any model in group chat mode."""
+        others_and_user = ", ".join(other_models) + ", and the User"
+        return f"""You are {model_name} in a group chat with: {others_and_user}.
 
-This is like a WhatsApp group - respond naturally and conversationally:
-- Keep responses short (2-4 sentences typically, can be longer if needed)
-- Reply to specific models by name when agreeing/disagreeing (e.g., "@Gemma I agree because...")
-- Build on what others said, don't just repeat the same points
-- Have your own personality and opinions
-- It's okay to disagree respectfully
-- Be casual but helpful
+This is a casual group chat, NOT a formal debate. Talk like you're texting in a group chat:
+- Keep messages SHORT: 1-3 sentences max. No essays, no bullet points, no numbered lists.
+- Mention others by name when replying (e.g., "@Qwen 3 32B nah that's wrong" or "@User good point but...")
+- You can mention @User to directly address the person who asked
+- Have a personality. Be opinionated. Disagree freely.
+- React to what others said — don't just give your own monologue
+- It's okay to be casual, use short sentences, be blunt
+{"- You're first to speak. Drop your take and keep it brief." if is_first else "- Read what others said and respond to THEM, not just the topic."}
 
-DO NOT:
-- Give long formal responses
-- Repeat what others already said
-- Ask clarifying questions to the user
-- Be overly formal or robotic"""
-
-    @staticmethod
-    def get_chat_first_responder_prompt(model_name: str) -> str:
-        """System prompt for the first model to respond in chat mode."""
-        return f"""You are {model_name} in a group chat with other AI models.
-
-You're the first to respond! Give your take on the user's question:
-- Keep it conversational (2-4 sentences)
-- Share your perspective naturally
-- Leave room for others to add or disagree
-
-DO NOT be overly formal or give a lecture."""
+NEVER:
+- Write more than 3 sentences
+- Use bullet points or numbered lists
+- Write headers or formatted text
+- Repeat what someone else already said
+- Be formal or diplomatic"""
 
     @staticmethod
     def build_conversation_context(previous_rounds: List[ConversationRound]) -> str:
@@ -69,8 +62,11 @@ DO NOT be overly formal or give a lecture."""
         context = "=== PREVIOUS CONVERSATION ===\n"
         for i, round in enumerate(previous_rounds, 1):
             context += f"\n--- Round {i} ---\n"
-            context += f"User Question: {round.question}\n"
-            if round.final_synthesis:
+            context += f"User: {round.question}\n"
+            if round.chat_messages:
+                for msg in round.chat_messages:
+                    context += f"{msg.model_name}: {msg.content}\n"
+            elif round.final_synthesis:
                 context += f"Council Verdict: {round.final_synthesis}\n"
         context += "\n=== END PREVIOUS CONVERSATION ===\n\n"
         return context
@@ -139,7 +135,7 @@ Only output the JSON array, nothing else."""
         if previous_rounds:
             context = Prompts.build_conversation_context(previous_rounds)
 
-        return f"""{context}You are Grok, the Chairman of a council of AI models. Your job is to give the final verdict based on the council's responses.
+        return f"""{context}You are Claude Sonnet 4.6, the Head of the AI Council. Your job is to give the final verdict based on the council's debate.
 
 Original Question: {question}
 
@@ -169,17 +165,14 @@ Be direct and decisive. Do NOT ask follow-up questions. Give a clear final answe
         if previous_rounds:
             parts.append(Prompts.build_conversation_context(previous_rounds))
 
-        # Add the current question
-        parts.append(f"User's question: {question}\n")
+        # Show the chat thread
+        parts.append(f"User: {question}")
 
-        # Add chat history
         if chat_messages:
-            parts.append("=== GROUP CHAT ===")
             for msg in chat_messages:
                 parts.append(f"{msg.model_name}: {msg.content}")
-            parts.append("=== END CHAT ===\n")
-            parts.append("Now it's your turn. Respond to the conversation above.")
+            parts.append("\nYour turn. Keep it short.")
         else:
-            parts.append("You're first to respond. Share your thoughts!")
+            parts.append("\nYou're first. Drop your take.")
 
         return "\n".join(parts)

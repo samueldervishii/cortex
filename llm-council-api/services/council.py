@@ -4,7 +4,7 @@ import time
 from statistics import mean, stdev, StatisticsError
 from typing import List, Optional, Dict
 
-from clients import OpenRouterClient
+from clients import LLMClient
 from config import COUNCIL_MODELS, CHAIRMAN_MODEL
 from core.logging import logger
 from schemas import ModelResponse, PeerReview, ConversationRound, ChatMessage
@@ -61,7 +61,6 @@ def analyze_disagreement(
         model_info = response_map.get(resp_num, {})
 
         if len(ranks) < 2:
-            # Not enough data to calculate disagreement
             analysis.append(
                 {
                     "model_id": model_info.get("model_id", ""),
@@ -76,18 +75,14 @@ def analyze_disagreement(
 
         avg_rank = mean(ranks)
 
-        # Calculate standard deviation
         try:
             std = stdev(ranks)
         except StatisticsError:
             std = 0.0
 
-        # Normalize disagreement score (0-1)
-        # Max possible stdev for ranks 1 to N is approximately (N-1)/2
         max_std = (num_responses - 1) / 2
         disagreement_score = min(std / max_std, 1.0) if max_std > 0 else 0.0
 
-        # Consider high disagreement if score > 0.5 or if ranks span more than half the range
         rank_range = max(ranks) - min(ranks) if ranks else 0
         has_disagreement = disagreement_score > 0.5 or rank_range >= num_responses / 2
 
@@ -105,10 +100,29 @@ def analyze_disagreement(
     return analysis
 
 
-class CouncilService:
-    """Service for managing LLM Council operations."""
+def _get_name_variants(name: str) -> List[str]:
+    """Get name variants for mention matching (e.g., 'Claude Sonnet 4.6' -> ['Claude Sonnet 4.6', 'Claude Sonnet'])."""
+    variants = [name]
+    # Strip version numbers like "4.6", "4.5", "120B", "20B", "32B"
+    import re
+    short = re.sub(r"\s+\d+(\.\d+)?[A-Z]?$", "", name).strip()
+    if short and short != name:
+        variants.append(short)
+    return variants
 
-    def __init__(self, client: OpenRouterClient):
+
+def _detect_mention(response: str, model_name: str) -> bool:
+    """Check if a response mentions a model by full or short name."""
+    for variant in _get_name_variants(model_name):
+        if f"@{variant}" in response:
+            return True
+    return False
+
+
+class CouncilService:
+    """Service for managing LLM Council debate operations."""
+
+    def __init__(self, client: LLMClient):
         self.client = client
 
     def _get_active_models(
@@ -119,24 +133,38 @@ class CouncilService:
         """
         Get the models to use based on selection.
 
-        Args:
-            selected_models: List of model IDs to filter. If None, returns all council models.
-            include_chairman: If True, chairman can be included (for chat mode).
-                            If False, chairman is excluded even if selected (for formal mode).
+        In chat/debate mode, the chairman (Sonnet 4.6) goes FIRST to lead the discussion.
         """
         if selected_models is None:
             if include_chairman:
-                return COUNCIL_MODELS + [CHAIRMAN_MODEL]
+                # Chairman leads - put first
+                return [CHAIRMAN_MODEL] + COUNCIL_MODELS
             return COUNCIL_MODELS
 
-        # Build list of available models based on mode
         if include_chairman:
-            all_models = COUNCIL_MODELS + [CHAIRMAN_MODEL]
+            all_models = [CHAIRMAN_MODEL] + COUNCIL_MODELS
         else:
-            # In formal mode, exclude chairman - they only synthesize
             all_models = COUNCIL_MODELS
 
         return [m for m in all_models if m["id"] in selected_models]
+
+    async def _call_model(
+        self,
+        model: dict,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        max_tokens: int = 2048,
+        temperature: float = 0.7,
+    ) -> str:
+        """Call a model through the appropriate provider."""
+        return await self.client.chat(
+            model_id=model["id"],
+            prompt=prompt,
+            system_prompt=system_prompt,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            provider=model["provider"],
+        )
 
     async def get_council_responses(
         self,
@@ -158,8 +186,8 @@ class CouncilService:
         async def query_model(model: dict) -> ModelResponse:
             try:
                 start_time = time.monotonic()
-                response = await self.client.chat(
-                    model_id=model["id"], prompt=prompt, system_prompt=system_prompt
+                response = await self._call_model(
+                    model, prompt, system_prompt=system_prompt
                 )
                 elapsed_ms = int((time.monotonic() - start_time) * 1000)
                 return ModelResponse(
@@ -178,7 +206,6 @@ class CouncilService:
                     response_time_ms=None,
                 )
 
-        # Use selected models or all council models (exclude chairman in formal mode)
         active_models = self._get_active_models(
             current_round.selected_models, include_chairman=False
         )
@@ -206,11 +233,10 @@ class CouncilService:
                     previous_rounds=previous_rounds,
                 )
 
-                response = await self.client.chat(
-                    model_id=model["id"], prompt=prompt, temperature=0.3
+                response = await self._call_model(
+                    model, prompt, temperature=0.3
                 )
 
-                # Try to parse JSON from response
                 try:
                     start = response.find("[")
                     end = response.rfind("]") + 1
@@ -227,7 +253,6 @@ class CouncilService:
                     reviewer_model=model["name"], rankings=[{"error": str(e)}]
                 )
 
-        # Use selected models or all council models for reviews (exclude chairman)
         active_models = self._get_active_models(
             current_round.selected_models, include_chairman=False
         )
@@ -257,9 +282,9 @@ class CouncilService:
         logger.info(f"Starting synthesis with {CHAIRMAN_MODEL['name']}")
         logger.info(f"Synthesis prompt length: {len(synthesis_prompt)} chars")
 
-        final_response = await self.client.chat(
-            model_id=CHAIRMAN_MODEL["id"],
-            prompt=synthesis_prompt,
+        final_response = await self._call_model(
+            CHAIRMAN_MODEL,
+            synthesis_prompt,
             system_prompt=Prompts.CHAIRMAN_SYSTEM,
             max_tokens=4096,
         )
@@ -271,30 +296,89 @@ class CouncilService:
         self,
         current_round: ConversationRound,
         previous_rounds: Optional[List[ConversationRound]] = None,
-        num_turns: int = 1,  # Default to 1 turn so user can participate
+        num_turns: int = 1,
+        target_model: Optional[str] = None,
     ) -> List[ChatMessage]:
         """
-        Run a group chat style discussion where models respond sequentially
-        and can see/reply to each other's messages.
+        Run a debate-style discussion where models respond sequentially,
+        each seeing and building on what previous models said.
 
-        Args:
-            current_round: The current conversation round
-            previous_rounds: Previous rounds for context
-            num_turns: How many times each model should speak (default: 2)
-
-        Returns:
-            List of chat messages from all models
+        If target_model is set (model name), only that model responds.
+        This is used for @mention targeting — like WhatsApp, when you
+        @mention someone, only they reply.
         """
-        chat_messages: List[ChatMessage] = []
+        # Include existing chat messages as context for targeted responses
+        chat_messages: List[ChatMessage] = list(current_round.chat_messages) if target_model else []
 
-        # Use selected models or all models (council + chairman) in chat mode
-        # In chat mode, chairman participates as a regular member
+        # Chairman leads - included first in chat mode
         all_chat_models = self._get_active_models(
             current_round.selected_models, include_chairman=True
         )
 
+        # If targeting a specific model, only query that one
+        if target_model:
+            target = None
+            for m in all_chat_models:
+                if m["name"] == target_model:
+                    target = m
+                    break
+            if not target:
+                logger.warning(f"Target model '{target_model}' not found, falling back to all")
+            else:
+                logger.info(f"Targeted response from {target_model}")
+                other_models = [
+                    m["name"] for m in all_chat_models if m["id"] != target["id"]
+                ]
+                system_prompt = Prompts.get_chat_system_prompt(
+                    target["name"], other_models, is_first=False
+                )
+                user_prompt = Prompts.build_chat_prompt(
+                    question=current_round.question,
+                    chat_messages=chat_messages,
+                    previous_rounds=previous_rounds,
+                )
+
+                try:
+                    start_time = time.monotonic()
+                    response = await self._call_model(
+                        target,
+                        user_prompt,
+                        system_prompt=system_prompt,
+                        max_tokens=512,
+                        temperature=0.8,
+                    )
+                    elapsed_ms = int((time.monotonic() - start_time) * 1000)
+
+                    reply_to = None
+                    if "@User" in response:
+                        reply_to = "User"
+                    else:
+                        for other_name in other_models:
+                            if _detect_mention(response, other_name):
+                                reply_to = other_name
+                                break
+
+                    message = ChatMessage(
+                        model_id=target["id"],
+                        model_name=target["name"],
+                        content=response,
+                        reply_to=reply_to,
+                        response_time_ms=elapsed_ms,
+                    )
+                    return [message]  # Only return the single targeted response
+
+                except Exception as e:
+                    logger.error(f"Error from {target['name']}: {e}")
+                    return [ChatMessage(
+                        model_id=target["id"],
+                        model_name=target["name"],
+                        content=f"[Failed to respond: {str(e)}]",
+                        reply_to=None,
+                        response_time_ms=None,
+                    )]
+
         logger.info(
-            f"Starting group chat with {len(all_chat_models)} models, {num_turns} turns each"
+            f"Starting debate with {len(all_chat_models)} models, {num_turns} turns each"
         )
 
         for turn in range(num_turns):
@@ -305,15 +389,11 @@ class CouncilService:
                     m["name"] for m in all_chat_models if m["id"] != model["id"]
                 ]
 
-                # Build system prompt
-                if not chat_messages:
-                    system_prompt = Prompts.get_chat_first_responder_prompt(
-                        model["name"]
-                    )
-                else:
-                    system_prompt = Prompts.get_chat_system_prompt(
-                        model["name"], other_models
-                    )
+                # Same prompt for everyone — no special chairman role in chat
+                is_first = len(chat_messages) == 0
+                system_prompt = Prompts.get_chat_system_prompt(
+                    model["name"], other_models, is_first=is_first
+                )
 
                 # Build user prompt with chat history
                 user_prompt = Prompts.build_chat_prompt(
@@ -325,20 +405,24 @@ class CouncilService:
                 try:
                     logger.info(f"Querying {model['name']}...")
                     start_time = time.monotonic()
-                    response = await self.client.chat(
-                        model_id=model["id"],
-                        prompt=user_prompt,
+                    response = await self._call_model(
+                        model,
+                        user_prompt,
                         system_prompt=system_prompt,
-                        temperature=0.8,  # Slightly higher for more personality
+                        max_tokens=512,
+                        temperature=0.8,
                     )
                     elapsed_ms = int((time.monotonic() - start_time) * 1000)
 
-                    # Detect if replying to someone
+                    # Detect if replying to someone (model or user)
                     reply_to = None
-                    for other_name in other_models:
-                        if f"@{other_name}" in response or other_name in response[:50]:
-                            reply_to = other_name
-                            break
+                    if "@User" in response:
+                        reply_to = "User"
+                    else:
+                        for other_name in other_models:
+                            if _detect_mention(response, other_name):
+                                reply_to = other_name
+                                break
 
                     message = ChatMessage(
                         model_id=model["id"],
@@ -361,5 +445,96 @@ class CouncilService:
                     )
                     chat_messages.append(message)
 
-        logger.info(f"Group chat complete with {len(chat_messages)} messages")
+        # Mention-triggered follow-ups: if a model was @mentioned, it gets to respond
+        mentioned_models = self._find_mentioned_models(chat_messages, all_chat_models)
+        if mentioned_models:
+            logger.info(f"Mention follow-ups for: {[m['name'] for m in mentioned_models]}")
+
+            for model in mentioned_models:
+                other_models = [
+                    m["name"] for m in all_chat_models if m["id"] != model["id"]
+                ]
+                system_prompt = Prompts.get_chat_system_prompt(
+                    model["name"], other_models, is_first=False
+                )
+                user_prompt = Prompts.build_chat_prompt(
+                    question=current_round.question,
+                    chat_messages=chat_messages,
+                    previous_rounds=previous_rounds,
+                )
+
+                try:
+                    logger.info(f"Mention follow-up: {model['name']}...")
+                    start_time = time.monotonic()
+                    response = await self._call_model(
+                        model,
+                        user_prompt,
+                        system_prompt=system_prompt,
+                        max_tokens=512,
+                        temperature=0.8,
+                    )
+                    elapsed_ms = int((time.monotonic() - start_time) * 1000)
+
+                    reply_to = None
+                    if "@User" in response:
+                        reply_to = "User"
+                    else:
+                        for other_name in other_models:
+                            if _detect_mention(response, other_name):
+                                reply_to = other_name
+                                break
+
+                    message = ChatMessage(
+                        model_id=model["id"],
+                        model_name=model["name"],
+                        content=response,
+                        reply_to=reply_to,
+                        response_time_ms=elapsed_ms,
+                    )
+                    chat_messages.append(message)
+                except Exception as e:
+                    logger.error(f"Mention follow-up error from {model['name']}: {e}")
+
+        logger.info(f"Debate complete with {len(chat_messages)} messages")
         return chat_messages
+
+    def _find_mentioned_models(
+        self,
+        chat_messages: List[ChatMessage],
+        all_models: List[dict],
+    ) -> List[dict]:
+        """Find models that were @mentioned in the last round but haven't replied after being mentioned."""
+        if not chat_messages:
+            return []
+
+        # Build a map of model names to model dicts
+        model_map = {m["name"]: m for m in all_models}
+
+        # Track who was mentioned and by whom, only from recent messages
+        mentioned = set()
+        # Who already spoke (as the last speaker)
+        last_speaker = chat_messages[-1].model_name if chat_messages else None
+
+        for msg in chat_messages:
+            for name in model_map:
+                if name == msg.model_name:
+                    continue
+                if _detect_mention(msg.content, name):
+                    mentioned.add(name)
+
+        # Remove models who already spoke AFTER being mentioned
+        # (check if their last message is after the last mention)
+        responded_after_mention = set()
+        for name in mentioned:
+            last_mention_idx = -1
+            last_response_idx = -1
+            for i, msg in enumerate(chat_messages):
+                if _detect_mention(msg.content, name) and msg.model_name != name:
+                    last_mention_idx = i
+                if msg.model_name == name:
+                    last_response_idx = i
+            if last_response_idx > last_mention_idx:
+                responded_after_mention.add(name)
+
+        needs_followup = mentioned - responded_after_mention
+        return [model_map[name] for name in needs_followup if name in model_map]

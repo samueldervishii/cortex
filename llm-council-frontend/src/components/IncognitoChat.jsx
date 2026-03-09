@@ -24,10 +24,11 @@ const GhostIcon = () => (
 
 // Color palette for different models
 const MODEL_COLORS = {
-  'NVIDIA Nemotron 9B': '#76b900',
-  'Llama 3.2 3B': '#0467df',
-  'Mistral Devstral 2 2512': '#ff7000',
-  'GPT OSS 20B': '#10a37f',
+  'Claude Sonnet 4.6': '#d97706',
+  'Claude Haiku 4.5': '#8b5cf6',
+  'GPT OSS 120B': '#0467df',
+  'Qwen 3 32B': '#10b981',
+  'GPT OSS 20B': '#ef4444',
 }
 
 function getModelColor(modelName) {

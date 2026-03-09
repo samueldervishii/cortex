@@ -12,6 +12,7 @@ function ChatMessages({
   onQuestionChange,
   onSubmit,
   readOnly = false,
+  mode = 'formal',
 }) {
   const messagesEndRef = useRef(null)
 
@@ -61,7 +62,8 @@ function ChatMessages({
           onChange={onQuestionChange}
           onSubmit={onSubmit}
           disabled={loading}
-          placeholder="Ask the council another question..."
+          placeholder={mode === 'chat' ? 'Message the group chat... (@ to mention)' : 'Ask the council another question...'}
+          mode={mode}
         />
       )}
     </>

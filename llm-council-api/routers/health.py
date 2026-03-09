@@ -8,7 +8,6 @@ import asyncio
 from fastapi import APIRouter, Response, status
 
 from db import get_database
-from core.cache import get_redis_client
 from core.circuit_breaker import get_circuit_breaker_status
 
 router = APIRouter(tags=["health"])
@@ -20,7 +19,6 @@ async def health_check():
     Liveness Probe
 
     Returns 200 if the application is running.
-    Used by Kubernetes to know if the pod should be restarted.
     """
     return {"status": "healthy", "service": "llm-council-api"}
 
@@ -31,15 +29,9 @@ async def readiness_check(response: Response):
     Readiness Probe
 
     Returns 200 if the application is ready to serve traffic.
-    Checks:
-    - MongoDB connection
-    - Redis connection (optional)
-    - Circuit breaker status
-
-    Used by Kubernetes to know if the pod should receive traffic.
+    Checks MongoDB connection and circuit breaker status.
     """
-    checks = {"mongodb": "unknown", "redis": "unknown", "circuit_breaker": "unknown"}
-
+    checks = {"mongodb": "unknown", "circuit_breaker": "unknown"}
     is_ready = True
 
     # Check MongoDB
@@ -54,30 +46,15 @@ async def readiness_check(response: Response):
         checks["mongodb"] = f"unhealthy: {str(e)[:50]}"
         is_ready = False
 
-    # Check Redis (optional - not required for readiness)
-    try:
-        redis_client = get_redis_client()
-        if redis_client is not None:
-            redis_client.ping()
-            checks["redis"] = "healthy"
-        else:
-            checks["redis"] = "disabled"
-    except Exception as e:
-        checks["redis"] = f"unavailable: {str(e)[:50]}"
-        # Don't fail readiness if Redis is down (we have fallback)
-
     # Check Circuit Breaker
     try:
-        breaker_status = get_circuit_breaker_status("openrouter")
+        breaker_status = get_circuit_breaker_status("anthropic")
         checks["circuit_breaker"] = breaker_status.get("state", "unknown")
-
-        # If circuit is open, we're not fully ready
         if breaker_status.get("state") == "open":
             is_ready = False
     except Exception as e:
         checks["circuit_breaker"] = f"error: {str(e)[:50]}"
 
-    # Set response status
     if not is_ready:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
 
@@ -86,11 +63,7 @@ async def readiness_check(response: Response):
 
 @router.get("/metrics")
 async def metrics_endpoint():
-    """
-    Prometheus Metrics Endpoint
-
-    Exports metrics in Prometheus format for monitoring.
-    """
+    """Prometheus Metrics Endpoint."""
     try:
         from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 

@@ -253,6 +253,7 @@ function App() {
           question={question}
           onQuestionChange={setQuestion}
           onSubmit={startCouncil}
+          mode={mode}
         />
       )}
 

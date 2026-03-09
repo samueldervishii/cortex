@@ -68,7 +68,7 @@ def with_circuit_breaker(
     Decorator to protect function with circuit breaker.
 
     Usage:
-        @with_circuit_breaker(breaker_name="openrouter", fallback=lambda *args: "Service unavailable")
+        @with_circuit_breaker(breaker_name="anthropic", fallback=lambda *args: "Service unavailable")
         async def call_external_api():
             # API call here
             pass

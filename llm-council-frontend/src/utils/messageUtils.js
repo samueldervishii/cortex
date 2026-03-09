@@ -82,13 +82,13 @@ export function roundToMessages(round) {
   if (round.final_synthesis) {
     msgs.push({
       type: 'system',
-      content: 'Chairman Grok is reviewing all responses...',
+      content: 'Claude Sonnet 4.6 is reviewing all responses...',
       timestamp: new Date(),
     })
     msgs.push({
       type: 'chairman',
       content: round.final_synthesis,
-      modelName: 'Grok 4.1 Fast (Chairman)',
+      modelName: 'Claude Sonnet 4.6 (Head)',
       timestamp: new Date(),
     })
   }

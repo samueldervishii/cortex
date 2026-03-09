@@ -348,16 +348,25 @@ function useCouncil() {
       }
 
       if (activeMode === 'chat') {
-        // Chat mode: use run-all for group chat
-        setCurrentStep('Models are typing...')
+        // Detect @mention in user message to target a specific model
+        const mentionMatch = userQuestion.match(/@(Claude Sonnet 4\.6|Claude Haiku 4\.5|GPT OSS 120B|GPT OSS 20B|Qwen 3 32B)/)
+        const targetModel = mentionMatch ? mentionMatch[1] : null
 
-        const chatRes = await apiClient.post(`/session/${currentSessionId}/run-all`)
+        // Chat mode: use run-all for group chat
+        setCurrentStep(targetModel ? `${targetModel} is typing...` : 'Models are typing...')
+
+        const requestBody = targetModel ? { target_model: targetModel } : {}
+        const chatRes = await apiClient.post(`/session/${currentSessionId}/run-all`, requestBody)
         const session = chatRes.data.session
         const currentRound = session.rounds[session.rounds.length - 1]
 
-        // Add chat messages one by one with delay for visual effect
-        for (let i = 0; i < currentRound.chat_messages.length; i++) {
-          const chatMsg = currentRound.chat_messages[i]
+        // Each round's chat_messages contains only the messages from that round
+        // For targeted @mentions, it's just 1 message; for full rounds, all model responses
+        const newMessages = currentRound.chat_messages
+
+        // Add new chat messages one by one with delay for visual effect
+        for (let i = 0; i < newMessages.length; i++) {
+          const chatMsg = newMessages[i]
           setCurrentStep(`${chatMsg.model_name} is typing...`)
 
           // Small delay between messages for natural feel
@@ -397,14 +406,14 @@ function useCouncil() {
         setCurrentStep('Council is reviewing...')
         await apiClient.post(`/session/${currentSessionId}/reviews`)
 
-        setCurrentStep('Chairman Grok is deciding...')
-        addMessage('system', 'Chairman Grok is reviewing all responses...')
+        setCurrentStep('Council Head is deciding...')
+        addMessage('system', 'Claude Sonnet 4.6 is reviewing all responses...')
 
         const synthesisRes = await apiClient.post(`/session/${currentSessionId}/synthesize`)
         const finalSession = synthesisRes.data.session
         const finalRound = finalSession.rounds[finalSession.rounds.length - 1]
 
-        addMessage('chairman', finalRound.final_synthesis, 'Grok 4.1 Fast (Chairman)')
+        addMessage('chairman', finalRound.final_synthesis, 'Claude Sonnet 4.6 (Head)')
       }
 
       // Refresh sessions list

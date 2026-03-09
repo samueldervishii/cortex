@@ -2,23 +2,22 @@ import secrets
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Depends, Request, Query
+from fastapi import APIRouter, HTTPException, Depends, Request, Query, Body
 
 from core.dependencies import (
     get_session_repository,
     get_settings_repository,
-    get_openrouter_client,
+    get_llm_client,
     verify_api_key,
 )
-from core.distributed_rate_limit import check_distributed_rate_limit
+from core.rate_limit import check_rate_limit
 from core.sanitization import sanitize_title
-from core.cache import Cache
-from config import settings
 from db import SessionRepository, SettingsRepository
 from schemas import (
     QueryRequest,
     ContinueRequest,
     BranchRequest,
+    RunAllRequest,
     SessionResponse,
     CouncilSession,
     ConversationRound,
@@ -34,7 +33,7 @@ from services.council import analyze_disagreement
 router = APIRouter(prefix="/session", tags=["sessions"])
 
 
-def get_council_service(client=Depends(get_openrouter_client)) -> CouncilService:
+def get_council_service(client=Depends(get_llm_client)) -> CouncilService:
     return CouncilService(client)
 
 
@@ -79,7 +78,7 @@ async def create_session(
     request: QueryRequest,
     repo: SessionRepository = Depends(get_session_repository),
     _auth: bool = Depends(verify_api_key),
-    _rate_limit: None = Depends(check_distributed_rate_limit),
+    _rate_limit: None = Depends(check_rate_limit),
 ):
     """
     Create New Session
@@ -128,24 +127,10 @@ async def get_session(
 
     Retrieves the complete state of a session including all rounds,
     responses, peer reviews, and synthesis results.
-
-    Cached for better performance.
     """
-    # Try cache first
-    cache_key = f"session:{session_id}"
-    cached = Cache.get(cache_key)
-    if cached is not None:
-        return SessionResponse(
-            session=CouncilSession(**cached), message="Session retrieved (cached)"
-        )
-
-    # Cache miss - fetch from database
     session = await repo.get(session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
-
-    # Cache for 3 minutes
-    Cache.set(cache_key, session.model_dump(), ttl=settings.cache_ttl_sessions)
 
     return SessionResponse(session=session, message="Session retrieved")
 
@@ -165,9 +150,6 @@ async def delete_session(
     deleted = await repo.soft_delete(session_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Session not found")
-
-    # Invalidate cache
-    Cache.delete(f"session:{session_id}")
 
     return {"message": "Session deleted"}
 
@@ -207,9 +189,6 @@ async def update_session(
         # Version conflict - session was modified by another request
         raise HTTPException(status_code=409, detail=str(e))
 
-    # Invalidate cache
-    Cache.delete(f"session:{session_id}")
-
     return SessionResponse(session=session, message="Session updated")
 
 
@@ -219,7 +198,7 @@ async def continue_session(
     request: ContinueRequest,
     repo: SessionRepository = Depends(get_session_repository),
     _auth: bool = Depends(verify_api_key),
-    _rate_limit: None = Depends(check_distributed_rate_limit),
+    _rate_limit: None = Depends(check_rate_limit),
 ):
     """
     Continue Session
@@ -273,7 +252,7 @@ async def get_responses(
     repo: SessionRepository = Depends(get_session_repository),
     council_service: CouncilService = Depends(get_council_service),
     _auth: bool = Depends(verify_api_key),
-    _rate_limit: None = Depends(check_distributed_rate_limit),
+    _rate_limit: None = Depends(check_rate_limit),
 ):
     """
     Collect Council Responses
@@ -320,7 +299,7 @@ async def get_reviews(
     repo: SessionRepository = Depends(get_session_repository),
     council_service: CouncilService = Depends(get_council_service),
     _auth: bool = Depends(verify_api_key),
-    _rate_limit: None = Depends(check_distributed_rate_limit),
+    _rate_limit: None = Depends(check_rate_limit),
 ):
     """
     Collect Peer Reviews
@@ -383,7 +362,7 @@ async def synthesize(
     repo: SessionRepository = Depends(get_session_repository),
     council_service: CouncilService = Depends(get_council_service),
     _auth: bool = Depends(verify_api_key),
-    _rate_limit: None = Depends(check_distributed_rate_limit),
+    _rate_limit: None = Depends(check_rate_limit),
 ):
     """
     Synthesize Final Answer
@@ -432,10 +411,11 @@ async def synthesize(
 @router.post("/{session_id}/run-all", response_model=SessionResponse)
 async def run_full_council(
     session_id: str,
+    request: RunAllRequest = Body(None),
     repo: SessionRepository = Depends(get_session_repository),
     council_service: CouncilService = Depends(get_council_service),
     _auth: bool = Depends(verify_api_key),
-    _rate_limit: None = Depends(check_distributed_rate_limit),
+    _rate_limit: None = Depends(check_rate_limit),
 ):
     """
     Run Full Council Process
@@ -450,6 +430,7 @@ async def run_full_council(
     **In CHAT mode:**
     - Models respond sequentially, seeing and replying to each other
     - Creates a natural group conversation (like WhatsApp)
+    - If target_model is set, only that specific model responds (like @mentioning in WhatsApp)
 
     This is the recommended endpoint for most use cases.
     """
@@ -462,15 +443,21 @@ async def run_full_council(
 
     current_round = session.rounds[-1]
     previous_rounds = session.rounds[:-1] if len(session.rounds) > 1 else None
+    target_model = request.target_model if request else None
 
     # Check if using chat mode
     if current_round.mode == CouncilMode.CHAT:
         # Chat mode: run group chat (1 turn = each model responds once, then user can continue)
-        if current_round.status == "pending":
+        if current_round.status == "pending" or target_model:
             chat_messages = await council_service.run_group_chat(
-                current_round, previous_rounds, num_turns=1
+                current_round, previous_rounds, num_turns=1,
+                target_model=target_model,
             )
-            current_round.chat_messages = chat_messages
+            # Append to existing messages if targeting a specific model
+            if target_model and current_round.chat_messages:
+                current_round.chat_messages.extend(chat_messages)
+            else:
+                current_round.chat_messages = chat_messages
             current_round.status = "chat_complete"
             await repo.update(session)
 
@@ -511,9 +498,6 @@ async def run_full_council(
         raise HTTPException(
             status_code=409, detail=f"Session was modified during processing: {str(e)}"
         )
-
-    # Invalidate cache since session was updated
-    Cache.delete(f"session:{session_id}")
 
     return SessionResponse(session=session, message="Full council process complete!")
 

@@ -102,13 +102,13 @@ function SharedSession() {
         readOnly={true}
       />
 
-      <div className="shared-footer">
+      {/* <div className="shared-footer">
         <span>v{FRONTEND_VERSION}</span>
         <span>|</span>
         <a href="https://llm-council-docs.netlify.app/" target="_blank" rel="noopener noreferrer">
           Documentation
         </a>
-      </div>
+      </div> */}
     </div>
   )
 }

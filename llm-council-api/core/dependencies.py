@@ -3,13 +3,13 @@ from typing import Optional
 
 from fastapi import Header, HTTPException, Query, status
 
-from clients import OpenRouterClient
+from clients import LLMClient
 from config import settings
 from db import get_database, SessionRepository, SettingsRepository
 from db.folder_repository import FolderRepository
 
 # Singleton client instance
-_openrouter_client: OpenRouterClient | None = None
+_llm_client: LLMClient | None = None
 _session_repository: SessionRepository | None = None
 _settings_repository: SettingsRepository | None = None
 _folder_repository: FolderRepository | None = None
@@ -42,20 +42,20 @@ async def get_folder_repository() -> FolderRepository:
     return _folder_repository
 
 
-def get_openrouter_client() -> OpenRouterClient:
-    """Get the OpenRouter client dependency."""
-    global _openrouter_client
-    if _openrouter_client is None:
-        _openrouter_client = OpenRouterClient()
-    return _openrouter_client
+def get_llm_client() -> LLMClient:
+    """Get the LLM client dependency."""
+    global _llm_client
+    if _llm_client is None:
+        _llm_client = LLMClient()
+    return _llm_client
 
 
-async def close_openrouter_client() -> None:
-    """Close the OpenRouter client and cleanup resources."""
-    global _openrouter_client
-    if _openrouter_client is not None:
-        await _openrouter_client.close()
-        _openrouter_client = None
+async def close_llm_client() -> None:
+    """Close the LLM client and cleanup resources."""
+    global _llm_client
+    if _llm_client is not None:
+        await _llm_client.close()
+        _llm_client = None
 
 
 async def verify_api_key(
@@ -71,11 +71,9 @@ async def verify_api_key(
 
     If no API key is configured in settings, authentication is disabled.
     """
-    # If no API key is configured, allow all requests (development mode)
     if not settings.api_key:
         return True
 
-    # Get the provided key from header or query param
     provided_key = x_api_key or api_key
 
     if not provided_key:
@@ -85,7 +83,6 @@ async def verify_api_key(
             headers={"WWW-Authenticate": "ApiKey"},
         )
 
-    # Use constant-time comparison to prevent timing attacks
     if not secrets.compare_digest(provided_key, settings.api_key):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Invalid API key"

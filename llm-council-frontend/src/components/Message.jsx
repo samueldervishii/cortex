@@ -4,20 +4,56 @@ import rehypeSanitize from 'rehype-sanitize'
 
 // Color palette for different models
 const MODEL_COLORS = {
-  'NVIDIA Nemotron 9B': '#76b900',
-  'Llama 3.2 3B': '#0467df',
-  'Mistral Devstral 2 2512': '#ff7000',
-  'GPT OSS 20B': '#10a37f',
+  'Claude Sonnet 4.6': '#d97706',
+  'Claude Haiku 4.5': '#8b5cf6',
+  'GPT OSS 120B': '#0467df',
+  'Qwen 3 32B': '#10b981',
+  'GPT OSS 20B': '#ef4444',
+}
+
+// Mention names → color (includes short aliases models actually use)
+const MENTION_COLORS = {
+  ...MODEL_COLORS,
+  'Claude Sonnet': '#d97706',
+  'Claude Haiku': '#8b5cf6',
+  'Qwen': '#10b981',
+  'User': '#9ca3af',
 }
 
 function getModelColor(modelName) {
-  return MODEL_COLORS[modelName] || '#d4a574'
+  return MODEL_COLORS[modelName] || MENTION_COLORS[modelName] || '#d4a574'
 }
 
 function formatResponseTime(ms) {
   if (!ms) return null
   if (ms < 1000) return `${ms}ms`
   return `${(ms / 1000).toFixed(1)}s`
+}
+
+// Parse @mentions in text and wrap them with styled spans
+function highlightMentions(text) {
+  if (!text) return text
+  const mentionNames = Object.keys(MENTION_COLORS)
+  // Sort by length descending so "Claude Sonnet 4.6" matches before "Claude Sonnet"
+  mentionNames.sort((a, b) => b.length - a.length)
+  const pattern = mentionNames.map((n) => `@${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).join('|')
+  const regex = new RegExp(`(${pattern})`, 'g')
+
+  const parts = text.split(regex)
+  if (parts.length === 1) return text
+
+  return parts.map((part, i) => {
+    if (part && part.startsWith('@')) {
+      const name = part.slice(1)
+      const color = MENTION_COLORS[name] || '#d4a574'
+      return (
+        <span key={i} className="mention-tag" style={{ backgroundColor: `${color}20`, color, borderColor: `${color}40` }}>
+          {part}
+        </span>
+      )
+    }
+    return part
+  })
 }
 
 function Message({ type, content, modelName, disagreement, replyTo, responseTime }) {
@@ -77,7 +113,7 @@ function Message({ type, content, modelName, disagreement, replyTo, responseTime
             </button>
           </div>
           <div className="chat-content">
-            <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{content}</ReactMarkdown>
+            <p>{highlightMentions(content)}</p>
           </div>
         </div>
         <div className="chat-avatar" style={{ backgroundColor: color }}>

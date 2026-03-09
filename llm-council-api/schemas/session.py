@@ -7,8 +7,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 class ModelProvider(str, Enum):
     """Supported LLM providers."""
 
-    OPENROUTER = "openrouter"
-    GOOGLE = "google"
+    ANTHROPIC = "anthropic"
+    GROQ = "groq"
 
 
 class CouncilMode(str, Enum):
@@ -237,6 +237,15 @@ class BranchRequest(BaseModel):
     from_round_index: Optional[int] = Field(
         None,
         description="Round index to branch from (0-indexed). If None, branches from current state (all rounds)",
+    )
+
+
+class RunAllRequest(BaseModel):
+    """Optional request body for the run-all endpoint."""
+
+    target_model: Optional[str] = Field(
+        None,
+        description="If set, only this model responds (used for @mention targeting in chat mode)",
     )
 
 

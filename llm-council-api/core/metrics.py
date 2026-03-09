@@ -3,7 +3,6 @@ Prometheus metrics for monitoring and observability.
 
 Tracks:
 - Request counts and latencies
-- Cache hit/miss rates
 - Rate limit hits
 - Circuit breaker state
 - Database query performance
@@ -20,7 +19,6 @@ logger = logging.getLogger("llm-council.metrics")
 _metrics_initialized = False
 _request_counter = None
 _request_latency = None
-_cache_counter = None
 _rate_limit_counter = None
 _db_query_latency = None
 _llm_request_counter = None
@@ -30,7 +28,7 @@ _llm_request_latency = None
 def init_metrics():
     """Initialize Prometheus metrics."""
     global _metrics_initialized
-    global _request_counter, _request_latency, _cache_counter
+    global _request_counter, _request_latency
     global _rate_limit_counter, _db_query_latency
     global _llm_request_counter, _llm_request_latency
 
@@ -40,7 +38,6 @@ def init_metrics():
     try:
         from prometheus_client import Counter, Histogram
 
-        # HTTP Request metrics
         _request_counter = Counter(
             "http_requests_total",
             "Total HTTP requests",
@@ -53,33 +50,20 @@ def init_metrics():
             ["method", "endpoint"],
         )
 
-        # Cache metrics
-        _cache_counter = Counter(
-            "cache_operations_total",
-            "Cache operations",
-            [
-                "operation",
-                "result",
-            ],  # operation: get/set/delete, result: hit/miss/success
-        )
-
-        # Rate limit metrics
         _rate_limit_counter = Counter(
             "rate_limit_hits_total", "Rate limit hits", ["client_type"]
         )
 
-        # Database metrics
         _db_query_latency = Histogram(
             "db_query_duration_seconds",
             "Database query latency",
             ["operation", "collection"],
         )
 
-        # LLM request metrics
         _llm_request_counter = Counter(
             "llm_requests_total",
             "LLM API requests",
-            ["model", "status"],  # status: success/error/circuit_open
+            ["model", "status"],
         )
 
         _llm_request_latency = Histogram(
@@ -100,12 +84,6 @@ def track_request(method: str, endpoint: str, status: int, duration: float):
 
     if _request_latency is not None:
         _request_latency.labels(method=method, endpoint=endpoint).observe(duration)
-
-
-def track_cache(operation: str, result: str):
-    """Track cache operations."""
-    if _cache_counter is not None:
-        _cache_counter.labels(operation=operation, result=result).inc()
 
 
 def track_rate_limit(client_type: str = "api"):
@@ -132,14 +110,7 @@ def track_llm_request(model: str, status: str, duration: float = None):
 
 
 def timed_operation(metric_func: Callable):
-    """
-    Decorator to time an operation and record metrics.
-
-    Usage:
-        @timed_operation(lambda duration: track_db_query("find", "sessions", duration))
-        async def find_session():
-            ...
-    """
+    """Decorator to time an operation and record metrics."""
 
     def decorator(func):
         @wraps(func)
@@ -152,7 +123,6 @@ def timed_operation(metric_func: Callable):
                 return result
             except Exception as e:
                 duration = time.time() - start
-                # Still record the timing even on error
                 try:
                     metric_func(duration)
                 except Exception:

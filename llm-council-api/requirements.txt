@@ -6,10 +6,6 @@ pydantic>=2.12.5
 pydantic-settings>=2.6.0
 motor>=3.6.0
 
-# Production: Caching & Rate Limiting
-redis>=5.0.0
-hiredis>=2.3.0  # C parser for Redis (faster)
-
 # Production: Circuit Breaker & Resilience
 pybreaker>=1.0.0
 

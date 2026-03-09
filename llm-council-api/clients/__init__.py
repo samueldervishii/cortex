@@ -1,3 +1,3 @@
-from .openrouter import OpenRouterClient
+from .llm_client import LLMClient
 
-__all__ = ["OpenRouterClient"]
+__all__ = ["LLMClient"]

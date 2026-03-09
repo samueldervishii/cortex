@@ -926,6 +926,57 @@ body {
   gap: 0.25rem;
 }
 
+/* @mention autocomplete dropdown */
+.mention-dropdown {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  margin-bottom: 4px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-hover);
+  border-radius: 12px;
+  padding: 6px;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+  z-index: 100;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.mention-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.mention-option:hover,
+.mention-option.selected {
+  background: var(--bg-primary);
+}
+
+.mention-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 700;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
+.mention-name {
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
 /* Chat Messages */
 .chat-messages {
   flex: 1;
@@ -1009,7 +1060,6 @@ body {
   margin-left: 0;
   margin-right: auto;
   max-width: 75%;
-  overflow: hidden;
 }
 
 .message.chairman {
@@ -1019,7 +1069,6 @@ body {
   margin-left: 0;
   margin-right: auto;
   max-width: 75%;
-  overflow: hidden;
 }
 
 .message.error {
@@ -1122,6 +1171,16 @@ body {
   font-size: 0.75rem;
   color: var(--text-muted);
   font-style: italic;
+}
+
+.mention-tag {
+  display: inline;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid;
+  font-weight: 600;
+  font-size: 0.85em;
+  white-space: nowrap;
 }
 
 .chat-content {
