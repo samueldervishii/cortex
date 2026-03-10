@@ -68,6 +68,11 @@ class QueryRequest(BaseModel):
         max_length=20,
         description="List of model IDs to use. If not provided, all available models are used.",
     )
+    system_prompt: Optional[str] = Field(
+        default=None,
+        max_length=2000,
+        description="Custom instructions for all council members (e.g., 'respond in Spanish', 'you are a senior engineer')",
+    )
 
     @field_validator("selected_models")
     @classmethod
@@ -150,6 +155,10 @@ class ConversationRound(BaseModel):
     selected_models: Optional[List[str]] = Field(
         default=None,
         description="List of model IDs to use for this round. If None, all models are used.",
+    )
+    system_prompt: Optional[str] = Field(
+        default=None,
+        description="Custom instructions applied to all council members for this round",
     )
     # Formal mode fields
     responses: List[ModelResponse] = Field(

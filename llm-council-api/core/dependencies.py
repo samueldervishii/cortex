@@ -1,3 +1,4 @@
+import logging
 import secrets
 from typing import Optional
 
@@ -7,6 +8,8 @@ from clients import LLMClient
 from config import settings
 from db import get_database, SessionRepository, SettingsRepository
 from db.folder_repository import FolderRepository
+
+logger = logging.getLogger("llm-council.security")
 
 # Singleton client instance
 _llm_client: LLMClient | None = None
@@ -72,6 +75,11 @@ async def verify_api_key(
     If no API key is configured in settings, authentication is disabled.
     """
     if not settings.api_key:
+        logger.warning(
+            "API authentication is DISABLED (no API_KEY configured). "
+            "All endpoints are publicly accessible. "
+            "Set API_KEY in .env to enable authentication."
+        )
         return True
 
     provided_key = x_api_key or api_key

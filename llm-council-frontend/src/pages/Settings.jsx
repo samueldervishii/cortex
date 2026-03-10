@@ -334,6 +334,46 @@ function Settings({
                 </tbody>
               </table>
             </div>
+
+            {settings.enabled_beta_features?.includes('custom_prompts') && (
+              <>
+                <h2>Model Personas</h2>
+                <p className="section-description">
+                  Give each model a unique personality or role. These instructions are added to each model's system prompt.
+                </p>
+                <div className="personas-list">
+                  {availableModels.map((model) => (
+                    <div key={model.id} className="persona-item">
+                      <div className="persona-header">
+                        <span className="persona-model-name">{model.name}</span>
+                        {model.is_chairman && <span className="chairman-badge">Head</span>}
+                        {(settings.model_personas?.[model.id] || '').trim() && (
+                          <span className="persona-active-badge">Active</span>
+                        )}
+                      </div>
+                      <textarea
+                        className="persona-textarea"
+                        value={settings.model_personas?.[model.id] || ''}
+                        onChange={(e) => {
+                          const newPersonas = {
+                            ...(settings.model_personas || {}),
+                            [model.id]: e.target.value,
+                          }
+                          // Remove empty entries
+                          Object.keys(newPersonas).forEach((k) => {
+                            if (!newPersonas[k].trim()) delete newPersonas[k]
+                          })
+                          saveSettings({ model_personas: newPersonas })
+                        }}
+                        placeholder={`e.g., "You are a skeptic who questions everything" or "Always use analogies to explain"`}
+                        rows={2}
+                        maxLength={500}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         )}
 

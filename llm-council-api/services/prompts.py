@@ -30,6 +30,15 @@ class Prompts:
         "authoritative final answer. Be decisive and don't shy away from picking sides."
     )
 
+    @staticmethod
+    def with_custom_instructions(
+        base_prompt: str, custom_prompt: Optional[str] = None
+    ) -> str:
+        """Append custom user instructions to a base system prompt."""
+        if not custom_prompt or not custom_prompt.strip():
+            return base_prompt
+        return f"{base_prompt}\n\nAdditional instructions from the user:\n{custom_prompt.strip()}"
+
     # ==================== GROUP CHAT MODE PROMPTS ====================
     @staticmethod
     def get_chat_system_prompt(model_name: str, other_models: List[str], is_first: bool = False) -> str:

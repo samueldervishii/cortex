@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import re
-from typing import Optional
+from typing import AsyncGenerator, Optional
 
 import httpx
 
@@ -222,6 +222,193 @@ class LLMClient:
         content = data["choices"][0]["message"]["content"]
         logger.info(f"Groq response from {model_id}: {len(content)} chars")
         return content
+
+    async def _stream_anthropic(
+        self,
+        model_id: str,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        max_tokens: int = 2048,
+        temperature: float = 0.7,
+    ) -> AsyncGenerator[str, None]:
+        """Stream tokens from the Anthropic Messages API."""
+        logger.info(f"Anthropic streaming request to model: {model_id}")
+
+        headers = {
+            "x-api-key": self.anthropic_api_key,
+            "anthropic-version": self.ANTHROPIC_VERSION,
+            "content-type": "application/json",
+        }
+
+        payload = {
+            "model": model_id,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "stream": True,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+
+        if system_prompt:
+            payload["system"] = system_prompt
+
+        client = await self._get_client()
+        async with client.stream(
+            "POST",
+            f"{self.ANTHROPIC_BASE_URL}/messages",
+            headers=headers,
+            json=payload,
+        ) as response:
+            if response.status_code != 200:
+                body = await response.aread()
+                raise Exception(
+                    f"Anthropic API error ({response.status_code}): {body.decode()}"
+                )
+
+            async for line in response.aiter_lines():
+                if not line.startswith("data: "):
+                    continue
+                data_str = line[6:]
+                if data_str.strip() == "[DONE]":
+                    break
+                try:
+                    data = __import__("json").loads(data_str)
+                except Exception:
+                    continue
+
+                event_type = data.get("type", "")
+                if event_type == "content_block_delta":
+                    delta = data.get("delta", {})
+                    if delta.get("type") == "text_delta":
+                        text = delta.get("text", "")
+                        if text:
+                            yield text
+
+    async def _stream_groq(
+        self,
+        model_id: str,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        max_tokens: int = 2048,
+        temperature: float = 0.7,
+    ) -> AsyncGenerator[str, None]:
+        """Stream tokens from the Groq API (OpenAI-compatible)."""
+        logger.info(f"Groq streaming request to model: {model_id}")
+
+        headers = {
+            "Authorization": f"Bearer {self.groq_api_key}",
+            "Content-Type": "application/json",
+        }
+
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        payload = {
+            "model": model_id,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "stream": True,
+        }
+
+        client = await self._get_client()
+        async with client.stream(
+            "POST",
+            f"{self.GROQ_BASE_URL}/chat/completions",
+            headers=headers,
+            json=payload,
+        ) as response:
+            if response.status_code != 200:
+                body = await response.aread()
+                raise Exception(
+                    f"Groq API error ({response.status_code}): {body.decode()}"
+                )
+
+            async for line in response.aiter_lines():
+                if not line.startswith("data: "):
+                    continue
+                data_str = line[6:]
+                if data_str.strip() == "[DONE]":
+                    break
+                try:
+                    data = __import__("json").loads(data_str)
+                except Exception:
+                    continue
+
+                choices = data.get("choices", [])
+                if choices:
+                    delta = choices[0].get("delta", {})
+                    content = delta.get("content")
+                    if content:
+                        yield content
+
+    async def stream_chat(
+        self,
+        model_id: str,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        max_tokens: int = 2048,
+        temperature: float = 0.7,
+        provider: str = "anthropic",
+    ) -> AsyncGenerator[str, None]:
+        """
+        Stream tokens from the appropriate provider.
+
+        Yields individual text chunks as they arrive.
+        Automatically strips <think> blocks from streamed output.
+        """
+        in_think = False
+        buffer = ""
+
+        if provider == "anthropic":
+            source = self._stream_anthropic(
+                model_id, prompt, system_prompt, max_tokens, temperature
+            )
+        elif provider == "groq":
+            source = self._stream_groq(
+                model_id, prompt, system_prompt, max_tokens, temperature
+            )
+        else:
+            raise ValueError(f"Unsupported provider: {provider}")
+
+        async for chunk in source:
+            buffer += chunk
+
+            # Handle <think> tag stripping in streaming context
+            while buffer:
+                if in_think:
+                    end_idx = buffer.find("</think>")
+                    if end_idx != -1:
+                        buffer = buffer[end_idx + 8:]
+                        in_think = False
+                    else:
+                        # Still inside think block, consume all
+                        buffer = ""
+                        break
+                else:
+                    start_idx = buffer.find("<think>")
+                    if start_idx != -1:
+                        # Yield text before <think>
+                        if start_idx > 0:
+                            yield buffer[:start_idx]
+                        buffer = buffer[start_idx + 7:]
+                        in_think = True
+                    elif "<" in buffer and not buffer.endswith(">"):
+                        # Might be a partial <think> tag, hold in buffer
+                        safe = buffer[:buffer.rfind("<")]
+                        if safe:
+                            yield safe
+                        buffer = buffer[len(safe):]
+                        break
+                    else:
+                        yield buffer
+                        buffer = ""
+                        break
+
+        # Flush remaining buffer (if not in think block)
+        if buffer and not in_think:
+            yield buffer
 
     async def chat(
         self,

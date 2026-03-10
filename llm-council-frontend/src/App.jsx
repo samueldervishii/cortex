@@ -48,6 +48,9 @@ function App() {
     exportSession,
     sessionLoadError,
     isLoadingSession,
+    // System prompt
+    systemPrompt,
+    setSystemPrompt,
     // Folder management
     folders,
     createFolder,
@@ -244,6 +247,10 @@ function App() {
           onQuestionChange={setQuestion}
           onSubmit={startCouncil}
           loading={loading}
+          {...(userSettings.enabled_beta_features?.includes('custom_prompts') && {
+            systemPrompt,
+            onSystemPromptChange: setSystemPrompt,
+          })}
         />
       ) : (
         <ChatMessages
@@ -254,6 +261,10 @@ function App() {
           onQuestionChange={setQuestion}
           onSubmit={startCouncil}
           mode={mode}
+          {...(userSettings.enabled_beta_features?.includes('custom_prompts') && {
+            systemPrompt,
+            onSystemPromptChange: setSystemPrompt,
+          })}
         />
       )}
 

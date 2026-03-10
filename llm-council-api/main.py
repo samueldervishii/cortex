@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import re
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -115,8 +116,11 @@ async def lifespan(_app: FastAPI):
     init_metrics()
     print("Metrics initialized")
 
-    # Connect to MongoDB with timeout
-    print(f"Connecting to MongoDB at {settings.mongodb_url}...")
+    # Connect to MongoDB with timeout (mask credentials in log output)
+    masked_url = re.sub(
+        r"://([^:]+):([^@]+)@", r"://\1:****@", settings.mongodb_url
+    )
+    print(f"Connecting to MongoDB at {masked_url}...")
     try:
         db = await get_database()
         # Ping to verify connection with 10 second timeout
@@ -135,7 +139,7 @@ async def lifespan(_app: FastAPI):
     except asyncio.TimeoutError:
         print("MongoDB ping timeout after 10 seconds - proceeding anyway")
     except Exception as e:
-        print(f"MongoDB connection failed: {e}")
+        print(f"MongoDB connection failed: {type(e).__name__}")
 
     yield
     print("LLM Council API shutting down...")
@@ -237,9 +241,43 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "X-API-Key", "Authorization"],
 )
+
+
+# Request body size limit (1MB)
+MAX_REQUEST_BODY_SIZE = 1 * 1024 * 1024
+
+
+@app.middleware("http")
+async def limit_request_body(request: Request, call_next):
+    """Reject requests with bodies larger than MAX_REQUEST_BODY_SIZE."""
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > MAX_REQUEST_BODY_SIZE:
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse(
+            status_code=413,
+            content={"detail": "Request body too large. Maximum size is 1MB."},
+        )
+    return await call_next(request)
+
+
+# Security headers middleware
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """Add security headers to all responses."""
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    if settings.environment == "production":
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=31536000; includeSubDomains"
+        )
+    return response
 
 
 # Request logging and metrics middleware

@@ -47,8 +47,8 @@ BETA_FEATURES_INFO: List[BetaFeatureInfo] = [
     BetaFeatureInfo(
         id=BetaFeature.CUSTOM_PROMPTS,
         name="Custom System Prompts",
-        description="Define custom personality and behavior for each model",
-        status="coming_soon",
+        description="Define custom instructions and behavior for all council members",
+        status="available",
     ),
     BetaFeatureInfo(
         id=BetaFeature.AUTO_DELETE,

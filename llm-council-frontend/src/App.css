@@ -412,6 +412,11 @@ body {
     gap: 1rem;
   }
 
+  .system-prompt-section {
+    max-width: 100%;
+    padding: 0 0.25rem;
+  }
+
   /* Sidebar Mobile Optimization */
   .sidebar {
     width: 85vw;
@@ -926,6 +931,77 @@ body {
   gap: 0.25rem;
 }
 
+/* System Prompt */
+.system-prompt-section {
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto 0.5rem;
+}
+
+.system-prompt-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 0.25rem 0;
+  transition: color 0.2s;
+}
+
+.system-prompt-toggle:hover {
+  color: var(--text-primary);
+}
+
+.system-prompt-chevron {
+  font-size: 0.6rem;
+  transition: transform 0.2s;
+  display: inline-block;
+}
+
+.system-prompt-chevron.open {
+  transform: rotate(90deg);
+}
+
+.system-prompt-badge {
+  background: var(--accent-color, #6366f1);
+  color: white;
+  font-size: 0.65rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.system-prompt-textarea {
+  width: 100%;
+  margin-top: 0.4rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  resize: vertical;
+  min-height: 60px;
+  max-height: 150px;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.system-prompt-textarea:focus {
+  outline: none;
+  border-color: var(--accent-color, #6366f1);
+}
+
+.system-prompt-textarea::placeholder {
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
 /* @mention autocomplete dropdown */
 .mention-dropdown {
   position: absolute;
@@ -1115,6 +1191,22 @@ body {
   font-size: 0.75rem;
   color: var(--text-muted);
   font-weight: normal;
+}
+
+/* Streaming cursor animation */
+.streaming-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: var(--accent-color, #6366f1);
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: blink-cursor 0.8s step-end infinite;
+}
+
+@keyframes blink-cursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
 }
 
 .model-name {

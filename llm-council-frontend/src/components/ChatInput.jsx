@@ -12,13 +12,14 @@ const MODEL_COLORS = {
 const ALL_MODELS = Object.keys(MODEL_COLORS)
 
 const ChatInput = forwardRef(
-  ({ value, onChange, onSubmit, disabled, placeholder, centered = false, mode }, ref) => {
+  ({ value, onChange, onSubmit, disabled, placeholder, centered = false, mode, systemPrompt, onSystemPromptChange }, ref) => {
     const textareaRef = useRef(null)
     const dropdownRef = useRef(null)
     const [showMentions, setShowMentions] = useState(false)
     const [mentionFilter, setMentionFilter] = useState('')
     const [mentionStartIndex, setMentionStartIndex] = useState(-1)
     const [selectedIndex, setSelectedIndex] = useState(0)
+    const [showSystemPrompt, setShowSystemPrompt] = useState(false)
 
     // Expose focus method to parent
     useImperativeHandle(ref, () => ({
@@ -153,6 +154,33 @@ const ChatInput = forwardRef(
 
     return (
       <div className={`input-container ${centered ? 'centered' : 'bottom'}`}>
+        {/* System prompt - collapsible */}
+        {onSystemPromptChange && (
+          <div className={`system-prompt-section ${showSystemPrompt ? 'open' : ''}`}>
+            <button
+              className="system-prompt-toggle"
+              onClick={() => setShowSystemPrompt((prev) => !prev)}
+              type="button"
+            >
+              <span className={`system-prompt-chevron ${showSystemPrompt ? 'open' : ''}`}>&#9654;</span>
+              <span>System Prompt</span>
+              {systemPrompt?.trim() && !showSystemPrompt && (
+                <span className="system-prompt-badge">Active</span>
+              )}
+            </button>
+            {showSystemPrompt && (
+              <textarea
+                className="system-prompt-textarea"
+                value={systemPrompt || ''}
+                onChange={(e) => onSystemPromptChange(e.target.value)}
+                placeholder="Custom instructions for all council members (e.g., 'respond in Spanish', 'you are a senior engineer')..."
+                rows={3}
+                maxLength={2000}
+              />
+            )}
+          </div>
+        )}
+
         <div className="input-wrapper" style={{ position: 'relative' }}>
           {/* @mention dropdown */}
           {showMentions && filteredModels.length > 0 && (

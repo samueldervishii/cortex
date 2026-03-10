@@ -4,6 +4,7 @@ Input sanitization utilities for security.
 Prevents XSS and other injection attacks by cleaning user input.
 """
 
+import html
 import re
 from typing import Optional
 
@@ -12,8 +13,10 @@ def sanitize_text(text: Optional[str], max_length: Optional[int] = None) -> str:
     """
     Sanitize text input by removing potentially dangerous characters.
 
-    - Strips HTML/XML tags
+    - Strips HTML/XML tags (including unclosed tags and comments)
+    - Escapes remaining HTML entities
     - Removes control characters (except newlines and tabs)
+    - Strips javascript: and data: URI schemes
     - Normalizes whitespace
     - Optionally truncates to max_length
 
@@ -30,9 +33,20 @@ def sanitize_text(text: Optional[str], max_length: Optional[int] = None) -> str:
     # Convert to string if not already
     text = str(text)
 
-    # Remove HTML/XML tags (basic protection)
+    # Remove HTML comments
+    text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
+
+    # Remove HTML/XML tags (including unclosed tags)
     # Limit tag matching to prevent ReDoS with unclosed tags
     text = re.sub(r"<[^>]{0,1000}>", "", text)
+    # Catch unclosed tags at end of input
+    text = re.sub(r"<[^>]{0,1000}$", "", text)
+
+    # Remove dangerous URI schemes (javascript:, data:, vbscript:)
+    text = re.sub(r"(?i)(javascript|data|vbscript)\s*:", "", text)
+
+    # Escape any remaining HTML entities to prevent XSS
+    text = html.escape(text, quote=True)
 
     # Remove control characters except newline, carriage return, and tab
     # This prevents things like null bytes, bell characters, etc.

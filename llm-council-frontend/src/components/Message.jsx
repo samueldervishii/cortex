@@ -56,7 +56,7 @@ function highlightMentions(text) {
   })
 }
 
-function Message({ type, content, modelName, disagreement, replyTo, responseTime }) {
+function Message({ type, content, modelName, disagreement, replyTo, responseTime, streaming }) {
   const [copied, setCopied] = useState(false)
   const hasDisagreement = disagreement?.has_disagreement
   const disagreementScore = disagreement?.disagreement_score
@@ -113,7 +113,7 @@ function Message({ type, content, modelName, disagreement, replyTo, responseTime
             </button>
           </div>
           <div className="chat-content">
-            <p>{highlightMentions(content)}</p>
+            <p>{highlightMentions(content)}{streaming && <span className="streaming-cursor" />}</p>
           </div>
         </div>
         <div className="chat-avatar" style={{ backgroundColor: color }}>
@@ -182,6 +182,7 @@ function Message({ type, content, modelName, disagreement, replyTo, responseTime
       )}
       <div className="message-content">
         <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{content}</ReactMarkdown>
+        {streaming && <span className="streaming-cursor" />}
       </div>
       {type === 'user' && <div className="user-avatar">U</div>}
     </div>

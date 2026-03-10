@@ -5,10 +5,11 @@ Provides /health (liveness) and /ready (readiness) probes.
 """
 
 import asyncio
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter, Depends, Response, status
 
 from db import get_database
 from core.circuit_breaker import get_circuit_breaker_status
+from core.dependencies import verify_api_key
 
 router = APIRouter(tags=["health"])
 
@@ -43,7 +44,7 @@ async def readiness_check(response: Response):
         checks["mongodb"] = "timeout"
         is_ready = False
     except Exception as e:
-        checks["mongodb"] = f"unhealthy: {str(e)[:50]}"
+        checks["mongodb"] = "unhealthy"
         is_ready = False
 
     # Check Circuit Breaker
@@ -53,7 +54,7 @@ async def readiness_check(response: Response):
         if breaker_status.get("state") == "open":
             is_ready = False
     except Exception as e:
-        checks["circuit_breaker"] = f"error: {str(e)[:50]}"
+        checks["circuit_breaker"] = "error"
 
     if not is_ready:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
@@ -62,8 +63,8 @@ async def readiness_check(response: Response):
 
 
 @router.get("/metrics")
-async def metrics_endpoint():
-    """Prometheus Metrics Endpoint."""
+async def metrics_endpoint(_auth: bool = Depends(verify_api_key)):
+    """Prometheus Metrics Endpoint. Requires authentication."""
     try:
         from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 

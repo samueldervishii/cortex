@@ -2,13 +2,18 @@ import asyncio
 import json
 import time
 from statistics import mean, stdev, StatisticsError
-from typing import List, Optional, Dict
+from typing import AsyncGenerator, List, Optional, Dict
 
 from clients import LLMClient
 from config import COUNCIL_MODELS, CHAIRMAN_MODEL
 from core.logging import logger
 from schemas import ModelResponse, PeerReview, ConversationRound, ChatMessage
 from .prompts import Prompts
+
+
+def _sse_event(event: str, data: dict) -> str:
+    """Format a server-sent event."""
+    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
 def analyze_disagreement(
@@ -102,9 +107,10 @@ def analyze_disagreement(
 
 def _get_name_variants(name: str) -> List[str]:
     """Get name variants for mention matching (e.g., 'Claude Sonnet 4.6' -> ['Claude Sonnet 4.6', 'Claude Sonnet'])."""
+    import re
+
     variants = [name]
     # Strip version numbers like "4.6", "4.5", "120B", "20B", "32B"
-    import re
     short = re.sub(r"\s+\d+(\.\d+)?[A-Z]?$", "", name).strip()
     if short and short != name:
         variants.append(short)
@@ -148,6 +154,18 @@ class CouncilService:
 
         return [m for m in all_models if m["id"] in selected_models]
 
+    def _build_system_prompt(
+        self,
+        base_prompt: str,
+        custom_prompt: Optional[str] = None,
+        persona: Optional[str] = None,
+    ) -> str:
+        """Build system prompt with optional custom instructions and model persona."""
+        prompt = base_prompt
+        if persona and persona.strip():
+            prompt = f"{prompt}\n\nYour persona: {persona.strip()}"
+        return Prompts.with_custom_instructions(prompt, custom_prompt)
+
     async def _call_model(
         self,
         model: dict,
@@ -166,6 +184,24 @@ class CouncilService:
             provider=model["provider"],
         )
 
+    def _stream_model(
+        self,
+        model: dict,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        max_tokens: int = 2048,
+        temperature: float = 0.7,
+    ) -> AsyncGenerator[str, None]:
+        """Stream tokens from a model through the appropriate provider."""
+        return self.client.stream_chat(
+            model_id=model["id"],
+            prompt=prompt,
+            system_prompt=system_prompt,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            provider=model["provider"],
+        )
+
     async def get_council_responses(
         self,
         current_round: ConversationRound,
@@ -173,10 +209,13 @@ class CouncilService:
     ) -> List[ModelResponse]:
         """Query all council models in parallel."""
         has_context = previous_rounds and len(previous_rounds) > 0
-        system_prompt = (
+        base_prompt = (
             Prompts.COUNCIL_MEMBER_SYSTEM_WITH_CONTEXT
             if has_context
             else Prompts.COUNCIL_MEMBER_SYSTEM
+        )
+        system_prompt = self._build_system_prompt(
+            base_prompt, current_round.system_prompt
         )
 
         prompt = Prompts.build_question_with_context(
@@ -279,18 +318,397 @@ class CouncilService:
             previous_rounds=previous_rounds,
         )
 
+        chairman_system = self._build_system_prompt(
+            Prompts.CHAIRMAN_SYSTEM, current_round.system_prompt
+        )
+
         logger.info(f"Starting synthesis with {CHAIRMAN_MODEL['name']}")
         logger.info(f"Synthesis prompt length: {len(synthesis_prompt)} chars")
 
         final_response = await self._call_model(
             CHAIRMAN_MODEL,
             synthesis_prompt,
-            system_prompt=Prompts.CHAIRMAN_SYSTEM,
+            system_prompt=chairman_system,
             max_tokens=4096,
         )
 
         logger.info(f"Synthesis complete, response length: {len(final_response)} chars")
         return final_response
+
+    # ==================== STREAMING METHODS ====================
+
+    async def stream_formal_council(
+        self,
+        current_round: ConversationRound,
+        previous_rounds: Optional[List[ConversationRound]] = None,
+        personas: Optional[Dict[str, str]] = None,
+    ) -> AsyncGenerator[str, None]:
+        """Stream the full formal council process as SSE events with token-level streaming."""
+        yield _sse_event("step", {"step": "responses", "message": "Gathering council responses..."})
+
+        has_context = previous_rounds and len(previous_rounds) > 0
+        base_prompt = (
+            Prompts.COUNCIL_MEMBER_SYSTEM_WITH_CONTEXT
+            if has_context
+            else Prompts.COUNCIL_MEMBER_SYSTEM
+        )
+        personas = personas or {}
+        prompt = Prompts.build_question_with_context(
+            question=current_round.question, previous_rounds=previous_rounds
+        )
+
+        active_models = self._get_active_models(
+            current_round.selected_models, include_chairman=False
+        )
+
+        # Queue for interleaving token events from parallel models
+        queue: asyncio.Queue = asyncio.Queue()
+        SENTINEL = object()
+
+        async def stream_model_to_queue(model: dict):
+            """Stream a single model's tokens into the shared queue."""
+            model_id = model["id"]
+            model_name = model["name"]
+            model_persona = personas.get(model_id)
+            model_system = self._build_system_prompt(
+                base_prompt, current_round.system_prompt, persona=model_persona
+            )
+            try:
+                start_time = time.monotonic()
+                await queue.put(("start", model_id, model_name, None))
+                full_text = []
+                async for token in self._stream_model(
+                    model, prompt, system_prompt=model_system
+                ):
+                    full_text.append(token)
+                    await queue.put(("token", model_id, model_name, token))
+                elapsed_ms = int((time.monotonic() - start_time) * 1000)
+                response_text = "".join(full_text)
+                await queue.put(("end", model_id, model_name, {
+                    "response": response_text,
+                    "response_time_ms": elapsed_ms,
+                }))
+            except Exception as e:
+                await queue.put(("error", model_id, model_name, str(e)))
+
+        tasks = [asyncio.create_task(stream_model_to_queue(m)) for m in active_models]
+
+        # Also push a sentinel when all tasks are done
+        async def push_sentinel():
+            await asyncio.gather(*tasks, return_exceptions=True)
+            await queue.put(SENTINEL)
+
+        sentinel_task = asyncio.create_task(push_sentinel())
+
+        responses = []
+        while True:
+            item = await queue.get()
+            if item is SENTINEL:
+                break
+            event_type, model_id, model_name, payload = item
+
+            if event_type == "start":
+                yield _sse_event("response_start", {
+                    "model_id": model_id,
+                    "model_name": model_name,
+                })
+            elif event_type == "token":
+                yield _sse_event("response_token", {
+                    "model_id": model_id,
+                    "token": payload,
+                })
+            elif event_type == "end":
+                responses.append(ModelResponse(
+                    model_id=model_id,
+                    model_name=model_name,
+                    response=payload["response"],
+                    error=None,
+                    response_time_ms=payload["response_time_ms"],
+                ))
+                yield _sse_event("response_end", {
+                    "model_id": model_id,
+                    "model_name": model_name,
+                    "response_time_ms": payload["response_time_ms"],
+                })
+            elif event_type == "error":
+                responses.append(ModelResponse(
+                    model_id=model_id,
+                    model_name=model_name,
+                    response="",
+                    error=payload,
+                    response_time_ms=None,
+                ))
+                yield _sse_event("error_response", {
+                    "model_id": model_id,
+                    "model_name": model_name,
+                    "error": payload,
+                })
+
+        await sentinel_task
+
+        current_round.responses = responses
+        current_round.status = "responses_complete"
+
+        # Step 2: Peer reviews (not token-streamed — they're fast)
+        yield _sse_event("step", {"step": "reviews", "message": "Council members are reviewing..."})
+
+        reviews = await self.get_peer_reviews(current_round, previous_rounds)
+        current_round.peer_reviews = reviews
+        current_round.status = "reviews_complete"
+        current_round.disagreement_analysis = analyze_disagreement(responses, reviews)
+
+        # Step 3: Synthesis — stream tokens for chairman too
+        yield _sse_event("step", {"step": "synthesis", "message": "Council Head is deciding..."})
+
+        valid_responses = [r for r in current_round.responses if not r.error]
+        reviews_text = ""
+        for review in current_round.peer_reviews:
+            reviews_text += f"\n\n--- Review by {review.reviewer_model} ---\n{json.dumps(review.rankings, indent=2)}"
+
+        synthesis_prompt = Prompts.build_synthesis_prompt(
+            question=current_round.question,
+            valid_responses=valid_responses,
+            reviews_text=reviews_text,
+            previous_rounds=previous_rounds,
+        )
+        chairman_persona = personas.get(CHAIRMAN_MODEL["id"])
+        chairman_system = self._build_system_prompt(
+            Prompts.CHAIRMAN_SYSTEM, current_round.system_prompt, persona=chairman_persona
+        )
+
+        yield _sse_event("synthesis_start", {"model_name": CHAIRMAN_MODEL["name"]})
+        synthesis_parts = []
+        async for token in self._stream_model(
+            CHAIRMAN_MODEL,
+            synthesis_prompt,
+            system_prompt=chairman_system,
+            max_tokens=4096,
+        ):
+            synthesis_parts.append(token)
+            yield _sse_event("synthesis_token", {"token": token})
+
+        synthesis = "".join(synthesis_parts)
+        current_round.final_synthesis = synthesis
+        current_round.status = "synthesized"
+
+        yield _sse_event("synthesis_end", {})
+        yield _sse_event("done", {})
+
+    async def _stream_chat_single_model(
+        self,
+        model: dict,
+        all_models: List[dict],
+        chat_messages: List[ChatMessage],
+        current_round: ConversationRound,
+        previous_rounds: Optional[List[ConversationRound]],
+        custom_prompt: Optional[str] = None,
+        persona: Optional[str] = None,
+    ) -> AsyncGenerator[str, None]:
+        """Stream a single chat model's response as SSE events, yielding tokens."""
+        other_models = [m["name"] for m in all_models if m["id"] != model["id"]]
+        is_first = len(chat_messages) == 0
+        base_system = Prompts.get_chat_system_prompt(
+            model["name"], other_models, is_first=is_first
+        )
+        system_prompt = self._build_system_prompt(base_system, custom_prompt, persona=persona)
+
+        user_prompt = Prompts.build_chat_prompt(
+            question=current_round.question,
+            chat_messages=chat_messages,
+            previous_rounds=previous_rounds,
+        )
+
+        yield _sse_event("chat_message_start", {
+            "model_id": model["id"],
+            "model_name": model["name"],
+        })
+
+        try:
+            start_time = time.monotonic()
+            full_text = []
+            async for token in self._stream_model(
+                model, user_prompt,
+                system_prompt=system_prompt,
+                max_tokens=512,
+                temperature=0.8,
+            ):
+                full_text.append(token)
+                yield _sse_event("chat_message_token", {
+                    "model_id": model["id"],
+                    "token": token,
+                })
+            elapsed_ms = int((time.monotonic() - start_time) * 1000)
+            response = "".join(full_text)
+
+            reply_to = None
+            if "@User" in response:
+                reply_to = "User"
+            else:
+                for other_name in other_models:
+                    if _detect_mention(response, other_name):
+                        reply_to = other_name
+                        break
+
+            msg = ChatMessage(
+                model_id=model["id"],
+                model_name=model["name"],
+                content=response,
+                reply_to=reply_to,
+                response_time_ms=elapsed_ms,
+            )
+            chat_messages.append(msg)
+
+            yield _sse_event("chat_message_end", {
+                "model_id": model["id"],
+                "model_name": model["name"],
+                "content": response,
+                "reply_to": reply_to,
+                "response_time_ms": elapsed_ms,
+            })
+
+        except Exception as e:
+            logger.error(f"Error from {model['name']}: {e}")
+            error_content = f"[Failed to respond: {str(e)}]"
+            msg = ChatMessage(
+                model_id=model["id"],
+                model_name=model["name"],
+                content=error_content,
+                reply_to=None,
+                response_time_ms=None,
+            )
+            chat_messages.append(msg)
+            yield _sse_event("chat_message_end", {
+                "model_id": model["id"],
+                "model_name": model["name"],
+                "content": error_content,
+                "reply_to": None,
+                "response_time_ms": None,
+            })
+
+    async def stream_group_chat(
+        self,
+        current_round: ConversationRound,
+        previous_rounds: Optional[List[ConversationRound]] = None,
+        target_model: Optional[str] = None,
+        personas: Optional[Dict[str, str]] = None,
+    ) -> AsyncGenerator[str, None]:
+        """Stream group chat messages as SSE events with token-level streaming."""
+        chat_messages: List[ChatMessage] = (
+            list(current_round.chat_messages) if target_model else []
+        )
+
+        all_chat_models = self._get_active_models(
+            current_round.selected_models, include_chairman=True
+        )
+
+        custom_prompt = current_round.system_prompt
+        personas = personas or {}
+
+        # If targeting a specific model, only that one responds
+        if target_model:
+            target = None
+            for m in all_chat_models:
+                if m["name"] == target_model:
+                    target = m
+                    break
+            if target:
+                async for event in self._stream_chat_single_model(
+                    target, all_chat_models, chat_messages,
+                    current_round, previous_rounds, custom_prompt,
+                    persona=personas.get(target["id"]),
+                ):
+                    yield event
+                if target_model and current_round.chat_messages:
+                    current_round.chat_messages = current_round.chat_messages + chat_messages[-1:]
+                else:
+                    current_round.chat_messages = chat_messages
+                current_round.status = "chat_complete"
+                yield _sse_event("done", {})
+                return
+
+        # Full group chat: each model responds sequentially with token streaming
+        for model in all_chat_models:
+            async for event in self._stream_chat_single_model(
+                model, all_chat_models, chat_messages,
+                current_round, previous_rounds, custom_prompt,
+                persona=personas.get(model["id"]),
+            ):
+                yield event
+
+        # Mention follow-ups
+        mentioned_models = self._find_mentioned_models(chat_messages, all_chat_models)
+        for model in mentioned_models:
+            async for event in self._stream_chat_single_model(
+                model, all_chat_models, chat_messages,
+                current_round, previous_rounds, custom_prompt,
+                persona=personas.get(model["id"]),
+            ):
+                yield event
+
+        current_round.chat_messages = chat_messages
+        current_round.status = "chat_complete"
+        yield _sse_event("done", {})
+
+    async def _chat_single_model(
+        self,
+        model: dict,
+        all_models: List[dict],
+        chat_messages: List[ChatMessage],
+        current_round: ConversationRound,
+        previous_rounds: Optional[List[ConversationRound]],
+        custom_prompt: Optional[str] = None,
+    ) -> ChatMessage:
+        """Query a single model in chat mode and return a ChatMessage."""
+        other_models = [m["name"] for m in all_models if m["id"] != model["id"]]
+        is_first = len(chat_messages) == 0
+        base_system = Prompts.get_chat_system_prompt(
+            model["name"], other_models, is_first=is_first
+        )
+        system_prompt = self._build_system_prompt(base_system, custom_prompt)
+
+        user_prompt = Prompts.build_chat_prompt(
+            question=current_round.question,
+            chat_messages=chat_messages,
+            previous_rounds=previous_rounds,
+        )
+
+        try:
+            start_time = time.monotonic()
+            response = await self._call_model(
+                model, user_prompt,
+                system_prompt=system_prompt,
+                max_tokens=512,
+                temperature=0.8,
+            )
+            elapsed_ms = int((time.monotonic() - start_time) * 1000)
+
+            reply_to = None
+            if "@User" in response:
+                reply_to = "User"
+            else:
+                for other_name in other_models:
+                    if _detect_mention(response, other_name):
+                        reply_to = other_name
+                        break
+
+            return ChatMessage(
+                model_id=model["id"],
+                model_name=model["name"],
+                content=response,
+                reply_to=reply_to,
+                response_time_ms=elapsed_ms,
+            )
+        except Exception as e:
+            logger.error(f"Error from {model['name']}: {e}")
+            return ChatMessage(
+                model_id=model["id"],
+                model_name=model["name"],
+                content=f"[Failed to respond: {str(e)}]",
+                reply_to=None,
+                response_time_ms=None,
+            )
+
+    # ==================== NON-STREAMING GROUP CHAT ====================
 
     async def run_group_chat(
         self,
@@ -309,6 +727,7 @@ class CouncilService:
         """
         # Include existing chat messages as context for targeted responses
         chat_messages: List[ChatMessage] = list(current_round.chat_messages) if target_model else []
+        custom_prompt = current_round.system_prompt
 
         # Chairman leads - included first in chat mode
         all_chat_models = self._get_active_models(
@@ -326,56 +745,11 @@ class CouncilService:
                 logger.warning(f"Target model '{target_model}' not found, falling back to all")
             else:
                 logger.info(f"Targeted response from {target_model}")
-                other_models = [
-                    m["name"] for m in all_chat_models if m["id"] != target["id"]
-                ]
-                system_prompt = Prompts.get_chat_system_prompt(
-                    target["name"], other_models, is_first=False
+                msg = await self._chat_single_model(
+                    target, all_chat_models, chat_messages,
+                    current_round, previous_rounds, custom_prompt,
                 )
-                user_prompt = Prompts.build_chat_prompt(
-                    question=current_round.question,
-                    chat_messages=chat_messages,
-                    previous_rounds=previous_rounds,
-                )
-
-                try:
-                    start_time = time.monotonic()
-                    response = await self._call_model(
-                        target,
-                        user_prompt,
-                        system_prompt=system_prompt,
-                        max_tokens=512,
-                        temperature=0.8,
-                    )
-                    elapsed_ms = int((time.monotonic() - start_time) * 1000)
-
-                    reply_to = None
-                    if "@User" in response:
-                        reply_to = "User"
-                    else:
-                        for other_name in other_models:
-                            if _detect_mention(response, other_name):
-                                reply_to = other_name
-                                break
-
-                    message = ChatMessage(
-                        model_id=target["id"],
-                        model_name=target["name"],
-                        content=response,
-                        reply_to=reply_to,
-                        response_time_ms=elapsed_ms,
-                    )
-                    return [message]  # Only return the single targeted response
-
-                except Exception as e:
-                    logger.error(f"Error from {target['name']}: {e}")
-                    return [ChatMessage(
-                        model_id=target["id"],
-                        model_name=target["name"],
-                        content=f"[Failed to respond: {str(e)}]",
-                        reply_to=None,
-                        response_time_ms=None,
-                    )]
+                return [msg]
 
         logger.info(
             f"Starting debate with {len(all_chat_models)} models, {num_turns} turns each"
@@ -385,65 +759,12 @@ class CouncilService:
             logger.info(f"=== Turn {turn + 1}/{num_turns} ===")
 
             for model in all_chat_models:
-                other_models = [
-                    m["name"] for m in all_chat_models if m["id"] != model["id"]
-                ]
-
-                # Same prompt for everyone — no special chairman role in chat
-                is_first = len(chat_messages) == 0
-                system_prompt = Prompts.get_chat_system_prompt(
-                    model["name"], other_models, is_first=is_first
+                msg = await self._chat_single_model(
+                    model, all_chat_models, chat_messages,
+                    current_round, previous_rounds, custom_prompt,
                 )
-
-                # Build user prompt with chat history
-                user_prompt = Prompts.build_chat_prompt(
-                    question=current_round.question,
-                    chat_messages=chat_messages,
-                    previous_rounds=previous_rounds,
-                )
-
-                try:
-                    logger.info(f"Querying {model['name']}...")
-                    start_time = time.monotonic()
-                    response = await self._call_model(
-                        model,
-                        user_prompt,
-                        system_prompt=system_prompt,
-                        max_tokens=512,
-                        temperature=0.8,
-                    )
-                    elapsed_ms = int((time.monotonic() - start_time) * 1000)
-
-                    # Detect if replying to someone (model or user)
-                    reply_to = None
-                    if "@User" in response:
-                        reply_to = "User"
-                    else:
-                        for other_name in other_models:
-                            if _detect_mention(response, other_name):
-                                reply_to = other_name
-                                break
-
-                    message = ChatMessage(
-                        model_id=model["id"],
-                        model_name=model["name"],
-                        content=response,
-                        reply_to=reply_to,
-                        response_time_ms=elapsed_ms,
-                    )
-                    chat_messages.append(message)
-                    logger.info(f"{model['name']}: {response[:100]}...")
-
-                except Exception as e:
-                    logger.error(f"Error from {model['name']}: {e}")
-                    message = ChatMessage(
-                        model_id=model["id"],
-                        model_name=model["name"],
-                        content=f"[Failed to respond: {str(e)}]",
-                        reply_to=None,
-                        response_time_ms=None,
-                    )
-                    chat_messages.append(message)
+                chat_messages.append(msg)
+                logger.info(f"{model['name']}: {msg.content[:100]}...")
 
         # Mention-triggered follow-ups: if a model was @mentioned, it gets to respond
         mentioned_models = self._find_mentioned_models(chat_messages, all_chat_models)
@@ -451,49 +772,11 @@ class CouncilService:
             logger.info(f"Mention follow-ups for: {[m['name'] for m in mentioned_models]}")
 
             for model in mentioned_models:
-                other_models = [
-                    m["name"] for m in all_chat_models if m["id"] != model["id"]
-                ]
-                system_prompt = Prompts.get_chat_system_prompt(
-                    model["name"], other_models, is_first=False
+                msg = await self._chat_single_model(
+                    model, all_chat_models, chat_messages,
+                    current_round, previous_rounds, custom_prompt,
                 )
-                user_prompt = Prompts.build_chat_prompt(
-                    question=current_round.question,
-                    chat_messages=chat_messages,
-                    previous_rounds=previous_rounds,
-                )
-
-                try:
-                    logger.info(f"Mention follow-up: {model['name']}...")
-                    start_time = time.monotonic()
-                    response = await self._call_model(
-                        model,
-                        user_prompt,
-                        system_prompt=system_prompt,
-                        max_tokens=512,
-                        temperature=0.8,
-                    )
-                    elapsed_ms = int((time.monotonic() - start_time) * 1000)
-
-                    reply_to = None
-                    if "@User" in response:
-                        reply_to = "User"
-                    else:
-                        for other_name in other_models:
-                            if _detect_mention(response, other_name):
-                                reply_to = other_name
-                                break
-
-                    message = ChatMessage(
-                        model_id=model["id"],
-                        model_name=model["name"],
-                        content=response,
-                        reply_to=reply_to,
-                        response_time_ms=elapsed_ms,
-                    )
-                    chat_messages.append(message)
-                except Exception as e:
-                    logger.error(f"Mention follow-up error from {model['name']}: {e}")
+                chat_messages.append(msg)
 
         logger.info(f"Debate complete with {len(chat_messages)} messages")
         return chat_messages

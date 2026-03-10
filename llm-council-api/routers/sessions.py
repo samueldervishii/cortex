@@ -1,8 +1,11 @@
+import logging
 import secrets
 import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Depends, Request, Query, Body
+
+logger = logging.getLogger("llm-council.sessions")
 
 from core.dependencies import (
     get_session_repository,
@@ -99,6 +102,7 @@ async def create_session(
         question=request.question,
         mode=request.mode,
         selected_models=request.selected_models,
+        system_prompt=request.system_prompt,
         status="pending",
     )
 
@@ -186,8 +190,11 @@ async def update_session(
     try:
         await repo.update(session)
     except ValueError as e:
-        # Version conflict - session was modified by another request
-        raise HTTPException(status_code=409, detail=str(e))
+        logger.warning(f"Version conflict updating session {session_id}: {e}")
+        raise HTTPException(
+            status_code=409,
+            detail="Session was modified by another request. Please retry.",
+        )
 
     return SessionResponse(session=session, message="Session updated")
 
@@ -223,16 +230,18 @@ async def continue_session(
                 detail="Previous round must be completed before continuing",
             )
 
-    # Inherit mode and selected models from the first round (keep session consistent)
+    # Inherit mode, selected models, and system_prompt from the first round
     first_round = session.rounds[0] if session.rounds else None
     session_mode = first_round.mode if first_round else CouncilMode.FORMAL
     session_models = first_round.selected_models if first_round else None
+    session_system_prompt = first_round.system_prompt if first_round else None
 
-    # Add new round with same mode and models as session
+    # Add new round with same mode, models, and system prompt as session
     new_round = ConversationRound(
         question=request.question,
         mode=session_mode,
         selected_models=session_models,
+        system_prompt=session_system_prompt,
         status="pending",
     )
     session.rounds.append(new_round)
@@ -405,7 +414,11 @@ async def synthesize(
 
         return SessionResponse(session=session, message="Synthesis complete!")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Synthesis failed: {str(e)}")
+        logger.error(f"Synthesis failed for session {session_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Synthesis failed. Please try again later.",
+        )
 
 
 @router.post("/{session_id}/run-all", response_model=SessionResponse)
@@ -494,9 +507,10 @@ async def run_full_council(
     try:
         await repo.update(session)
     except ValueError as e:
-        # Version conflict - session was modified concurrently
+        logger.warning(f"Version conflict for session {session_id}: {e}")
         raise HTTPException(
-            status_code=409, detail=f"Session was modified during processing: {str(e)}"
+            status_code=409,
+            detail="Session was modified by another request. Please retry.",
         )
 
     return SessionResponse(session=session, message="Full council process complete!")
@@ -755,6 +769,79 @@ async def cleanup_old_sessions(
         "deleted_count": deleted_count,
         "retention_days": user_settings.auto_delete_days,
     }
+
+
+@router.post("/{session_id}/stream")
+async def stream_council(
+    session_id: str,
+    request: RunAllRequest = Body(None),
+    repo: SessionRepository = Depends(get_session_repository),
+    settings_repo: SettingsRepository = Depends(get_settings_repository),
+    council_service: CouncilService = Depends(get_council_service),
+    _auth: bool = Depends(verify_api_key),
+    _rate_limit: None = Depends(check_rate_limit),
+):
+    """
+    Stream Council Process (SSE)
+
+    Same as run-all but streams results via Server-Sent Events with token-level streaming.
+    Tokens arrive as they're generated for a real-time typing effect.
+
+    **Events:**
+    - `step` — progress update
+    - `response_start` / `response_token` / `response_end` — token-level model responses
+    - `synthesis_start` / `synthesis_token` / `synthesis_end` — token-level synthesis
+    - `chat_message_start` / `chat_message_token` / `chat_message_end` — token-level chat
+    - `error_response` — model that failed to respond
+    - `done` — stream complete
+    """
+    from fastapi.responses import StreamingResponse
+
+    session = await repo.get(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    if not session.rounds:
+        raise HTTPException(status_code=400, detail="No rounds in session")
+
+    current_round = session.rounds[-1]
+    previous_rounds = session.rounds[:-1] if len(session.rounds) > 1 else None
+    target_model = request.target_model if request else None
+
+    # Load model personas from user settings
+    user_settings = await settings_repo.get(user_id="default")
+    personas = user_settings.model_personas if user_settings.model_personas else {}
+
+    async def event_stream():
+        try:
+            if current_round.mode == CouncilMode.CHAT:
+                async for event in council_service.stream_group_chat(
+                    current_round, previous_rounds, target_model=target_model,
+                    personas=personas,
+                ):
+                    yield event
+            else:
+                async for event in council_service.stream_formal_council(
+                    current_round, previous_rounds, personas=personas,
+                ):
+                    yield event
+
+            # Save session after streaming completes
+            await repo.update(session)
+        except Exception as e:
+            logger.error(f"Stream error for session {session_id}: {e}")
+            import json
+            yield f"event: error\ndata: {json.dumps({'message': 'An error occurred during processing.'})}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("s/export")

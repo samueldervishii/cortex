@@ -13,6 +13,8 @@ function ChatMessages({
   onSubmit,
   readOnly = false,
   mode = 'formal',
+  systemPrompt,
+  onSystemPromptChange,
 }) {
   const messagesEndRef = useRef(null)
 
@@ -47,6 +49,7 @@ function ChatMessages({
               disagreement={msg.disagreement}
               replyTo={msg.replyTo}
               responseTime={msg.responseTime}
+              streaming={msg.streaming}
             />
           )
         })}
@@ -64,6 +67,8 @@ function ChatMessages({
           disabled={loading}
           placeholder={mode === 'chat' ? 'Message the group chat... (@ to mention)' : 'Ask the council another question...'}
           mode={mode}
+          systemPrompt={systemPrompt}
+          onSystemPromptChange={onSystemPromptChange}
         />
       )}
     </>
