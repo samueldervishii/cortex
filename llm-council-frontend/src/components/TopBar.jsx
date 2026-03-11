@@ -16,6 +16,7 @@ function TopBar({
   const location = useLocation()
   const navigate = useNavigate()
   const isRootPath = location.pathname === '/'
+  const showGlobalActions = isRootPath || location.pathname.startsWith('/settings') || location.pathname.startsWith('/status')
   const [shareModal, setShareModal] = useState({ open: false, url: '', loading: false })
   const [showToast, setShowToast] = useState(false)
   const [apiStatus, setApiStatus] = useState('checking') // 'healthy', 'unhealthy', 'checking'
@@ -71,7 +72,7 @@ function TopBar({
         </div>
 
         <div className="top-bar-right">
-          {isRootPath && (
+          {showGlobalActions && (
             <button
               className={`status-indicator ${apiStatus}`}
               onClick={() => navigate('/status')}
@@ -118,7 +119,7 @@ function TopBar({
             </button>
           )}
 
-          {isRootPath && (
+          {showGlobalActions && (
             <button
               className="top-bar-action search-btn"
               onClick={onOpenCommandPalette}
