@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths-ignore:
-      - 'version.json'
+      - "version.json"
 
 jobs:
   bump-version:
@@ -26,7 +26,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
 
       - name: Bump patch version
         id: bump
@@ -53,8 +53,8 @@ jobs:
           # Update root version.json (source of truth)
           jq --arg v "$NEW_VERSION" '.version = $v' version.json > tmp.json && mv tmp.json version.json
 
-          # Update llm-council-frontend/package.json (for npm consistency)
-          jq --arg v "$NEW_VERSION" '.version = $v' llm-council-frontend/package.json > tmp.json && mv tmp.json llm-council-frontend/package.json
+          # Update frontend/package.json (for npm consistency)
+          jq --arg v "$NEW_VERSION" '.version = $v' frontend/package.json > tmp.json && mv tmp.json frontend/package.json
 
       - name: Commit and push changes
         run: |
@@ -63,6 +63,6 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
 
-          git add version.json llm-council-frontend/package.json
+          git add version.json frontend/package.json
           git commit -m "chore: bump version to $NEW_VERSION [skip ci]"
           git push
