@@ -11,6 +11,8 @@ function TopBar({
   onBranch,
   onOpenCommandPalette,
   onOpenIncognito,
+  onOpenRightPanel,
+  showContextButton = false,
   branchingEnabled = false,
 }) {
   const location = useLocation()
@@ -139,6 +141,31 @@ function TopBar({
               <span className="search-hint">
                 <kbd>Ctrl</kbd> <kbd>K</kbd>
               </span>
+            </button>
+          )}
+
+          {showGlobalActions && showContextButton && (
+            <button
+              className="top-bar-action panel-btn"
+              onClick={onOpenRightPanel}
+              title="Session context (system prompt &amp; language)"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <line x1="4" y1="6" x2="20" y2="6" />
+                <line x1="8" y1="12" x2="20" y2="12" />
+                <line x1="12" y1="18" x2="20" y2="18" />
+                <circle cx="2" cy="6" r="2" fill="currentColor" stroke="none" />
+                <circle cx="4" cy="12" r="2" fill="currentColor" stroke="none" />
+                <circle cx="8" cy="18" r="2" fill="currentColor" stroke="none" />
+              </svg>
+              <span className="button-text">Context</span>
             </button>
           )}
 

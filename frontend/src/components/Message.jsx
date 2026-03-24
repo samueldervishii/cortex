@@ -56,7 +56,7 @@ function highlightMentions(text) {
   })
 }
 
-function Message({ type, content, modelName, disagreement, replyTo, responseTime, streaming }) {
+function Message({ type, content, modelName, disagreement, replyTo, responseTime, streaming, blindVoteProps, level, levelLabel }) {
   const [copied, setCopied] = useState(false)
   const hasDisagreement = disagreement?.has_disagreement
   const disagreementScore = disagreement?.disagreement_score
@@ -73,7 +73,49 @@ function Message({ type, content, modelName, disagreement, replyTo, responseTime
   }
 
   // Only show copy for model responses
-  const showCopy = ['council', 'chairman', 'chat'].includes(type)
+  const showCopy = ['council', 'chairman', 'chat', 'eli5'].includes(type)
+
+  // ELI5 Ladder styling
+  if (type === 'eli5') {
+    const LEVEL_STYLES = {
+      beginner: { color: '#10b981', icon: '⚡' },
+      intermediate: { color: '#0467df', icon: '📖' },
+      expert: { color: '#d97706', icon: '🔬' },
+    }
+    const style = LEVEL_STYLES[level] || { color: '#888', icon: '•' }
+    const displayLabel = levelLabel || level || 'Unknown'
+    return (
+      <div className="message eli5" style={{ '--eli5-color': style.color }}>
+        <div className="message-header">
+          <span
+            className="eli5-level-badge"
+            style={{ background: `${style.color}22`, color: style.color, border: `1px solid ${style.color}44` }}
+          >
+            {style.icon} {displayLabel}
+          </span>
+          {formattedTime && <span className="response-time">{formattedTime}</span>}
+          {showCopy && (
+            <button className="copy-btn" onClick={handleCopy} title="Copy response">
+              {copied ? (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+              )}
+            </button>
+          )}
+        </div>
+        <div className="message-content">
+          <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{content}</ReactMarkdown>
+          {streaming && <span className="streaming-cursor" />}
+        </div>
+      </div>
+    )
+  }
 
   // Chat mode styling
   if (type === 'chat') {
@@ -148,6 +190,14 @@ function Message({ type, content, modelName, disagreement, replyTo, responseTime
               </svg>
               Disputed
             </span>
+          )}
+          {blindVoteProps?.isVotable && (
+            <button className="vote-btn" onClick={blindVoteProps.onVote} title="Vote for this response">
+              Vote
+            </button>
+          )}
+          {blindVoteProps?.isVoted && (
+            <span className="voted-badge">Your Pick</span>
           )}
           {formattedTime && <span className="response-time">{formattedTime}</span>}
           {showCopy && (

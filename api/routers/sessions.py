@@ -823,6 +823,11 @@ async def stream_council(
                     personas=personas,
                 ):
                     yield event
+            elif current_round.mode == CouncilMode.ELI5_LADDER:
+                async for event in council_service.stream_eli5_ladder(
+                    current_round, previous_rounds, personas=personas,
+                ):
+                    yield event
             else:
                 async for event in council_service.stream_formal_council(
                     current_round, previous_rounds, personas=personas,

@@ -64,7 +64,7 @@ BETA_FEATURES_INFO: List[BetaFeatureInfo] = [
         id=BetaFeature.BLIND_VOTE,
         name="Blind Vote",
         description="Responses shown without model names — pick the best answer, then reveal which model wrote it",
-        status="coming_soon",
+        status="available",
     ),
     BetaFeatureInfo(
         id=BetaFeature.FACT_CHECK,
@@ -88,13 +88,13 @@ BETA_FEATURES_INFO: List[BetaFeatureInfo] = [
         id=BetaFeature.ELI5_LADDER,
         name="ELI5 Ladder",
         description="Same question answered at multiple complexity levels, from beginner to expert",
-        status="coming_soon",
+        status="available",
     ),
     BetaFeatureInfo(
         id=BetaFeature.MULTI_LANGUAGE,
         name="Multi-Language",
-        description="Council responds in your chosen language, or each model responds in a different language with translations",
-        status="coming_soon",
+        description="Council responds in your chosen language — pick from a list and every response will be in that language",
+        status="available",
     ),
     BetaFeatureInfo(
         id=BetaFeature.COUNCIL_ANALYTICS,

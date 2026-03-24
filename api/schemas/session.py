@@ -16,6 +16,7 @@ class CouncilMode(str, Enum):
 
     FORMAL = "formal"  # Traditional: parallel responses → peer reviews → synthesis
     CHAT = "chat"  # Group chat: sequential, conversational responses
+    ELI5_LADDER = "eli5_ladder"  # Same question at 3 complexity levels (ELI5 → Expert)
 
 
 class ModelInfo(BaseModel):

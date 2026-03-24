@@ -13,6 +13,34 @@ export function roundToMessages(round) {
     timestamp: new Date(),
   })
 
+  // ELI5 Ladder mode
+  if (round.mode === 'eli5_ladder' && round.responses && round.responses.length > 0) {
+    msgs.push({
+      type: 'system',
+      content: 'Generating explanations at multiple complexity levels...',
+      timestamp: new Date(),
+    })
+    for (const resp of round.responses) {
+      if (resp.error) {
+        msgs.push({ type: 'error', content: `Error: ${resp.error}`, modelName: resp.model_name, timestamp: new Date() })
+      } else {
+        const levelMatch = resp.model_name.match(/ELI5 · (.+)/)
+        const levelLabel = levelMatch ? levelMatch[1] : resp.model_name
+        const levelId = levelLabel.toLowerCase()
+        msgs.push({
+          type: 'eli5',
+          content: resp.response,
+          modelName: resp.model_name,
+          level: levelId,
+          levelLabel,
+          responseTime: resp.response_time_ms,
+          timestamp: new Date(),
+        })
+      }
+    }
+    return msgs
+  }
+
   // Check if this is a chat mode round
   if (round.mode === 'chat' && round.chat_messages && round.chat_messages.length > 0) {
     // Chat mode: display messages as a group chat

@@ -585,6 +585,102 @@ class CouncilService:
                 "response_time_ms": None,
             })
 
+    async def stream_eli5_ladder(
+        self,
+        current_round: ConversationRound,
+        previous_rounds: Optional[List[ConversationRound]] = None,
+        personas: Optional[Dict[str, str]] = None,
+    ) -> AsyncGenerator[str, None]:
+        """Stream the same question at three complexity levels using the Chairman model."""
+        ELI5_LEVELS = [
+            {
+                "id": "beginner",
+                "label": "ELI5",
+                "model_name": "ELI5 · Beginner",
+                "system": (
+                    "Explain this as if to a 5-year-old. Use very simple words, "
+                    "concrete everyday analogies, and short sentences. No jargon whatsoever."
+                ),
+            },
+            {
+                "id": "intermediate",
+                "label": "Intermediate",
+                "model_name": "ELI5 · Intermediate",
+                "system": (
+                    "Explain this at an intermediate level for someone with general knowledge "
+                    "but no expert background. Use clear language; introduce a few technical "
+                    "terms but always explain them in plain English."
+                ),
+            },
+            {
+                "id": "expert",
+                "label": "Expert",
+                "model_name": "ELI5 · Expert",
+                "system": (
+                    "Explain this at an expert level with full technical depth. Use precise "
+                    "domain-specific terminology, cover nuances and edge cases, and assume the "
+                    "reader has deep familiarity with the subject."
+                ),
+            },
+        ]
+
+        yield _sse_event("step", {"step": "eli5", "message": "Building explanations across complexity levels..."})
+
+        prompt = Prompts.build_question_with_context(
+            question=current_round.question, previous_rounds=previous_rounds
+        )
+
+        for level in ELI5_LEVELS:
+            level_id = level["id"]
+            level_label = level["label"]
+            model_name = level["model_name"]
+
+            level_system = level["system"]
+            if current_round.system_prompt:
+                level_system = f"{current_round.system_prompt}\n\n{level_system}"
+
+            try:
+                start_time = time.monotonic()
+                yield _sse_event(
+                    "eli5_level_start",
+                    {"level": level_id, "label": level_label, "model_name": model_name},
+                )
+
+                full_text: list[str] = []
+                async for token in self._stream_model(
+                    CHAIRMAN_MODEL, prompt, system_prompt=level_system
+                ):
+                    full_text.append(token)
+                    yield _sse_event("eli5_level_token", {"level": level_id, "token": token})
+
+                elapsed_ms = int((time.monotonic() - start_time) * 1000)
+                response_text = "".join(full_text)
+
+                # Persist in round's responses so session history works
+                current_round.responses.append(
+                    ModelResponse(
+                        model_id=f"eli5_{level_id}",
+                        model_name=model_name,
+                        response=response_text,
+                        response_time_ms=elapsed_ms,
+                    )
+                )
+
+                yield _sse_event(
+                    "eli5_level_end",
+                    {"level": level_id, "label": level_label, "response_time_ms": elapsed_ms},
+                )
+
+            except Exception as e:
+                logger.error(f"ELI5 error at {level_label}: {e}")
+                yield _sse_event(
+                    "error_response",
+                    {"model_name": model_name, "error": str(e)},
+                )
+
+        current_round.status = "synthesized"
+        yield _sse_event("done", {})
+
     async def stream_group_chat(
         self,
         current_round: ConversationRound,

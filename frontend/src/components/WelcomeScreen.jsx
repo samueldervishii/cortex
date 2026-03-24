@@ -2,7 +2,7 @@ import { useRef, useState, useEffect } from 'react'
 import ChatInput from './ChatInput'
 import SuggestionCards from './SuggestionCards'
 
-function WelcomeScreen({ question, onQuestionChange, onSubmit, loading, systemPrompt, onSystemPromptChange }) {
+function WelcomeScreen({ question, onQuestionChange, onSubmit, loading }) {
   const inputRef = useRef(null)
   const [showSuggestions, setShowSuggestions] = useState(true)
 
@@ -39,8 +39,6 @@ function WelcomeScreen({ question, onQuestionChange, onSubmit, loading, systemPr
         disabled={loading}
         placeholder="How can we help you today?"
         centered
-        systemPrompt={systemPrompt}
-        onSystemPromptChange={onSystemPromptChange}
       />
       {showSuggestions && (
         <SuggestionCards onSelectSuggestion={handleSuggestionClick} isVisible={!question} />

@@ -63,6 +63,9 @@ function useCouncil() {
   const [systemPrompt, setSystemPrompt] = useState(() => {
     return localStorage.getItem('llm-council-system-prompt') || ''
   })
+  const [selectedLanguage, setSelectedLanguage] = useState(() => {
+    return localStorage.getItem('llm-council-language') || ''
+  })
 
   // Persist mode to localStorage when it changes
   useEffect(() => {
@@ -80,6 +83,11 @@ function useCouncil() {
   useEffect(() => {
     localStorage.setItem('llm-council-system-prompt', systemPrompt)
   }, [systemPrompt])
+
+  // Persist selected language to localStorage
+  useEffect(() => {
+    localStorage.setItem('llm-council-language', selectedLanguage)
+  }, [selectedLanguage])
 
   // Fetch available models on mount
   const fetchModels = useCallback(async () => {
@@ -386,6 +394,8 @@ function useCouncil() {
             addMessage('system', 'Gathering responses from the council...')
           } else if (data.step === 'synthesis') {
             addMessage('system', 'Claude Sonnet 4.6 is reviewing all responses...')
+          } else if (data.step === 'eli5') {
+            addMessage('system', 'Generating explanations at multiple complexity levels...')
           }
           break
 
@@ -438,6 +448,47 @@ function useCouncil() {
 
         case 'error_response':
           addMessage('error', `Error: ${data.error}`, data.model_name)
+          break
+
+        // --- ELI5 Ladder events ---
+        case 'eli5_level_start':
+          setCurrentStep(`Generating ${data.label} explanation...`)
+          setMessages((prev) => {
+            streamingIndices[data.level] = prev.length
+            return [
+              ...prev,
+              {
+                type: 'eli5',
+                content: '',
+                modelName: data.model_name,
+                level: data.level,
+                levelLabel: data.label,
+                streaming: true,
+                timestamp: new Date(),
+              },
+            ]
+          })
+          break
+
+        case 'eli5_level_token':
+          setMessages((prev) => {
+            const idx = streamingIndices[data.level]
+            if (idx === undefined) return prev
+            const updated = [...prev]
+            updated[idx] = { ...updated[idx], content: updated[idx].content + data.token }
+            return updated
+          })
+          break
+
+        case 'eli5_level_end':
+          setMessages((prev) => {
+            const idx = streamingIndices[data.level]
+            if (idx === undefined) return prev
+            const updated = [...prev]
+            updated[idx] = { ...updated[idx], streaming: false, responseTime: data.response_time_ms }
+            return updated
+          })
+          delete streamingIndices[data.level]
           break
 
         // --- Token-level synthesis events ---
@@ -596,11 +647,15 @@ function useCouncil() {
         activeMode = session.rounds[0]?.mode || mode
       } else {
         setCurrentStep('Creating session...')
+        const base = systemPrompt.trim()
+        const effectiveSystemPrompt = selectedLanguage
+          ? (base ? `Respond in ${selectedLanguage}.\n\n${base}` : `Respond in ${selectedLanguage}.`)
+          : (base || null)
         const createRes = await apiClient.post('/query', {
           question: userQuestion,
           mode: mode,
           selected_models: selectedModels.length > 0 ? selectedModels : null,
-          system_prompt: systemPrompt.trim() || null,
+          system_prompt: effectiveSystemPrompt,
         })
         currentSessionId = createRes.data.session.id
         setSessionId(currentSessionId)
@@ -743,6 +798,8 @@ function useCouncil() {
     selectAllModels,
     systemPrompt,
     setSystemPrompt,
+    selectedLanguage,
+    setSelectedLanguage,
     startCouncil,
     startNewChat,
     loadSession,

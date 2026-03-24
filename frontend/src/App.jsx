@@ -10,6 +10,7 @@ import {
   CommandPalette,
   IncognitoChat,
   PWAInstallPrompt,
+  RightPanel,
 } from './components'
 import useCouncil from './hooks/useCouncil'
 import useTheme from './hooks/useTheme'
@@ -51,6 +52,9 @@ function App() {
     // System prompt
     systemPrompt,
     setSystemPrompt,
+    // Language
+    selectedLanguage,
+    setSelectedLanguage,
     // Folder management
     folders,
     createFolder,
@@ -63,6 +67,7 @@ function App() {
   const [userSettings, setUserSettings] = useState({ enabled_beta_features: [], branching_enabled: true, custom_prompts_enabled: true })
   const [errorModal, setErrorModal] = useState({ open: false, title: '', message: '' })
   const [isIncognitoOpen, setIsIncognitoOpen] = useState(false)
+  const [rightPanelOpen, setRightPanelOpen] = useState(false)
   const [konamiActive, setKonamiActive] = useState(false)
   const konamiBuffer = useRef([])
 
@@ -262,6 +267,11 @@ function App() {
         branchingEnabled={userSettings.branching_enabled !== false}
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
         onOpenIncognito={() => setIsIncognitoOpen(true)}
+        onOpenRightPanel={() => setRightPanelOpen(true)}
+        showContextButton={
+          userSettings.custom_prompts_enabled !== false ||
+          (userSettings.enabled_beta_features?.includes('multi_language') ?? false)
+        }
       />
 
       {isLoadingSession ? (
@@ -278,10 +288,6 @@ function App() {
           onQuestionChange={setQuestion}
           onSubmit={startCouncil}
           loading={loading}
-          {...(userSettings.custom_prompts_enabled !== false && {
-            systemPrompt,
-            onSystemPromptChange: setSystemPrompt,
-          })}
         />
       ) : (
         <ChatMessages
@@ -292,10 +298,7 @@ function App() {
           onQuestionChange={setQuestion}
           onSubmit={startCouncil}
           mode={mode}
-          {...(userSettings.custom_prompts_enabled !== false && {
-            systemPrompt,
-            onSystemPromptChange: setSystemPrompt,
-          })}
+          blindVoteEnabled={userSettings.enabled_beta_features?.includes('blind_vote') ?? false}
         />
       )}
 
@@ -347,6 +350,17 @@ function App() {
         onClose={() => setIsIncognitoOpen(false)}
         availableModels={availableModels}
         selectedModels={selectedModels}
+      />
+
+      <RightPanel
+        isOpen={rightPanelOpen}
+        onClose={() => setRightPanelOpen(false)}
+        systemPrompt={systemPrompt}
+        onSystemPromptChange={setSystemPrompt}
+        selectedLanguage={selectedLanguage}
+        onLanguageChange={setSelectedLanguage}
+        customPromptsEnabled={userSettings.custom_prompts_enabled !== false}
+        multiLanguageEnabled={userSettings.enabled_beta_features?.includes('multi_language') ?? false}
       />
 
       <PWAInstallPrompt />
