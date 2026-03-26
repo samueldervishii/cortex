@@ -19,7 +19,10 @@ class RateLimiter:
         self.window_seconds = window_seconds
         self.requests: dict[str, list[float]] = defaultdict(list)
         self._last_full_cleanup = time.time()
-        self._cleanup_interval = 300  # Full cleanup every 5 minutes
+        # Full cleanup runs every 5 minutes to remove stale client entries and
+        # prevent unbounded memory growth. This is separate from per-request cleanup
+        # (which only cleans the current client's timestamps) — it sweeps ALL clients.
+        self._cleanup_interval = 300
 
     def _get_client_id(self, request: Request) -> str:
         """Get unique identifier for the client."""
@@ -44,7 +47,9 @@ class RateLimiter:
             return
 
         cutoff = current_time - self.window_seconds
-        # Create list of keys to avoid modifying dict during iteration
+        # A client is "stale" if it has no timestamps or all its timestamps are
+        # older than the sliding window — meaning it hasn't made a request recently.
+        # We collect keys first to avoid modifying the dict during iteration.
         stale_clients = [
             client_id
             for client_id, timestamps in self.requests.items()

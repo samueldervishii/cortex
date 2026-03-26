@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     environment: str = "development"
 
     # API Authentication - optional API key for protecting endpoints
-    # If set, requests must include X-API-Key header or api_key query param
+    # If set, requests must include X-API-Key header
     api_key: str = ""
 
     # Rate limiting
@@ -34,7 +34,9 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-# Council member models
+# Council member models — intentionally diverse mix of providers and sizes
+# to produce varied perspectives during debates. Groq models are served via
+# Groq's OpenAI-compatible API for fast inference.
 COUNCIL_MODELS = [
     {
         "id": "claude-haiku-4-5-20251001",
@@ -58,7 +60,9 @@ COUNCIL_MODELS = [
     },
 ]
 
-# Head of the Council - Claude Sonnet 4.6 moderates and leads debates
+# Head of the Council — Claude Sonnet 4.6 acts as chairman: it moderates debates,
+# synthesizes final answers in formal mode, and leads group chat discussions.
+# Chosen for its strong reasoning and instruction-following capabilities.
 CHAIRMAN_MODEL = {
     "id": "claude-sonnet-4-6",
     "name": "Claude Sonnet 4.6",

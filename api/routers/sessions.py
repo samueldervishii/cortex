@@ -753,7 +753,7 @@ async def cleanup_old_sessions(
             "skipped": True,
         }
 
-    # Validate days value
+    # Validate days value — restricted to these options in the Settings UI
     valid_days = [30, 60, 90]
     if user_settings.auto_delete_days not in valid_days:
         return {

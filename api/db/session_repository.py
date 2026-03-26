@@ -1,9 +1,13 @@
+import re
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from schemas import CouncilSession
+
+# Validate share tokens: alphanumeric, hyphens, underscores only
+_SHARE_TOKEN_PATTERN = re.compile(r"^[a-zA-Z0-9\-_]+$")
 
 
 class SessionRepository:
@@ -170,6 +174,9 @@ class SessionRepository:
 
     async def get_by_share_token(self, share_token: str) -> Optional[CouncilSession]:
         """Get a shared session by its share token."""
+        if not share_token or not _SHARE_TOKEN_PATTERN.match(share_token):
+            return None
+
         doc = await self.collection.find_one(
             {"share_token": share_token, "is_shared": True, "is_deleted": {"$ne": True}}
         )

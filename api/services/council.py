@@ -58,7 +58,16 @@ def analyze_disagreement(
                 if resp_num in ranks_by_response and isinstance(rank, (int, float)):
                     ranks_by_response[resp_num].append(int(rank))
 
-    # Calculate disagreement for each response
+    # Calculate disagreement for each response.
+    #
+    # Algorithm: normalize the standard deviation of ranks each response received.
+    # With N responses ranked 1..N, the maximum possible stdev is (N-1)/2
+    # (one reviewer ranks it #1 and another ranks it #N). Dividing by this max
+    # gives a 0-1 score where 0 = full consensus and 1 = maximum disagreement.
+    #
+    # has_disagreement triggers when either:
+    #   - disagreement_score > 0.5 (high variance in rankings), OR
+    #   - rank_range >= N/2 (at least one pair of reviewers disagrees by half the scale)
     analysis = []
     num_responses = len(valid_responses)
 
@@ -85,6 +94,7 @@ def analyze_disagreement(
         except StatisticsError:
             std = 0.0
 
+        # Maximum possible stdev for ranks 1..N is (N-1)/2
         max_std = (num_responses - 1) / 2
         disagreement_score = min(std / max_std, 1.0) if max_std > 0 else 0.0
 
@@ -110,7 +120,8 @@ def _get_name_variants(name: str) -> List[str]:
     import re
 
     variants = [name]
-    # Strip version numbers like "4.6", "4.5", "120B", "20B", "32B"
+    # Strip trailing version/size identifiers so "@Claude Sonnet" matches "Claude Sonnet 4.6"
+    # and "@GPT OSS" matches "GPT OSS 120B". Pattern: whitespace + digits + optional decimal + optional letter
     short = re.sub(r"\s+\d+(\.\d+)?[A-Z]?$", "", name).strip()
     if short and short != name:
         variants.append(short)
@@ -361,7 +372,13 @@ class CouncilService:
             current_round.selected_models, include_chairman=False
         )
 
-        # Queue for interleaving token events from parallel models (bounded to prevent memory growth)
+        # All council models stream tokens in parallel. We use a shared asyncio.Queue
+        # to interleave their tokens into a single SSE stream, giving the user a
+        # real-time typing effect for all models simultaneously.
+        #
+        # maxsize=100 prevents unbounded memory growth if one model is much faster
+        # than the SSE consumer can flush. Producers will block on put() if full.
+        # A SENTINEL object signals that all producers are done.
         queue: asyncio.Queue = asyncio.Queue(maxsize=100)
         SENTINEL = object()
 
@@ -446,13 +463,15 @@ class CouncilService:
                         "error": payload,
                     })
         finally:
-            # Cancel all pending tasks on client disconnect or early exit
+            # Cleanup on client disconnect or error:
+            # 1. Cancel model tasks that haven't finished yet
             for task in tasks:
                 if not task.done():
                     task.cancel()
             if not sentinel_task.done():
                 sentinel_task.cancel()
-            # Drain the queue to unblock any tasks stuck on put()
+            # 2. Drain the queue — if a producer task is blocked on queue.put()
+            #    because the queue is full, it can't be cancelled until we free space
             while not queue.empty():
                 try:
                     queue.get_nowait()

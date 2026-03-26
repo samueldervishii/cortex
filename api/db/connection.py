@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
@@ -10,6 +11,7 @@ logger = logging.getLogger("llm-council.db")
 _client: AsyncIOMotorClient | None = None
 _database: AsyncIOMotorDatabase | None = None
 _indexes_created: bool = False
+_db_lock = asyncio.Lock()
 
 
 async def get_database() -> AsyncIOMotorDatabase:
@@ -17,17 +19,23 @@ async def get_database() -> AsyncIOMotorDatabase:
     global _client, _database
 
     if _database is None:
-        _client = AsyncIOMotorClient(
-            settings.mongodb_url,
-            maxPoolSize=20,  # Maximum connections in the pool
-            minPoolSize=5,  # Minimum connections to maintain
-            maxIdleTimeMS=30000,  # Close idle connections after 30 seconds
-            connectTimeoutMS=10000,  # Connection timeout: 10 seconds
-            serverSelectionTimeoutMS=10000,  # Server selection timeout: 10 seconds
-            retryWrites=True,  # Retry failed writes
-            retryReads=True,  # Retry failed reads
-        )
-        _database = _client[settings.mongodb_database]
+        async with _db_lock:
+            if _database is None:
+                # Pool settings tuned for moderate load (~10-20 concurrent users).
+                # maxPoolSize=20 matches the typical number of parallel LLM calls
+                # during a formal council session (5 models × potential retries).
+                # minPoolSize=5 keeps connections warm to avoid cold-start latency.
+                _client = AsyncIOMotorClient(
+                    settings.mongodb_url,
+                    maxPoolSize=20,
+                    minPoolSize=5,
+                    maxIdleTimeMS=30000,     # Close idle connections after 30s
+                    connectTimeoutMS=10000,   # 10s to establish connection
+                    serverSelectionTimeoutMS=10000,
+                    retryWrites=True,
+                    retryReads=True,
+                )
+                _database = _client[settings.mongodb_database]
 
     return _database
 
@@ -49,10 +57,11 @@ async def ensure_indexes(database: AsyncIOMotorDatabase) -> None:
             [("id", ASCENDING)], unique=True, name="idx_session_id"
         )
 
-        # Index for shared session lookup by token
+        # Index for shared session lookup by token (unique to prevent collisions)
         await sessions_collection.create_index(
             [("share_token", ASCENDING)],
-            sparse=True,  # Only index documents with share_token
+            sparse=True,
+            unique=True,
             name="idx_share_token",
         )
 

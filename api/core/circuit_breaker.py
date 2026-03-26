@@ -5,6 +5,7 @@ Prevents cascading failures by temporarily blocking requests to failing services
 """
 
 import logging
+import threading
 from functools import wraps
 from typing import Optional, Callable, Any
 
@@ -12,8 +13,9 @@ from config import settings
 
 logger = logging.getLogger("llm-council.circuit_breaker")
 
-# Global circuit breaker instances
+# Global circuit breaker instances with lock for thread-safe initialization
 _breakers: dict[str, Any] = {}
+_breaker_lock = threading.Lock()
 
 
 def get_circuit_breaker(name: str = "default"):
@@ -23,22 +25,22 @@ def get_circuit_breaker(name: str = "default"):
     Args:
         name: Unique name for this circuit breaker
     """
-    global _breakers
-
     if name not in _breakers:
-        try:
-            from pybreaker import CircuitBreaker
+        with _breaker_lock:
+            if name not in _breakers:
+                try:
+                    from pybreaker import CircuitBreaker
 
-            _breakers[name] = CircuitBreaker(
-                fail_max=settings.circuit_breaker_fail_max,
-                reset_timeout=settings.circuit_breaker_timeout,
-                name=name,
-                listeners=[CircuitBreakerLogger()],
-            )
-            logger.info(f"Circuit breaker '{name}' initialized")
-        except ImportError:
-            logger.warning("pybreaker not installed. Circuit breaker disabled.")
-            _breakers[name] = None
+                    _breakers[name] = CircuitBreaker(
+                        fail_max=settings.circuit_breaker_fail_max,
+                        reset_timeout=settings.circuit_breaker_timeout,
+                        name=name,
+                        listeners=[CircuitBreakerLogger()],
+                    )
+                    logger.info(f"Circuit breaker '{name}' initialized")
+                except ImportError:
+                    logger.warning("pybreaker not installed. Circuit breaker disabled.")
+                    _breakers[name] = None
 
     return _breakers[name]
 
@@ -83,13 +85,18 @@ def with_circuit_breaker(
         async def async_wrapper(*args, **kwargs):
             breaker = get_circuit_breaker(breaker_name)
 
-            # If circuit breaker is not available, call function directly
+            # If pybreaker not installed, skip circuit breaking entirely
             if breaker is None:
                 return await func(*args, **kwargs)
 
             try:
-                # Check if circuit is open before calling
-                # current_state can be a string or an object with .name attribute
+                # Circuit breaker states (pybreaker):
+                #   closed    → normal operation, requests go through
+                #   open      → too many failures, block all requests until reset_timeout
+                #   half-open → after timeout, allow ONE request to test if service recovered
+                #
+                # pybreaker's current_state can be a string or object with .name,
+                # depending on the version — getattr handles both.
                 state = breaker.current_state
                 state_name = getattr(state, "name", str(state)).lower()
 
@@ -103,28 +110,28 @@ def with_circuit_breaker(
                         "Service temporarily unavailable (circuit breaker open)"
                     )
 
-                # Call the async function directly (bypass call_async which needs Tornado)
-                # We track failures manually via the breaker's state
+                # We call the async function directly instead of pybreaker's call_async()
+                # because call_async() requires Tornado. We manually track state transitions.
                 try:
                     result = await func(*args, **kwargs)
                     # Only transition to closed when recovering from half-open state.
-                    # Calling close() in normal (closed) state resets the fail counter
-                    # on every request, preventing failures from ever accumulating.
+                    # Important: calling close() in normal (closed) state would reset the
+                    # fail counter on every successful request, preventing failures from
+                    # ever accumulating to the threshold.
                     if state_name == "half-open" and hasattr(breaker, "close"):
                         breaker.close()
                     return result
                 except Exception:
-                    # Record failure - this may trip the breaker
+                    # Record failure — _inc_counter increments pybreaker's internal counter
                     if hasattr(breaker, "_inc_counter"):
                         breaker._inc_counter()
-                    # Open circuit if failure threshold reached
+                    # Trip the breaker if we've hit the failure threshold
                     if breaker.fail_counter >= breaker.fail_max:
                         if hasattr(breaker, "open"):
                             breaker.open()
                     raise
 
             except Exception:
-                # Re-raise the exception
                 raise
 
         @wraps(func)

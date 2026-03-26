@@ -8,6 +8,17 @@ import html
 import re
 from typing import Optional
 
+# Pre-compiled regex patterns for performance
+_RE_HTML_COMMENT = re.compile(r"<!--[^-]{0,10000}(?:-(?!->)[^-]{0,10000})*-->")
+_RE_HTML_TAG = re.compile(r"<[^>]{0,1000}>")
+_RE_HTML_UNCLOSED = re.compile(r"<[^>]{0,1000}$")
+_RE_URI_SCHEME = re.compile(r"(?i)(javascript|data|vbscript)\s*:")
+_RE_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]")
+_RE_MULTI_SPACES = re.compile(r"[ \t]+")
+_RE_MULTI_NEWLINES = re.compile(r"\n[ \t]*\n(?:[ \t]*\n)+")
+_RE_TITLE_NEWLINES = re.compile(r"[\r\n]+")
+_RE_TITLE_WHITESPACE = re.compile(r"\s+")
+
 
 def sanitize_text(text: Optional[str], max_length: Optional[int] = None) -> str:
     """
@@ -40,31 +51,25 @@ def sanitize_text(text: Optional[str], max_length: Optional[int] = None) -> str:
     if len(text) > _REGEX_SAFE_LIMIT:
         text = text[:_REGEX_SAFE_LIMIT]
 
-    # Remove HTML comments — use a bounded quantifier instead of .*? to avoid
-    # backtracking on unclosed comment tags
-    text = re.sub(r"<!--[^-]{0,10000}(?:-(?!->)[^-]{0,10000})*-->", "", text)
+    # Remove HTML comments
+    text = _RE_HTML_COMMENT.sub("", text)
 
-    # Remove HTML/XML tags (including unclosed tags)
-    # Limit tag matching to prevent ReDoS with unclosed tags
-    text = re.sub(r"<[^>]{0,1000}>", "", text)
-    # Catch unclosed tags at end of input
-    text = re.sub(r"<[^>]{0,1000}$", "", text)
+    # Remove HTML/XML tags (including unclosed tags at end of input)
+    text = _RE_HTML_TAG.sub("", text)
+    text = _RE_HTML_UNCLOSED.sub("", text)
 
     # Remove dangerous URI schemes (javascript:, data:, vbscript:)
-    text = re.sub(r"(?i)(javascript|data|vbscript)\s*:", "", text)
+    text = _RE_URI_SCHEME.sub("", text)
 
     # Escape any remaining HTML entities to prevent XSS
     text = html.escape(text, quote=True)
 
     # Remove control characters except newline, carriage return, and tab
-    # This prevents things like null bytes, bell characters, etc.
-    text = re.sub(r"[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]", "", text)
+    text = _RE_CONTROL_CHARS.sub("", text)
 
     # Normalize excessive whitespace (but preserve single newlines)
-    text = re.sub(r"[ \t]+", " ", text)  # Multiple spaces/tabs -> single space
-    # Use non-ambiguous pattern: match 3+ consecutive newlines (with optional spaces/tabs between)
-    # Avoid \s* between \n as \s includes \n, causing ambiguity
-    text = re.sub(r"\n[ \t]*\n(?:[ \t]*\n)+", "\n\n", text)  # 3+ newlines -> 2 newlines
+    text = _RE_MULTI_SPACES.sub(" ", text)
+    text = _RE_MULTI_NEWLINES.sub("\n\n", text)
 
     # Strip leading/trailing whitespace
     text = text.strip()
@@ -96,10 +101,10 @@ def sanitize_title(title: Optional[str], max_length: int = 200) -> str:
     title = sanitize_text(title, max_length=None)
 
     # Remove newlines and carriage returns (titles should be single line)
-    title = re.sub(r"[\r\n]+", " ", title)
+    title = _RE_TITLE_NEWLINES.sub(" ", title)
 
     # Collapse multiple spaces
-    title = re.sub(r"\s+", " ", title)
+    title = _RE_TITLE_WHITESPACE.sub(" ", title)
 
     # Truncate if needed
     if len(title) > max_length:

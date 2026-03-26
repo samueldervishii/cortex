@@ -49,7 +49,7 @@ async def run_auto_delete_cleanup(silent: bool = False):
                 logger.info("Auto-delete: No retention period configured, skipping cleanup")
             return 0
 
-        # Validate days value
+        # Validate days value — restricted to these options in the Settings UI
         valid_days = [30, 60, 90]
         if user_settings.auto_delete_days not in valid_days:
             if not silent:
@@ -79,7 +79,8 @@ async def run_auto_delete_cleanup(silent: bool = False):
         return 0
 
 
-# Background task reference (to cancel on shutdown)
+# Reference to the background auto-delete task. Stored globally so we can
+# cancel it cleanly during shutdown (see lifespan handler below).
 _auto_delete_task: asyncio.Task | None = None
 
 # Cleanup interval: 24 hours (in seconds)

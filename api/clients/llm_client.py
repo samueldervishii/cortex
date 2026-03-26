@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import re
 from typing import AsyncGenerator, Optional
@@ -10,12 +11,17 @@ from core.circuit_breaker import with_circuit_breaker
 
 logger = logging.getLogger("llm-council.llm_client")
 
-# Retry configuration
+# Retry configuration — exponential backoff (1s, 2s, 4s) for transient failures.
+# 3 retries balances reliability vs. user wait time for LLM API calls.
 MAX_RETRIES = 3
-RETRY_DELAY_BASE = 1.0
+RETRY_DELAY_BASE = 1.0  # seconds; multiplied by 2^attempt for backoff
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
-# Timeout configuration
+# Timeout configuration — tuned for LLM API response characteristics:
+# - connect: 10s is generous for TLS handshake to cloud APIs
+# - read: 120s because LLM responses (especially synthesis) can take 30-90s
+# - write: 30s for sending large prompts with conversation history
+# - pool: 10s to wait for a connection from the pool before failing
 CONNECT_TIMEOUT = 10.0
 READ_TIMEOUT = 120.0
 WRITE_TIMEOUT = 30.0
@@ -274,8 +280,9 @@ class LLMClient:
                 if data_str.strip() == "[DONE]":
                     break
                 try:
-                    data = __import__("json").loads(data_str)
-                except Exception:
+                    data = json.loads(data_str)
+                except json.JSONDecodeError as e:
+                    logger.debug(f"Failed to parse Anthropic stream data: {e}")
                     continue
 
                 event_type = data.get("type", "")
@@ -335,8 +342,9 @@ class LLMClient:
                 if data_str.strip() == "[DONE]":
                     break
                 try:
-                    data = __import__("json").loads(data_str)
-                except Exception:
+                    data = json.loads(data_str)
+                except json.JSONDecodeError as e:
+                    logger.debug(f"Failed to parse Groq stream data: {e}")
                     continue
 
                 choices = data.get("choices", [])
@@ -375,30 +383,38 @@ class LLMClient:
         else:
             raise ValueError(f"Unsupported provider: {provider}")
 
+        # Stream tokens while stripping <think>...</think> blocks in real-time.
+        # Groq models (e.g. Qwen) emit <think> blocks for chain-of-thought reasoning
+        # that should not be shown to the user.
+        #
+        # The challenge: tokens arrive in small chunks, so a <think> tag may be split
+        # across multiple chunks (e.g. "<thi" then "nk>"). We buffer text containing
+        # a partial "<" until we can confirm whether it's a <think> tag or not.
         async for chunk in source:
             buffer += chunk
 
-            # Handle <think> tag stripping in streaming context
             while buffer:
                 if in_think:
+                    # Inside a think block — discard everything until </think>
                     end_idx = buffer.find("</think>")
                     if end_idx != -1:
                         buffer = buffer[end_idx + 8:]
                         in_think = False
                     else:
-                        # Still inside think block, consume all
                         buffer = ""
                         break
                 else:
                     start_idx = buffer.find("<think>")
                     if start_idx != -1:
-                        # Yield text before <think>
+                        # Found a think tag — yield text before it, discard the tag
                         if start_idx > 0:
                             yield buffer[:start_idx]
                         buffer = buffer[start_idx + 7:]
                         in_think = True
                     elif "<" in buffer and not buffer.endswith(">"):
-                        # Might be a partial <think> tag, hold in buffer
+                        # Buffer contains "<" but no closing ">" yet — could be a
+                        # partial "<think>" tag split across chunks. Yield everything
+                        # before the last "<" and hold the rest for the next chunk.
                         safe = buffer[:buffer.rfind("<")]
                         if safe:
                             yield safe
@@ -409,7 +425,7 @@ class LLMClient:
                         buffer = ""
                         break
 
-        # Flush remaining buffer (if not in think block)
+        # Flush remaining buffer (unless we're mid-think block)
         if buffer and not in_think:
             yield buffer
 
