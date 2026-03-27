@@ -20,7 +20,7 @@ from core.metrics import init_metrics, track_request
 from db import get_database, close_database, ensure_indexes
 from routers import sessions_router, models_router, shared_router, settings_router
 from routers.health import router as health_router
-from routers.folders import router as folders_router
+
 from routers.sessions import create_session
 from schemas import QueryRequest, SessionResponse
 
@@ -327,7 +327,7 @@ app.include_router(sessions_router)
 app.include_router(models_router)
 app.include_router(shared_router)
 app.include_router(settings_router)
-app.include_router(folders_router)
+
 
 
 @app.get("/", tags=["health"])

@@ -219,15 +219,31 @@
 .command-palette-footer {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 1.5rem;
+  justify-content: space-between;
   padding: 0.75rem 1rem;
   border-top: 1px solid var(--border-color);
   font-size: 0.75rem;
   color: var(--text-muted);
 }
 
-.command-palette-footer span {
+.command-palette-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.command-palette-status:hover {
+  color: var(--text-secondary);
+}
+
+.command-palette-footer-keys {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.command-palette-footer-keys span {
   display: flex;
   align-items: center;
   gap: 0.375rem;

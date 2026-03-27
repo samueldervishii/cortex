@@ -11,13 +11,36 @@ import {
   Star,
   Search,
 } from 'lucide-react'
+import { apiClient } from '../config/api'
 import './CommandPalette.css'
+
+// Persists across component remounts so reopening the palette doesn't flash "checking"
+let lastKnownStatus = 'checking'
 
 function CommandPalette({ isOpen, onClose, sessions, onNewChat, onExport, currentSessionId }) {
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
   const inputRef = useRef(null)
   const navigate = useNavigate()
+  const [apiStatus, setApiStatus] = useState(() => lastKnownStatus)
+
+  // Check API health status periodically
+  useEffect(() => {
+    const checkHealth = async () => {
+      try {
+        await apiClient.get('/health')
+        setApiStatus('healthy')
+        lastKnownStatus = 'healthy'
+      } catch {
+        setApiStatus('unhealthy')
+        lastKnownStatus = 'unhealthy'
+      }
+    }
+
+    checkHealth()
+    const interval = setInterval(checkHealth, 300000)
+    return () => clearInterval(interval)
+  }, [])
 
   // Focus input when opened
   useEffect(() => {
@@ -251,14 +274,30 @@ function CommandPalette({ isOpen, onClose, sessions, onNewChat, onExport, curren
         </div>
 
         <div className="command-palette-footer">
-          <span>
-            <kbd>↑</kbd> <kbd>↓</kbd> Navigate
+          <span
+            className="command-palette-status"
+            onClick={() => {
+              navigate('/status')
+              onClose()
+            }}
+          >
+            <span className={`banner-dot ${apiStatus}`}></span>
+            {apiStatus === 'checking'
+              ? 'Checking server...'
+              : apiStatus === 'unhealthy'
+                ? 'Server is experiencing issues'
+                : 'All systems operational'}
           </span>
-          <span>
-            <kbd>↵</kbd> Select
-          </span>
-          <span>
-            <kbd>Esc</kbd> Close
+          <span className="command-palette-footer-keys">
+            <span>
+              <kbd>↑</kbd> <kbd>↓</kbd> Navigate
+            </span>
+            <span>
+              <kbd>↵</kbd> Select
+            </span>
+            <span>
+              <kbd>Esc</kbd> Close
+            </span>
           </span>
         </div>
       </div>

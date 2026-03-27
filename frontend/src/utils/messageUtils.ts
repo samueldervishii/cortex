@@ -41,7 +41,12 @@ export function roundToMessages(round: ConversationRound): DisplayMessage[] {
     })
     for (const resp of round.responses) {
       if (resp.error) {
-        msgs.push({ type: 'error', content: `Error: ${resp.error}`, modelName: resp.model_name, timestamp: new Date() })
+        msgs.push({
+          type: 'error',
+          content: `Error: ${resp.error}`,
+          modelName: resp.model_name,
+          timestamp: new Date(),
+        })
       } else {
         const levelMatch = resp.model_name.match(/ELI5 · (.+)/)
         const levelLabel = levelMatch ? levelMatch[1] : resp.model_name

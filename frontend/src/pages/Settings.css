@@ -2,6 +2,8 @@
 .settings-page {
   max-width: 1200px;
   padding: 2rem 3rem;
+  overflow-y: auto;
+  flex: 1;
 }
 
 /* Header */

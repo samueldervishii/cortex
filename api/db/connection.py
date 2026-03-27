@@ -78,13 +78,6 @@ async def ensure_indexes(database: AsyncIOMotorDatabase) -> None:
             name="idx_pinned_sessions",
         )
 
-        # Index for folder membership lookups and cascade clears
-        await sessions_collection.create_index(
-            [("folder_id", ASCENDING)],
-            sparse=True,
-            name="idx_folder_id",
-        )
-
         # User settings indexes
         # Index for user_id lookup
         await settings_collection.create_index(

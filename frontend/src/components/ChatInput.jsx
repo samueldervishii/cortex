@@ -156,10 +156,7 @@ const ChatInput = forwardRef(
                   onClick={() => insertMention(name)}
                   onMouseEnter={() => setSelectedIndex(i)}
                 >
-                  <span
-                    className="mention-avatar"
-                    style={{ backgroundColor: MODEL_COLORS[name] }}
-                  >
+                  <span className="mention-avatar" style={{ backgroundColor: MODEL_COLORS[name] }}>
                     {name.charAt(0)}
                   </span>
                   <span className="mention-name">{name}</span>

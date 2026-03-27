@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useOutletContext } from 'react-router-dom'
 import {
   TopBar,
   WelcomeScreen,
@@ -11,6 +11,7 @@ import {
   PWAInstallPrompt,
   RightPanel,
 } from './components'
+import AppLoader from './components/AppLoader'
 import useCouncil from './hooks/useCouncil'
 import useTheme from './hooks/useTheme'
 import { apiClient } from './config/api'
@@ -20,6 +21,7 @@ function App() {
   const { sessionId: urlSessionId } = useParams()
   const navigate = useNavigate()
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
+  const { sidebarOpen, toggleSidebar } = useOutletContext()
   const {
     question,
     setQuestion,
@@ -30,7 +32,6 @@ function App() {
     hasMessages,
     sessionId,
     sessions,
-    sidebarOpen,
     mode,
     setMode,
     availableModels,
@@ -43,7 +44,6 @@ function App() {
     deleteSession,
     renameSession,
     togglePinSession,
-    toggleSidebar,
     shareSession,
     exportSession,
     sessionLoadError,
@@ -54,16 +54,14 @@ function App() {
     // Language
     selectedLanguage,
     setSelectedLanguage,
-    // Folder management
-    folders,
-    createFolder,
-    updateFolder,
-    deleteFolder,
-    moveSessionToFolder,
   } = useCouncil()
 
   const { theme, toggleTheme } = useTheme()
-  const [userSettings, setUserSettings] = useState({ enabled_beta_features: [], branching_enabled: true, custom_prompts_enabled: true })
+  const [userSettings, setUserSettings] = useState({
+    enabled_beta_features: [],
+    branching_enabled: true,
+    custom_prompts_enabled: true,
+  })
   const [errorModal, setErrorModal] = useState({ open: false, title: '', message: '' })
   const [isIncognitoOpen, setIsIncognitoOpen] = useState(false)
   const [rightPanelOpen, setRightPanelOpen] = useState(false)
@@ -71,12 +69,25 @@ function App() {
   const konamiBuffer = useRef([])
 
   // Konami Code easter egg
-  const KONAMI_CODE = ['ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowLeft','ArrowRight','ArrowLeft','ArrowRight','b','a']
+  const KONAMI_CODE = [
+    'ArrowUp',
+    'ArrowUp',
+    'ArrowDown',
+    'ArrowDown',
+    'ArrowLeft',
+    'ArrowRight',
+    'ArrowLeft',
+    'ArrowRight',
+    'b',
+    'a',
+  ]
 
   const konamiTimerRef = useRef(null)
   const handleKonami = useCallback(() => {
     setKonamiActive(true)
-    setSystemPrompt('Respond as a dramatic pirate captain. Use pirate slang, say "arrr" and "ye", reference treasure, the sea, and your ship. Be theatrical but still answer the question. Keep it fun!')
+    setSystemPrompt(
+      'Respond as a dramatic pirate captain. Use pirate slang, say "arrr" and "ye", reference treasure, the sea, and your ship. Be theatrical but still answer the question. Keep it fun!'
+    )
     // Clear any existing timer before setting a new one
     if (konamiTimerRef.current) clearTimeout(konamiTimerRef.current)
     konamiTimerRef.current = setTimeout(() => setKonamiActive(false), 30000)
@@ -86,8 +97,10 @@ function App() {
     const handleKonamiKey = (e) => {
       konamiBuffer.current.push(e.key)
       konamiBuffer.current = konamiBuffer.current.slice(-10)
-      if (konamiBuffer.current.length === 10 &&
-          konamiBuffer.current.every((k, i) => k === KONAMI_CODE[i])) {
+      if (
+        konamiBuffer.current.length === 10 &&
+        konamiBuffer.current.every((k, i) => k === KONAMI_CODE[i])
+      ) {
         handleKonami()
         konamiBuffer.current = []
       }
@@ -232,7 +245,7 @@ function App() {
   }, [handleNewChat, toggleSidebar])
 
   if (appLoading) {
-    return null
+    return <AppLoader />
   }
 
   return (
@@ -240,11 +253,6 @@ function App() {
       <TopBar
         onNewChat={handleNewChat}
         onToggleSidebar={toggleSidebar}
-        sessionId={sessionId}
-        onShare={shareSession}
-        onExport={exportSession}
-        onBranch={handleBranch}
-        branchingEnabled={userSettings.branching_enabled !== false}
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
         onOpenIncognito={() => setIsIncognitoOpen(true)}
         onOpenRightPanel={() => setRightPanelOpen(true)}
@@ -269,11 +277,6 @@ function App() {
               branchingEnabled={userSettings.branching_enabled !== false}
               onClose={toggleSidebar}
               onNewChat={handleNewChat}
-              folders={folders}
-              onCreateFolder={createFolder}
-              onUpdateFolder={updateFolder}
-              onDeleteFolder={deleteFolder}
-              onMoveSessionToFolder={moveSessionToFolder}
             />
           </>
         )}
@@ -304,6 +307,11 @@ function App() {
               onSubmit={startCouncil}
               mode={mode}
               blindVoteEnabled={userSettings.enabled_beta_features?.includes('blind_vote') ?? false}
+              sessionId={sessionId}
+              onExport={exportSession}
+              onBranch={handleBranch}
+              onShare={shareSession}
+              branchingEnabled={userSettings.branching_enabled !== false}
             />
           )}
         </div>
@@ -367,7 +375,9 @@ function App() {
         selectedLanguage={selectedLanguage}
         onLanguageChange={setSelectedLanguage}
         customPromptsEnabled={userSettings.custom_prompts_enabled !== false}
-        multiLanguageEnabled={userSettings.enabled_beta_features?.includes('multi_language') ?? false}
+        multiLanguageEnabled={
+          userSettings.enabled_beta_features?.includes('multi_language') ?? false
+        }
       />
 
       <PWAInstallPrompt />

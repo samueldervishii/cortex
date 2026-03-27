@@ -39,29 +39,29 @@ async function* parseSSE(reader) {
   }
 }
 
+// Module-level caches: avoid re-fetching on page navigation (component remounts)
+let cachedModels = null
+let cachedSessions = null
+
 function useCouncil() {
   const [question, setQuestion] = useState('')
   const [messages, setMessages] = useState([])
   const [loading, setLoading] = useState(false)
   const [currentStep, setCurrentStep] = useState('')
-  const [appLoading, setAppLoading] = useState(true)
+  const [appLoading, setAppLoading] = useState(!cachedModels)
   const [sessionId, setSessionId] = useState(null)
-  const [sessions, setSessions] = useState([])
-  const [sidebarOpen, setSidebarOpen] = useState(() => {
-    return localStorage.getItem('llm-council-sidebar') === 'open'
-  })
+  const [sessions, setSessions] = useState(cachedSessions || [])
   const [sessionLoadError, setSessionLoadError] = useState(null)
   const [isLoadingSession, setIsLoadingSession] = useState(false)
   const [mode, setMode] = useState(() => {
     const savedMode = localStorage.getItem('llm-council-mode')
     return savedMode || 'formal'
   })
-  const [availableModels, setAvailableModels] = useState([])
+  const [availableModels, setAvailableModels] = useState(cachedModels || [])
   const [selectedModels, setSelectedModels] = useState(() => {
     const saved = localStorage.getItem('llm-council-selected-models')
     return saved ? JSON.parse(saved) : []
   })
-  const [folders, setFolders] = useState([])
   const [systemPrompt, setSystemPrompt] = useState(() => {
     return localStorage.getItem('llm-council-system-prompt') || ''
   })
@@ -95,11 +95,6 @@ function useCouncil() {
     localStorage.setItem('llm-council-language', selectedLanguage)
   }, [selectedLanguage])
 
-  // Persist sidebar open/closed state
-  useEffect(() => {
-    localStorage.setItem('llm-council-sidebar', sidebarOpen ? 'open' : 'closed')
-  }, [sidebarOpen])
-
   // Cleanup: abort any in-flight stream when the component using this hook unmounts
   useEffect(() => {
     return () => {
@@ -114,6 +109,7 @@ function useCouncil() {
     try {
       const res = await apiClient.get('/models')
       const models = res.data.models
+      cachedModels = models
       setAvailableModels(models)
 
       const validModelIds = models.map((m) => m.id)
@@ -144,84 +140,41 @@ function useCouncil() {
   }, [])
 
   // Fetch models immediately on mount — hide the app loader once done
+  // Also set a max wait so the UI renders even if the backend is slow/down
+  // Skip the loading phase entirely if models are already cached (page navigation)
   useEffect(() => {
-    fetchModels().finally(() => setAppLoading(false))
+    if (cachedModels) {
+      setAppLoading(false)
+      fetchModels() // refresh in background
+      return
+    }
+    const maxWait = setTimeout(() => setAppLoading(false), 3000)
+    fetchModels().finally(() => {
+      clearTimeout(maxWait)
+      setAppLoading(false)
+    })
+    return () => clearTimeout(maxWait)
   }, [fetchModels])
 
   const fetchSessions = useCallback(async () => {
     try {
       const res = await apiClient.get('/sessions')
+      cachedSessions = res.data.sessions
       setSessions(res.data.sessions)
     } catch (error) {
       console.error('Error fetching sessions:', error)
     }
   }, [])
 
-  const fetchFolders = useCallback(async () => {
-    try {
-      const res = await apiClient.get('/folders')
-      setFolders(res.data.folders)
-    } catch (error) {
-      console.error('Error fetching folders:', error)
-    }
-  }, [])
-
-  const createFolder = async (name, color = null, icon = null) => {
-    try {
-      const res = await apiClient.post('/folders', { name, color, icon })
-      await fetchFolders()
-      return res.data.folder
-    } catch (error) {
-      console.error('Error creating folder:', error)
-      throw error
-    }
-  }
-
-  const updateFolder = async (folderId, updates) => {
-    try {
-      await apiClient.patch(`/folders/${folderId}`, updates)
-      await fetchFolders()
-    } catch (error) {
-      console.error('Error updating folder:', error)
-      throw error
-    }
-  }
-
-  const deleteFolder = async (folderId) => {
-    try {
-      await apiClient.delete(`/folders/${folderId}`)
-      await fetchFolders()
-      await fetchSessions()
-    } catch (error) {
-      console.error('Error deleting folder:', error)
-      throw error
-    }
-  }
-
-  const moveSessionToFolder = async (targetSessionId, targetFolderId) => {
-    try {
-      await apiClient.patch(`/session/${targetSessionId}/folder`, {
-        folder_id: targetFolderId,
-      })
-      await fetchSessions()
-    } catch (error) {
-      console.error('Error moving session to folder:', error)
-      throw error
-    }
-  }
-
+  // Fetch sessions on mount — use cache if available (page navigation)
   useEffect(() => {
-    if (!appLoading) {
+    if (!appLoading && !cachedSessions) {
       fetchSessions()
-      fetchFolders()
     }
-  }, [appLoading, fetchSessions, fetchFolders])
+  }, [appLoading, fetchSessions])
 
   const addMessage = (type, content, modelName = null, extras = {}) => {
-    setMessages((prev) => [
-      ...prev,
-      { type, content, modelName, timestamp: new Date(), ...extras },
-    ])
+    setMessages((prev) => [...prev, { type, content, modelName, timestamp: new Date(), ...extras }])
   }
 
   const loadSession = async (id) => {
@@ -271,9 +224,7 @@ function useCouncil() {
       }
 
       if (error.message === 'timeout') {
-        setSessionLoadError(
-          'The server is taking too long to respond. Please try again later.'
-        )
+        setSessionLoadError('The server is taking too long to respond. Please try again later.')
       } else {
         setSessionLoadError(
           error.response?.data?.detail || 'Something went wrong. Please check again later.'
@@ -510,7 +461,11 @@ function useCouncil() {
             const idx = streamingIndices[data.level]
             if (idx === undefined) return prev
             const updated = [...prev]
-            updated[idx] = { ...updated[idx], streaming: false, responseTime: data.response_time_ms }
+            updated[idx] = {
+              ...updated[idx],
+              streaming: false,
+              responseTime: data.response_time_ms,
+            }
             return updated
           })
           delete streamingIndices[data.level]
@@ -667,18 +622,19 @@ function useCouncil() {
       // If we have an existing session, continue it; otherwise create new
       if (currentSessionId) {
         setCurrentStep('Continuing conversation...')
-        const continueRes = await apiClient.post(
-          `/session/${currentSessionId}/continue`,
-          { question: userQuestion }
-        )
+        const continueRes = await apiClient.post(`/session/${currentSessionId}/continue`, {
+          question: userQuestion,
+        })
         const session = continueRes.data.session
         activeMode = session.rounds[0]?.mode || mode
       } else {
         setCurrentStep('Creating session...')
         const base = systemPrompt.trim()
         const effectiveSystemPrompt = selectedLanguage
-          ? (base ? `Respond in ${selectedLanguage}.\n\n${base}` : `Respond in ${selectedLanguage}.`)
-          : (base || null)
+          ? base
+            ? `Respond in ${selectedLanguage}.\n\n${base}`
+            : `Respond in ${selectedLanguage}.`
+          : base || null
         const createRes = await apiClient.post('/query', {
           question: userQuestion,
           mode: mode,
@@ -692,17 +648,11 @@ function useCouncil() {
 
       if (activeMode === 'chat') {
         // Build mention regex dynamically from available models instead of hardcoding names
-        const modelNames = availableModels.map((m) =>
-          m.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-        )
-        const mentionRegex = modelNames.length > 0
-          ? new RegExp(`@(${modelNames.join('|')})`)
-          : null
+        const modelNames = availableModels.map((m) => m.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+        const mentionRegex = modelNames.length > 0 ? new RegExp(`@(${modelNames.join('|')})`) : null
         const mentionMatch = mentionRegex ? userQuestion.match(mentionRegex) : null
         const targetModel = mentionMatch ? mentionMatch[1] : null
-        setCurrentStep(
-          targetModel ? `${targetModel} is typing...` : 'Models are typing...'
-        )
+        setCurrentStep(targetModel ? `${targetModel} is typing...` : 'Models are typing...')
         await streamCouncil(currentSessionId, targetModel)
       } else {
         setCurrentStep('Council is thinking...')
@@ -730,10 +680,6 @@ function useCouncil() {
     setSessionId(null)
   }
 
-  const toggleSidebar = () => {
-    setSidebarOpen((prev) => !prev)
-  }
-
   const toggleModel = (modelId) => {
     setSelectedModels((prev) => {
       if (prev.includes(modelId)) {
@@ -746,8 +692,7 @@ function useCouncil() {
 
   const selectAllModels = () => {
     const allSelected =
-      availableModels.length > 0 &&
-      availableModels.every((m) => selectedModels.includes(m.id))
+      availableModels.length > 0 && availableModels.every((m) => selectedModels.includes(m.id))
 
     if (allSelected) {
       const chairman = availableModels.find((m) => m.is_chairman)
@@ -825,7 +770,6 @@ function useCouncil() {
     hasMessages,
     sessionId,
     sessions,
-    sidebarOpen,
     mode,
     setMode,
     availableModels,
@@ -842,7 +786,6 @@ function useCouncil() {
     deleteSession,
     renameSession,
     togglePinSession,
-    toggleSidebar,
     fetchSessions,
     shareSession,
     unshareSession,
@@ -851,12 +794,6 @@ function useCouncil() {
     exportSession,
     sessionLoadError,
     isLoadingSession,
-    // Folder management
-    folders,
-    createFolder,
-    updateFolder,
-    deleteFolder,
-    moveSessionToFolder,
   }
 }
 

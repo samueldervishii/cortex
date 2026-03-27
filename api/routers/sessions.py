@@ -69,7 +69,6 @@ async def list_sessions(
                 round_count=s.get("round_count", 1),
                 created_at=created_at.isoformat() if created_at else None,
                 is_pinned=s.get("is_pinned", False),
-                folder_id=s.get("folder_id"),
             )
         )
 

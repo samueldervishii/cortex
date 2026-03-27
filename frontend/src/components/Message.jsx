@@ -8,8 +8,8 @@ const MENTION_COLORS = {
   ...MODEL_COLORS,
   'Claude Sonnet': '#d97706',
   'Claude Haiku': '#8b5cf6',
-  'Qwen': '#10b981',
-  'User': '#9ca3af',
+  Qwen: '#10b981',
+  User: '#9ca3af',
 }
 
 function getModelColor(modelName) {
@@ -39,7 +39,11 @@ function highlightMentions(text) {
       const name = part.slice(1)
       const color = MENTION_COLORS[name] || '#d4a574'
       return (
-        <span key={i} className="mention-tag" style={{ backgroundColor: `${color}20`, color, borderColor: `${color}40` }}>
+        <span
+          key={i}
+          className="mention-tag"
+          style={{ backgroundColor: `${color}20`, color, borderColor: `${color}40` }}
+        >
           {part}
         </span>
       )
@@ -48,7 +52,18 @@ function highlightMentions(text) {
   })
 }
 
-function Message({ type, content, modelName, disagreement, replyTo, responseTime, streaming, blindVoteProps, level, levelLabel }) {
+function Message({
+  type,
+  content,
+  modelName,
+  disagreement,
+  replyTo,
+  responseTime,
+  streaming,
+  blindVoteProps,
+  level,
+  levelLabel,
+}) {
   const [copied, setCopied] = useState(false)
   const hasDisagreement = disagreement?.has_disagreement
   const disagreementScore = disagreement?.disagreement_score
@@ -81,7 +96,11 @@ function Message({ type, content, modelName, disagreement, replyTo, responseTime
         <div className="message-header">
           <span
             className="eli5-level-badge"
-            style={{ background: `${style.color}22`, color: style.color, border: `1px solid ${style.color}44` }}
+            style={{
+              background: `${style.color}22`,
+              color: style.color,
+              border: `1px solid ${style.color}44`,
+            }}
           >
             {style.icon} {displayLabel}
           </span>
@@ -89,11 +108,25 @@ function Message({ type, content, modelName, disagreement, replyTo, responseTime
           {showCopy && (
             <button className="copy-btn" onClick={handleCopy} title="Copy response">
               {copied ? (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
               ) : (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
                   <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                   <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                 </svg>
@@ -147,7 +180,10 @@ function Message({ type, content, modelName, disagreement, replyTo, responseTime
             </button>
           </div>
           <div className="chat-content">
-            <p>{highlightMentions(content)}{streaming && <span className="streaming-cursor" />}</p>
+            <p>
+              {highlightMentions(content)}
+              {streaming && <span className="streaming-cursor" />}
+            </p>
           </div>
         </div>
         <div className="chat-avatar" style={{ backgroundColor: color }}>
@@ -184,13 +220,15 @@ function Message({ type, content, modelName, disagreement, replyTo, responseTime
             </span>
           )}
           {blindVoteProps?.isVotable && (
-            <button className="vote-btn" onClick={blindVoteProps.onVote} title="Vote for this response">
+            <button
+              className="vote-btn"
+              onClick={blindVoteProps.onVote}
+              title="Vote for this response"
+            >
               Vote
             </button>
           )}
-          {blindVoteProps?.isVoted && (
-            <span className="voted-badge">Your Pick</span>
-          )}
+          {blindVoteProps?.isVoted && <span className="voted-badge">Your Pick</span>}
           {formattedTime && <span className="response-time">{formattedTime}</span>}
           {showCopy && (
             <button className="copy-btn" onClick={handleCopy} title="Copy response">

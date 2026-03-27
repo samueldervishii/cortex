@@ -71,7 +71,6 @@ export interface CouncilSession {
   share_token: string | null
   shared_at: string | null
   pinned_at: string | null
-  folder_id: string | null
   parent_session_id: string | null
   branched_from_round: number | null
   created_at: string | null
@@ -85,16 +84,6 @@ export interface SessionSummary {
   round_count: number
   created_at: string | null
   is_pinned: boolean
-  folder_id: string | null
-}
-
-export interface Folder {
-  id: string
-  name: string
-  color: string | null
-  icon: string | null
-  order: number
-  created_at: string | null
 }
 
 // Frontend-only message type used in the chat UI.

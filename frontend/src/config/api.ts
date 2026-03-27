@@ -11,6 +11,7 @@ export const FRONTEND_VERSION: string = versionData.version
 
 export const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE,
+  timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
     ...(API_KEY && { 'X-API-Key': API_KEY }),

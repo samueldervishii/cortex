@@ -31,7 +31,14 @@ function RightPanel({
         <div className="right-panel-header">
           <h2>Session Context</h2>
           <button className="right-panel-close" onClick={onClose} title="Close">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
@@ -43,9 +50,7 @@ function RightPanel({
             <div className="right-panel-section">
               <label className="right-panel-label">
                 System Prompt
-                {systemPrompt?.trim() && (
-                  <span className="right-panel-active-badge">Active</span>
-                )}
+                {systemPrompt?.trim() && <span className="right-panel-active-badge">Active</span>}
               </label>
               <p className="right-panel-hint">
                 Custom instructions applied to all council members for new chats.
@@ -58,9 +63,7 @@ function RightPanel({
                 rows={6}
                 maxLength={2000}
               />
-              <div className="right-panel-char-count">
-                {(systemPrompt || '').length} / 2000
-              </div>
+              <div className="right-panel-char-count">{(systemPrompt || '').length} / 2000</div>
             </div>
           )}
 
@@ -68,9 +71,7 @@ function RightPanel({
             <div className="right-panel-section">
               <label className="right-panel-label">
                 Response Language
-                {selectedLanguage && (
-                  <span className="right-panel-active-badge">Active</span>
-                )}
+                {selectedLanguage && <span className="right-panel-active-badge">Active</span>}
               </label>
               <p className="right-panel-hint">
                 Applied to new chats. Existing sessions keep their original language.
@@ -80,7 +81,9 @@ function RightPanel({
                   <button
                     key={lang.code}
                     className={`language-pill ${selectedLanguage === lang.code ? 'selected' : ''}`}
-                    onClick={() => onLanguageChange(selectedLanguage === lang.code ? '' : lang.code)}
+                    onClick={() =>
+                      onLanguageChange(selectedLanguage === lang.code ? '' : lang.code)
+                    }
                     type="button"
                   >
                     <span className="language-pill-flag">{lang.flag}</span>
@@ -89,7 +92,11 @@ function RightPanel({
                 ))}
               </div>
               {selectedLanguage && (
-                <button className="language-clear-btn" onClick={() => onLanguageChange('')} type="button">
+                <button
+                  className="language-clear-btn"
+                  onClick={() => onLanguageChange('')}
+                  type="button"
+                >
                   Clear — use default language
                 </button>
               )}

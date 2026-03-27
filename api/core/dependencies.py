@@ -8,7 +8,6 @@ from fastapi import Header, HTTPException, status
 from clients import LLMClient
 from config import settings
 from db import get_database, SessionRepository, SettingsRepository
-from db.folder_repository import FolderRepository
 
 logger = logging.getLogger("llm-council.security")
 
@@ -20,7 +19,6 @@ logger = logging.getLogger("llm-council.security")
 _llm_client: LLMClient | None = None
 _session_repository: SessionRepository | None = None
 _settings_repository: SettingsRepository | None = None
-_folder_repository: FolderRepository | None = None
 _init_lock = asyncio.Lock()
 
 
@@ -44,17 +42,6 @@ async def get_settings_repository() -> SettingsRepository:
                 database = await get_database()
                 _settings_repository = SettingsRepository(database)
     return _settings_repository
-
-
-async def get_folder_repository() -> FolderRepository:
-    """Get the folder repository dependency."""
-    global _folder_repository
-    if _folder_repository is None:
-        async with _init_lock:
-            if _folder_repository is None:
-                database = await get_database()
-                _folder_repository = FolderRepository(database)
-    return _folder_repository
 
 
 def get_llm_client() -> LLMClient:

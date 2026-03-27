@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useOutletContext } from 'react-router-dom'
 import { TopBar, Sidebar, CommandPalette } from '../components'
+import AppLoader from '../components/AppLoader'
 import Settings from './Settings'
 import useCouncil from '../hooks/useCouncil'
 import useTheme from '../hooks/useTheme'
@@ -9,11 +10,11 @@ import '../App.css'
 function SettingsPage() {
   const navigate = useNavigate()
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
+  const { sidebarOpen, toggleSidebar } = useOutletContext()
   const {
     appLoading,
     sessionId,
     sessions,
-    sidebarOpen,
     mode,
     setMode,
     availableModels,
@@ -25,7 +26,6 @@ function SettingsPage() {
     deleteSession,
     renameSession,
     togglePinSession,
-    toggleSidebar,
     shareSession,
     exportSession,
   } = useCouncil()
@@ -47,7 +47,7 @@ function SettingsPage() {
   }, [])
 
   if (appLoading) {
-    return null
+    return <AppLoader />
   }
 
   return (
@@ -58,9 +58,6 @@ function SettingsPage() {
           navigate('/')
         }}
         onToggleSidebar={toggleSidebar}
-        sessionId={sessionId}
-        onShare={shareSession}
-        onExport={exportSession}
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
       />
 

@@ -235,10 +235,6 @@ class CouncilSession(BaseModel):
     branched_from_round: Optional[int] = Field(
         None, description="Round index this was branched from (0-indexed)"
     )
-    # Folder organization
-    folder_id: Optional[str] = Field(
-        None, description="ID of the folder this session belongs to"
-    )
 
 
 class BranchRequest(BaseModel):
@@ -282,9 +278,6 @@ class SessionSummary(BaseModel):
     round_count: int = Field(default=1, description="Number of conversation rounds")
     created_at: Optional[str] = Field(None, description="ISO timestamp of creation")
     is_pinned: bool = Field(default=False, description="Whether the session is pinned")
-    folder_id: Optional[str] = Field(
-        None, description="ID of the folder this session belongs to"
-    )
 
 
 class SessionUpdateRequest(BaseModel):

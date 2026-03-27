@@ -99,7 +99,6 @@ class SessionRepository:
                     "title": 1,
                     "created_at": 1,
                     "is_pinned": {"$ifNull": ["$is_pinned", False]},
-                    "folder_id": {"$ifNull": ["$folder_id", None]},
                     # Extract only what we need from rounds array
                     "question": {
                         "$ifNull": [{"$arrayElemAt": ["$rounds.question", 0]}, ""]
@@ -254,31 +253,6 @@ class SessionRepository:
         )
         return result.modified_count > 0
 
-    async def clear_folder_from_sessions(self, folder_id: str) -> int:
-        """Remove folder_id from all sessions belonging to a folder (bulk operation)."""
-        result = await self.collection.update_many(
-            {"folder_id": folder_id, "is_deleted": {"$ne": True}},
-            {
-                "$set": {
-                    "folder_id": None,
-                    "updated_at": datetime.now(timezone.utc),
-                }
-            },
-        )
-        return result.modified_count
-
-    async def update_folder(self, session_id: str, folder_id: Optional[str]) -> bool:
-        """Update the folder_id of a session."""
-        result = await self.collection.update_one(
-            {"id": session_id, "is_deleted": {"$ne": True}},
-            {
-                "$set": {
-                    "folder_id": folder_id,
-                    "updated_at": datetime.now(timezone.utc),
-                }
-            },
-        )
-        return result.modified_count > 0
 
     async def soft_delete_older_than(
         self, days: int, include_pinned: bool = False

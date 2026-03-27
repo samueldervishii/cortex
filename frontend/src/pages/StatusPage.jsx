@@ -61,7 +61,14 @@ function StatusPage() {
     <div className="status-page">
       <header className="status-page-header">
         <button className="status-page-back" onClick={() => navigate('/')}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
             <path d="M19 12H5M12 19l-7-7 7-7" />
           </svg>
         </button>
@@ -98,9 +105,7 @@ function StatusPage() {
                             : key}
                     </span>
                   </div>
-                  <span className={`status-page-check-badge ${check.status}`}>
-                    {check.status}
-                  </span>
+                  <span className={`status-page-check-badge ${check.status}`}>{check.status}</span>
                   <span className="status-page-check-detail">{check.detail}</span>
                 </div>
               ))}
@@ -140,9 +145,7 @@ function StatusPage() {
             <div className="status-page-council">
               <div className="status-page-council-chairman">
                 <span className="status-page-council-label">Chairman</span>
-                <span className="status-page-council-model">
-                  {statusData.models.chairman.name}
-                </span>
+                <span className="status-page-council-model">{statusData.models.chairman.name}</span>
                 <span className="status-page-council-provider">
                   {statusData.models.chairman.provider}
                 </span>
@@ -163,9 +166,7 @@ function StatusPage() {
 
           <footer className="status-page-footer">
             <span>Environment: {statusData.environment}</span>
-            {lastChecked && (
-              <span>Last checked: {lastChecked.toLocaleTimeString()}</span>
-            )}
+            {lastChecked && <span>Last checked: {lastChecked.toLocaleTimeString()}</span>}
             <button className="status-page-refresh" onClick={fetchStatus}>
               Refresh
             </button>

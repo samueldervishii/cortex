@@ -314,15 +314,21 @@ function Settings({
             <h2>Features</h2>
             <div className="settings-option">
               <div className="settings-option-info">
-                <h3>Conversation Branching <span className="new-badge">New</span></h3>
-                <p>Create branches from any point in a conversation to explore different directions</p>
+                <h3>
+                  Conversation Branching <span className="new-badge">New</span>
+                </h3>
+                <p>
+                  Create branches from any point in a conversation to explore different directions
+                </p>
               </div>
               <div className="settings-option-control">
                 <label className="toggle-switch">
                   <input
                     type="checkbox"
                     checked={settings.branching_enabled !== false}
-                    onChange={() => saveSettings({ branching_enabled: !settings.branching_enabled })}
+                    onChange={() =>
+                      saveSettings({ branching_enabled: !settings.branching_enabled })
+                    }
                   />
                   <span className="toggle-slider"></span>
                 </label>
@@ -330,15 +336,22 @@ function Settings({
             </div>
             <div className="settings-option">
               <div className="settings-option-info">
-                <h3>Custom System Prompts <span className="new-badge">New</span></h3>
-                <p>Define custom instructions and model personas to control how council members respond</p>
+                <h3>
+                  Custom System Prompts <span className="new-badge">New</span>
+                </h3>
+                <p>
+                  Define custom instructions and model personas to control how council members
+                  respond
+                </p>
               </div>
               <div className="settings-option-control">
                 <label className="toggle-switch">
                   <input
                     type="checkbox"
                     checked={settings.custom_prompts_enabled !== false}
-                    onChange={() => saveSettings({ custom_prompts_enabled: !settings.custom_prompts_enabled })}
+                    onChange={() =>
+                      saveSettings({ custom_prompts_enabled: !settings.custom_prompts_enabled })
+                    }
                   />
                   <span className="toggle-slider"></span>
                 </label>
@@ -402,9 +415,12 @@ function Settings({
 
             {settings.custom_prompts_enabled !== false && (
               <>
-                <h2>Model Personas <span className="new-badge">New</span></h2>
+                <h2>
+                  Model Personas <span className="new-badge">New</span>
+                </h2>
                 <p className="section-description">
-                  Give each model a unique personality or role. These instructions are added to each model's system prompt.
+                  Give each model a unique personality or role. These instructions are added to each
+                  model's system prompt.
                 </p>
                 <div className="personas-list">
                   {availableModels.map((model) => (
@@ -450,8 +466,8 @@ function Settings({
               <div className="settings-option-info">
                 <h3>Auto-delete Old Chats</h3>
                 <p>
-                  Automatically delete inactive chat sessions after a certain period. Pinned
-                  chats and recently-active sessions are always preserved.
+                  Automatically delete inactive chat sessions after a certain period. Pinned chats
+                  and recently-active sessions are always preserved.
                 </p>
               </div>
               <div className="settings-option-control">

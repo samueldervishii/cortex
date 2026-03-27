@@ -3,6 +3,7 @@ import Message from './Message'
 import VotingVisualization from './VotingVisualization'
 import LoadingIndicator from './LoadingIndicator'
 import ChatInput from './ChatInput'
+import SessionActions from './SessionActions'
 
 function ChatMessages({
   messages,
@@ -14,6 +15,11 @@ function ChatMessages({
   readOnly = false,
   mode = 'formal',
   blindVoteEnabled = false,
+  onExport,
+  onBranch,
+  onShare,
+  sessionId,
+  branchingEnabled = false,
 }) {
   const messagesEndRef = useRef(null)
   const chatInputRef = useRef(null)
@@ -106,9 +112,7 @@ function ChatMessages({
 
           // Show anonymous label while not revealed, real name after
           const displayName =
-            isCurrentRoundCouncil && !revealed
-              ? (msg.anonymousLabel || msg.modelName)
-              : msg.modelName
+            isCurrentRoundCouncil && !revealed ? msg.anonymousLabel || msg.modelName : msg.modelName
 
           const isVotable = showBlindVoteUI && !revealed && isCurrentRoundCouncil
           const isVoted = Boolean(userVote && userVote === msg.anonymousLabel)
@@ -144,10 +148,7 @@ function ChatMessages({
                     : 'Click "Vote" on your favourite response before the reveal!'}
                 </span>
                 {userVote && (
-                  <button
-                    className="blind-vote-reveal-btn"
-                    onClick={() => setRevealed(true)}
-                  >
+                  <button className="blind-vote-reveal-btn" onClick={() => setRevealed(true)}>
                     Reveal Models
                   </button>
                 )}
@@ -160,6 +161,16 @@ function ChatMessages({
               </span>
             )}
           </div>
+        )}
+
+        {!loading && sessionId && (
+          <SessionActions
+            sessionId={sessionId}
+            onExport={onExport}
+            onBranch={onBranch}
+            onShare={onShare}
+            branchingEnabled={branchingEnabled}
+          />
         )}
 
         {loading && <LoadingIndicator statusText={currentStep} />}
