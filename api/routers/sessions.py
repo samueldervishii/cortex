@@ -11,7 +11,7 @@ from core.dependencies import (
     get_session_repository,
     get_settings_repository,
     get_llm_client,
-    verify_api_key,
+    get_current_user,
 )
 from core.rate_limit import check_rate_limit
 from core.sanitization import sanitize_title
@@ -46,6 +46,7 @@ async def list_sessions(
         default=50, ge=1, le=500, description="Maximum number of sessions to return"
     ),
     repo: SessionRepository = Depends(get_session_repository),
+    user_id: str = Depends(get_current_user),
 ):
     """
     List All Sessions
@@ -56,7 +57,7 @@ async def list_sessions(
     - **limit**: Maximum number of sessions to return (default: 50, max: 500)
     """
     # Sessions are already sorted in database (pinned first, then by created_at desc)
-    sessions = await repo.list_all(limit=limit)
+    sessions = await repo.list_all(limit=limit, user_id=user_id)
     summaries = []
     for s in sessions:
         created_at = s.get("created_at")
@@ -79,7 +80,7 @@ async def list_sessions(
 async def create_session(
     request: QueryRequest,
     repo: SessionRepository = Depends(get_session_repository),
-    _auth: bool = Depends(verify_api_key),
+    user_id: str = Depends(get_current_user),
     _rate_limit: None = Depends(check_rate_limit),
 ):
     """
@@ -108,6 +109,7 @@ async def create_session(
     # Sanitize and limit title to prevent XSS and ensure clean data
     session = CouncilSession(
         id=session_id,
+        user_id=user_id,
         title=sanitize_title(request.question, max_length=100),
         rounds=[first_round],
     )
@@ -123,7 +125,9 @@ async def create_session(
 
 @router.get("/{session_id}", response_model=SessionResponse)
 async def get_session(
-    session_id: str, repo: SessionRepository = Depends(get_session_repository)
+    session_id: str,
+    repo: SessionRepository = Depends(get_session_repository),
+    user_id: str = Depends(get_current_user),
 ):
     """
     Get Session Details
@@ -131,7 +135,7 @@ async def get_session(
     Retrieves the complete state of a session including all rounds,
     responses, peer reviews, and synthesis results.
     """
-    session = await repo.get(session_id)
+    session = await repo.get(session_id, user_id=user_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -142,7 +146,7 @@ async def get_session(
 async def delete_session(
     session_id: str,
     repo: SessionRepository = Depends(get_session_repository),
-    _auth: bool = Depends(verify_api_key),
+    user_id: str = Depends(get_current_user),
 ):
     """
     Delete Session
@@ -150,7 +154,7 @@ async def delete_session(
     Soft-deletes a session. The session data is preserved but marked as deleted
     and will no longer appear in session lists.
     """
-    deleted = await repo.soft_delete(session_id)
+    deleted = await repo.soft_delete(session_id, user_id=user_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -162,7 +166,7 @@ async def update_session(
     session_id: str,
     request: SessionUpdateRequest,
     repo: SessionRepository = Depends(get_session_repository),
-    _auth: bool = Depends(verify_api_key),
+    user_id: str = Depends(get_current_user),
 ):
     """
     Update Session
@@ -170,7 +174,7 @@ async def update_session(
     Updates session properties like title or pinned status.
     Only provided fields will be updated.
     """
-    session = await repo.get(session_id)
+    session = await repo.get(session_id, user_id=user_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -178,7 +182,7 @@ async def update_session(
     # (pin toggling can race with council operations that also update the session)
     if request.is_pinned is not None and request.title is None:
         pinned_at = datetime.now(timezone.utc).isoformat() if request.is_pinned else None
-        success = await repo.update_pin(session_id, request.is_pinned, pinned_at)
+        success = await repo.update_pin(session_id, request.is_pinned, pinned_at, user_id=user_id)
         if not success:
             raise HTTPException(status_code=500, detail="Failed to update pin status")
         session.is_pinned = request.is_pinned
@@ -214,7 +218,7 @@ async def continue_session(
     session_id: str,
     request: ContinueRequest,
     repo: SessionRepository = Depends(get_session_repository),
-    _auth: bool = Depends(verify_api_key),
+    user_id: str = Depends(get_current_user),
     _rate_limit: None = Depends(check_rate_limit),
 ):
     """
@@ -226,7 +230,7 @@ async def continue_session(
     This allows for multi-turn conversations where the council can build on
     previous context and answers.
     """
-    session = await repo.get(session_id)
+    session = await repo.get(session_id, user_id=user_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -270,7 +274,7 @@ async def get_responses(
     session_id: str,
     repo: SessionRepository = Depends(get_session_repository),
     council_service: CouncilService = Depends(get_council_service),
-    _auth: bool = Depends(verify_api_key),
+    user_id: str = Depends(get_current_user),
     _rate_limit: None = Depends(check_rate_limit),
 ):
     """
@@ -283,7 +287,7 @@ async def get_responses(
 
     **Next step**: Call `POST /session/{id}/reviews` for peer reviews.
     """
-    session = await repo.get(session_id)
+    session = await repo.get(session_id, user_id=user_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -317,7 +321,7 @@ async def get_reviews(
     session_id: str,
     repo: SessionRepository = Depends(get_session_repository),
     council_service: CouncilService = Depends(get_council_service),
-    _auth: bool = Depends(verify_api_key),
+    user_id: str = Depends(get_current_user),
     _rate_limit: None = Depends(check_rate_limit),
 ):
     """
@@ -331,7 +335,7 @@ async def get_reviews(
 
     **Next step**: Call `POST /session/{id}/synthesize` for the final synthesis.
     """
-    session = await repo.get(session_id)
+    session = await repo.get(session_id, user_id=user_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -380,7 +384,7 @@ async def synthesize(
     session_id: str,
     repo: SessionRepository = Depends(get_session_repository),
     council_service: CouncilService = Depends(get_council_service),
-    _auth: bool = Depends(verify_api_key),
+    user_id: str = Depends(get_current_user),
     _rate_limit: None = Depends(check_rate_limit),
 ):
     """
@@ -395,7 +399,7 @@ async def synthesize(
 
     **Next step**: Optionally call `POST /session/{id}/continue` to ask a follow-up question.
     """
-    session = await repo.get(session_id)
+    session = await repo.get(session_id, user_id=user_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -437,7 +441,7 @@ async def run_full_council(
     request: RunAllRequest = Body(None),
     repo: SessionRepository = Depends(get_session_repository),
     council_service: CouncilService = Depends(get_council_service),
-    _auth: bool = Depends(verify_api_key),
+    user_id: str = Depends(get_current_user),
     _rate_limit: None = Depends(check_rate_limit),
 ):
     """
@@ -457,7 +461,7 @@ async def run_full_council(
 
     This is the recommended endpoint for most use cases.
     """
-    session = await repo.get(session_id)
+    session = await repo.get(session_id, user_id=user_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -531,7 +535,7 @@ async def share_session(
     session_id: str,
     request: Request,
     repo: SessionRepository = Depends(get_session_repository),
-    _auth: bool = Depends(verify_api_key),
+    user_id: str = Depends(get_current_user),
 ):
     """
     Share Session
@@ -541,7 +545,7 @@ async def share_session(
 
     Returns the share token and full URL for sharing.
     """
-    session = await repo.get(session_id)
+    session = await repo.get(session_id, user_id=user_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -567,14 +571,14 @@ async def share_session(
 async def unshare_session(
     session_id: str,
     repo: SessionRepository = Depends(get_session_repository),
-    _auth: bool = Depends(verify_api_key),
+    user_id: str = Depends(get_current_user),
 ):
     """
     Revoke Session Sharing
 
     Removes public access to a shared session. The share link will no longer work.
     """
-    session = await repo.get(session_id)
+    session = await repo.get(session_id, user_id=user_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -594,13 +598,14 @@ async def get_share_info(
     session_id: str,
     request: Request,
     repo: SessionRepository = Depends(get_session_repository),
+    user_id: str = Depends(get_current_user),
 ):
     """
     Get Share Info
 
     Returns the current sharing status and share URL if the session is shared.
     """
-    session = await repo.get(session_id)
+    session = await repo.get(session_id, user_id=user_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -621,7 +626,7 @@ async def branch_session(
     session_id: str,
     request: BranchRequest,
     repo: SessionRepository = Depends(get_session_repository),
-    _auth: bool = Depends(verify_api_key),
+    user_id: str = Depends(get_current_user),
 ):
     """
     Branch Session
@@ -638,7 +643,7 @@ async def branch_session(
     Returns the newly created branched session.
     """
     # Get original session
-    original_session = await repo.get(session_id)
+    original_session = await repo.get(session_id, user_id=user_id)
     if original_session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -667,6 +672,7 @@ async def branch_session(
 
     branched_session = CouncilSession(
         id=new_session_id,
+        user_id=user_id,
         title=branched_title,
         rounds=rounds_to_copy,
         parent_session_id=session_id,
@@ -690,7 +696,7 @@ async def delete_all_sessions(
     confirm: bool = False,
     include_pinned: bool = False,
     repo: SessionRepository = Depends(get_session_repository),
-    _auth: bool = Depends(verify_api_key),
+    user_id: str = Depends(get_current_user),
 ):
     """
     Clear All History
@@ -708,7 +714,7 @@ async def delete_all_sessions(
             status_code=400, detail="Must set confirm=true to delete all sessions"
         )
 
-    deleted_count = await repo.soft_delete_all(include_pinned=include_pinned)
+    deleted_count = await repo.soft_delete_all(include_pinned=include_pinned, user_id=user_id)
 
     if include_pinned:
         message = f"All {deleted_count} sessions deleted successfully"
@@ -722,7 +728,7 @@ async def delete_all_sessions(
 async def cleanup_old_sessions(
     session_repo: SessionRepository = Depends(get_session_repository),
     settings_repo: SettingsRepository = Depends(get_settings_repository),
-    _auth: bool = Depends(verify_api_key),
+    user_id: str = Depends(get_current_user),
 ):
     """
     Cleanup Old Sessions (Auto-Delete)
@@ -742,7 +748,7 @@ async def cleanup_old_sessions(
     Recently-active sessions (updated within the retention period) are also preserved.
     """
     # Get user settings
-    user_settings = await settings_repo.get(user_id="default")
+    user_settings = await settings_repo.get(user_id=user_id)
 
     # Check if auto_delete_days is configured
     if user_settings.auto_delete_days is None:
@@ -763,7 +769,7 @@ async def cleanup_old_sessions(
 
     # Run cleanup (never delete pinned sessions)
     deleted_count = await session_repo.soft_delete_older_than(
-        days=user_settings.auto_delete_days, include_pinned=False
+        days=user_settings.auto_delete_days, include_pinned=False, user_id=user_id
     )
 
     return {
@@ -780,7 +786,7 @@ async def stream_council(
     repo: SessionRepository = Depends(get_session_repository),
     settings_repo: SettingsRepository = Depends(get_settings_repository),
     council_service: CouncilService = Depends(get_council_service),
-    _auth: bool = Depends(verify_api_key),
+    user_id: str = Depends(get_current_user),
     _rate_limit: None = Depends(check_rate_limit),
 ):
     """
@@ -799,7 +805,7 @@ async def stream_council(
     """
     from fastapi.responses import StreamingResponse
 
-    session = await repo.get(session_id)
+    session = await repo.get(session_id, user_id=user_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -811,7 +817,7 @@ async def stream_council(
     target_model = request.target_model if request else None
 
     # Load model personas from user settings
-    user_settings = await settings_repo.get(user_id="default")
+    user_settings = await settings_repo.get(user_id=user_id)
     personas = user_settings.model_personas if user_settings.model_personas else {}
 
     async def event_stream():
@@ -858,7 +864,7 @@ async def export_sessions(
         default=1000, ge=1, le=5000, description="Maximum sessions to export"
     ),
     repo: SessionRepository = Depends(get_session_repository),
-    _auth: bool = Depends(verify_api_key),
+    user_id: str = Depends(get_current_user),
 ):
     """
     Export All Data
@@ -886,7 +892,7 @@ async def export_sessions(
         format = "markdown"
 
     # Get sessions with limit to prevent memory issues
-    sessions = await repo.get_all_full(include_deleted=include_deleted, limit=limit)
+    sessions = await repo.get_all_full(include_deleted=include_deleted, limit=limit, user_id=user_id)
 
     # Format based on requested type
     if format == "json":

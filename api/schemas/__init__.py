@@ -25,6 +25,14 @@ from .user_settings import (
     UserSettingsUpdate,
     UserSettingsResponse,
 )
+from .user import (
+    UserCreate,
+    UserLogin,
+    UserInDB,
+    UserResponse,
+    TokenResponse,
+    RefreshRequest,
+)
 
 __all__ = [
     "ModelProvider",
@@ -50,4 +58,10 @@ __all__ = [
     "UserSettings",
     "UserSettingsUpdate",
     "UserSettingsResponse",
+    "UserCreate",
+    "UserLogin",
+    "UserInDB",
+    "UserResponse",
+    "TokenResponse",
+    "RefreshRequest",
 ]

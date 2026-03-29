@@ -78,10 +78,25 @@ async def ensure_indexes(database: AsyncIOMotorDatabase) -> None:
             name="idx_pinned_sessions",
         )
 
+        # Compound index for user-scoped session queries
+        await sessions_collection.create_index(
+            [("user_id", ASCENDING), ("is_deleted", ASCENDING), ("created_at", DESCENDING)],
+            name="idx_user_sessions",
+        )
+
         # User settings indexes
         # Index for user_id lookup
         await settings_collection.create_index(
             [("user_id", ASCENDING)], unique=True, name="idx_user_id"
+        )
+
+        # Users collection indexes
+        users_collection = database["users"]
+        await users_collection.create_index(
+            [("id", ASCENDING)], unique=True, name="idx_user_id_pk"
+        )
+        await users_collection.create_index(
+            [("email", ASCENDING)], unique=True, name="idx_user_email"
         )
 
         _indexes_created = True

@@ -1,4 +1,5 @@
 import { useLocation } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
 
 function TopBar({
   onNewChat,
@@ -8,6 +9,7 @@ function TopBar({
   onOpenRightPanel,
   showContextButton = false,
 }) {
+  const { user, logout } = useAuth()
   const location = useLocation()
   const isRootPath = location.pathname === '/'
   const showGlobalActions =
@@ -96,6 +98,30 @@ function TopBar({
               <circle cx="8" cy="18" r="2" fill="currentColor" stroke="none" />
             </svg>
             <span className="button-text">Context</span>
+          </button>
+        )}
+
+        {user && (
+          <button
+            className="top-bar-action user-btn"
+            onClick={logout}
+            title={`${user.email} — Log out`}
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+            <span className="button-text">Log out</span>
           </button>
         )}
       </div>

@@ -195,6 +195,9 @@ class CouncilSession(BaseModel):
     """
 
     id: str = Field(..., description="Unique session identifier (UUID)")
+    user_id: Optional[str] = Field(
+        None, description="Owner user ID. None for legacy sessions."
+    )
     version: int = Field(
         default=1,
         description="Version number for optimistic locking (prevents race conditions)",

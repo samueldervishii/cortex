@@ -3,13 +3,18 @@ import logging
 import secrets
 from typing import Optional
 
-from fastapi import Header, HTTPException, status
+from fastapi import Header, HTTPException, status, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from clients import LLMClient
 from config import settings
+from core.auth import decode_token
 from db import get_database, SessionRepository, SettingsRepository
+from db.user_repository import UserRepository
 
 logger = logging.getLogger("llm-council.security")
+
+_bearer_scheme = HTTPBearer()
 
 # Singleton instances — each repository/client is created once and reused.
 # We use double-checked locking to prevent multiple concurrent requests from
@@ -19,6 +24,7 @@ logger = logging.getLogger("llm-council.security")
 _llm_client: LLMClient | None = None
 _session_repository: SessionRepository | None = None
 _settings_repository: SettingsRepository | None = None
+_user_repository: UserRepository | None = None
 _init_lock = asyncio.Lock()
 
 
@@ -42,6 +48,26 @@ async def get_settings_repository() -> SettingsRepository:
                 database = await get_database()
                 _settings_repository = SettingsRepository(database)
     return _settings_repository
+
+
+async def get_user_repository() -> UserRepository:
+    """Get the user repository dependency."""
+    global _user_repository
+    if _user_repository is None:
+        async with _init_lock:
+            if _user_repository is None:
+                database = await get_database()
+                _user_repository = UserRepository(database)
+    return _user_repository
+
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(_bearer_scheme),
+) -> str:
+    """Extract and validate the current user from the JWT Bearer token.
+    Returns the user_id string."""
+    payload = decode_token(credentials.credentials, expected_type="access")
+    return payload["sub"]
 
 
 def get_llm_client() -> LLMClient:

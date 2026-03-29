@@ -1,7 +1,7 @@
 from typing import List
 from fastapi import APIRouter, Depends
 
-from core.dependencies import get_settings_repository, verify_api_key
+from core.dependencies import get_settings_repository, get_current_user
 from db import SettingsRepository
 from schemas import UserSettingsUpdate, UserSettingsResponse
 from constants.beta_features import get_beta_features_info, BetaFeatureInfo
@@ -10,14 +10,17 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 
 
 @router.get("", response_model=UserSettingsResponse)
-async def get_settings(repo: SettingsRepository = Depends(get_settings_repository)):
+async def get_settings(
+    repo: SettingsRepository = Depends(get_settings_repository),
+    user_id: str = Depends(get_current_user),
+):
     """
     Get User Settings
 
     Retrieves the current user settings and preferences.
     Returns default settings if none have been configured.
     """
-    settings = await repo.get(user_id="default")
+    settings = await repo.get(user_id=user_id)
     return UserSettingsResponse(settings=settings, message="Settings retrieved")
 
 
@@ -25,7 +28,7 @@ async def get_settings(repo: SettingsRepository = Depends(get_settings_repositor
 async def update_settings(
     request: UserSettingsUpdate,
     repo: SettingsRepository = Depends(get_settings_repository),
-    _auth: bool = Depends(verify_api_key),
+    user_id: str = Depends(get_current_user),
 ):
     """
     Update User Settings
@@ -38,7 +41,7 @@ async def update_settings(
     - **beta_features_enabled**: Access experimental features
     """
     # Get current settings
-    current_settings = await repo.get(user_id="default")
+    current_settings = await repo.get(user_id=user_id)
 
     # Update only provided fields
     update_data = request.model_dump(exclude_unset=True)
@@ -56,14 +59,14 @@ async def update_settings(
 @router.delete("")
 async def reset_settings(
     repo: SettingsRepository = Depends(get_settings_repository),
-    _auth: bool = Depends(verify_api_key),
+    user_id: str = Depends(get_current_user),
 ):
     """
     Reset Settings to Defaults
 
     Deletes all user settings and reverts to default values.
     """
-    await repo.delete(user_id="default")
+    await repo.delete(user_id=user_id)
     return {"message": "Settings reset to defaults"}
 
 

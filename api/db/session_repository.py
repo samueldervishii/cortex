@@ -27,12 +27,14 @@ class SessionRepository:
         return session
 
     async def get(
-        self, session_id: str, include_deleted: bool = False
+        self, session_id: str, include_deleted: bool = False, user_id: Optional[str] = None
     ) -> Optional[CouncilSession]:
-        """Get a session by ID."""
+        """Get a session by ID, optionally scoped to a user."""
         query = {"id": session_id}
         if not include_deleted:
             query["is_deleted"] = {"$ne": True}
+        if user_id is not None:
+            query["user_id"] = user_id
 
         doc = await self.collection.find_one(query)
         if doc is None:
@@ -78,7 +80,7 @@ class SessionRepository:
         return session
 
     async def list_all(
-        self, limit: int = 50, include_deleted: bool = False
+        self, limit: int = 50, include_deleted: bool = False, user_id: Optional[str] = None
     ) -> List[dict]:
         """List all sessions with basic info, ordered by pinned first, then most recent.
 
@@ -89,6 +91,8 @@ class SessionRepository:
         match_stage = {}
         if not include_deleted:
             match_stage["is_deleted"] = {"$ne": True}
+        if user_id is not None:
+            match_stage["user_id"] = user_id
 
         pipeline = [
             {"$match": match_stage},
@@ -137,11 +141,14 @@ class SessionRepository:
             sessions.append(doc)
         return sessions
 
-    async def soft_delete(self, session_id: str) -> bool:
-        """Soft delete a session by ID."""
+    async def soft_delete(self, session_id: str, user_id: Optional[str] = None) -> bool:
+        """Soft delete a session by ID, optionally scoped to a user."""
         now = datetime.now(timezone.utc)
+        query = {"id": session_id, "is_deleted": {"$ne": True}}
+        if user_id is not None:
+            query["user_id"] = user_id
         result = await self.collection.update_one(
-            {"id": session_id, "is_deleted": {"$ne": True}},
+            query,
             {
                 "$set": {
                     "is_deleted": True,
@@ -152,10 +159,13 @@ class SessionRepository:
         )
         return result.modified_count > 0
 
-    async def restore(self, session_id: str) -> bool:
-        """Restore a soft-deleted session."""
+    async def restore(self, session_id: str, user_id: Optional[str] = None) -> bool:
+        """Restore a soft-deleted session, optionally scoped to a user."""
+        query = {"id": session_id, "is_deleted": True}
+        if user_id is not None:
+            query["user_id"] = user_id
         result = await self.collection.update_one(
-            {"id": session_id, "is_deleted": True},
+            query,
             {
                 "$set": {
                     "is_deleted": False,
@@ -166,9 +176,12 @@ class SessionRepository:
         )
         return result.modified_count > 0
 
-    async def hard_delete(self, session_id: str) -> bool:
-        """Permanently delete a session by ID."""
-        result = await self.collection.delete_one({"id": session_id})
+    async def hard_delete(self, session_id: str, user_id: Optional[str] = None) -> bool:
+        """Permanently delete a session by ID, optionally scoped to a user."""
+        query = {"id": session_id}
+        if user_id is not None:
+            query["user_id"] = user_id
+        result = await self.collection.delete_one(query)
         return result.deleted_count > 0
 
     async def get_by_share_token(self, share_token: str) -> Optional[CouncilSession]:
@@ -183,16 +196,19 @@ class SessionRepository:
             return None
         return CouncilSession(**doc)
 
-    async def soft_delete_all(self, include_pinned: bool = False) -> int:
+    async def soft_delete_all(self, include_pinned: bool = False, user_id: Optional[str] = None) -> int:
         """
-        Soft delete all sessions.
+        Soft delete all sessions, optionally scoped to a user.
         Returns the count of deleted sessions.
 
         Args:
             include_pinned: If True, also delete pinned sessions. Default False (preserve pinned).
+            user_id: If set, only delete sessions belonging to this user.
         """
         now = datetime.now(timezone.utc)
         query = {"is_deleted": {"$ne": True}}
+        if user_id is not None:
+            query["user_id"] = user_id
 
         if not include_pinned:
             query["is_pinned"] = {"$ne": True}
@@ -210,7 +226,8 @@ class SessionRepository:
         return result.modified_count
 
     async def get_all_full(
-        self, include_deleted: bool = False, limit: int = 1000, batch_size: int = 100
+        self, include_deleted: bool = False, limit: int = 1000, batch_size: int = 100,
+        user_id: Optional[str] = None
     ) -> List[CouncilSession]:
         """
         Get all sessions with full data (for export).
@@ -220,10 +237,13 @@ class SessionRepository:
             include_deleted: Include soft-deleted sessions
             limit: Maximum number of sessions to return (default 1000, prevents memory issues)
             batch_size: MongoDB cursor batch size for efficient fetching
+            user_id: If set, only return sessions belonging to this user.
         """
         query = {}
         if not include_deleted:
             query["is_deleted"] = {"$ne": True}
+        if user_id is not None:
+            query["user_id"] = user_id
 
         sessions = []
         cursor = (
@@ -239,7 +259,8 @@ class SessionRepository:
         return sessions
 
     async def update_pin(
-        self, session_id: str, is_pinned: bool, pinned_at: Optional[str] = None
+        self, session_id: str, is_pinned: bool, pinned_at: Optional[str] = None,
+        user_id: Optional[str] = None
     ) -> bool:
         """Update the pinned status of a session (bypasses optimistic locking)."""
         update_fields = {
@@ -247,15 +268,18 @@ class SessionRepository:
             "pinned_at": pinned_at,
             "updated_at": datetime.now(timezone.utc),
         }
+        query = {"id": session_id, "is_deleted": {"$ne": True}}
+        if user_id is not None:
+            query["user_id"] = user_id
         result = await self.collection.update_one(
-            {"id": session_id, "is_deleted": {"$ne": True}},
+            query,
             {"$set": update_fields},
         )
         return result.modified_count > 0
 
 
     async def soft_delete_older_than(
-        self, days: int, include_pinned: bool = False
+        self, days: int, include_pinned: bool = False, user_id: Optional[str] = None
     ) -> int:
         """
         Soft delete sessions older than the specified number of days.
@@ -277,6 +301,9 @@ class SessionRepository:
             "created_at": {"$lt": cutoff_date},
             "updated_at": {"$lt": cutoff_date},
         }
+
+        if user_id is not None:
+            query["user_id"] = user_id
 
         if not include_pinned:
             query["is_pinned"] = {"$ne": True}

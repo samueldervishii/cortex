@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { apiClient, API_BASE, API_KEY } from '../config/api'
+import { apiClient, API_BASE, API_KEY, getAccessToken } from '../config/api'
 import { roundToMessages } from '../utils'
 
 /**
@@ -329,6 +329,8 @@ function useCouncil() {
 
     const headers = { 'Content-Type': 'application/json' }
     if (API_KEY) headers['X-API-Key'] = API_KEY
+    const token = getAccessToken()
+    if (token) headers['Authorization'] = `Bearer ${token}`
 
     const body = targetModel ? JSON.stringify({ target_model: targetModel }) : '{}'
 

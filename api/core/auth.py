@@ -1,0 +1,67 @@
+import logging
+from datetime import datetime, timedelta, timezone
+
+from fastapi import HTTPException, status
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+
+from config import settings
+
+logger = logging.getLogger("llm-council.auth")
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def _check_jwt_secret():
+    """Validate JWT secret key at first use."""
+    if not settings.jwt_secret_key or len(settings.jwt_secret_key) < 32:
+        raise ValueError(
+            "JWT_SECRET_KEY is missing or too short (min 32 chars). "
+            "Generate one with: openssl rand -hex 32"
+        )
+
+
+def hash_password(password: str) -> str:
+    return pwd_context.hash(password)
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
+
+
+def create_access_token(user_id: str) -> str:
+    _check_jwt_secret()
+    expire = datetime.now(timezone.utc) + timedelta(
+        minutes=settings.jwt_access_token_expire_minutes
+    )
+    payload = {"sub": user_id, "exp": expire, "type": "access"}
+    return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+
+
+def create_refresh_token(user_id: str) -> str:
+    _check_jwt_secret()
+    expire = datetime.now(timezone.utc) + timedelta(
+        days=settings.jwt_refresh_token_expire_days
+    )
+    payload = {"sub": user_id, "exp": expire, "type": "refresh"}
+    return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+
+
+def decode_token(token: str, expected_type: str = "access") -> dict:
+    """Decode and validate a JWT token. Returns the payload dict with 'sub' (user_id)."""
+    _check_jwt_secret()
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or expired token",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(
+            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
+        )
+        user_id: str = payload.get("sub")
+        token_type: str = payload.get("type")
+        if user_id is None or token_type != expected_type:
+            raise credentials_exception
+        return payload
+    except JWTError:
+        raise credentials_exception

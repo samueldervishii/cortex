@@ -18,11 +18,10 @@ from core.dependencies import (
 )
 from core.metrics import init_metrics, track_request
 from db import get_database, close_database, ensure_indexes
-from routers import sessions_router, models_router, shared_router, settings_router
+from routers import sessions_router, models_router, shared_router, settings_router, auth_router
 from routers.health import router as health_router
 
-from routers.sessions import create_session
-from schemas import QueryRequest, SessionResponse
+
 
 # Configure logging
 setup_logging()
@@ -30,49 +29,47 @@ logger = logging.getLogger("llm-council.requests")
 
 
 async def run_auto_delete_cleanup(silent: bool = False):
-    """Run auto-delete cleanup based on user settings."""
+    """Run auto-delete cleanup for all users with auto_delete configured."""
     try:
         session_repo = await get_session_repository()
         settings_repo = await get_settings_repository()
 
-        user_settings = await settings_repo.get(user_id="default")
+        # Get all user settings that have auto_delete_days configured
+        all_settings = await settings_repo.get_all_with_auto_delete()
 
-        # Check if auto_delete beta feature is enabled
-        if "auto_delete" not in (user_settings.enabled_beta_features or []):
+        if not all_settings:
             if not silent:
-                logger.info("Auto-delete: Feature not enabled, skipping cleanup")
+                logger.info("Auto-delete: No users with auto-delete configured, skipping")
             return 0
 
-        # Check if auto_delete_days is configured
-        if user_settings.auto_delete_days is None:
-            if not silent:
-                logger.info("Auto-delete: No retention period configured, skipping cleanup")
-            return 0
-
-        # Validate days value — restricted to these options in the Settings UI
         valid_days = [30, 60, 90]
-        if user_settings.auto_delete_days not in valid_days:
-            if not silent:
+        total_deleted = 0
+
+        for user_settings in all_settings:
+            # Check if auto_delete beta feature is enabled for this user
+            if "auto_delete" not in (user_settings.enabled_beta_features or []):
+                continue
+
+            if user_settings.auto_delete_days not in valid_days:
+                continue
+
+            deleted_count = await session_repo.soft_delete_older_than(
+                days=user_settings.auto_delete_days,
+                include_pinned=False,
+                user_id=user_settings.user_id,
+            )
+            total_deleted += deleted_count
+
+            if deleted_count > 0:
                 logger.info(
-                    f"Auto-delete: Invalid retention period {user_settings.auto_delete_days}, skipping"
+                    f"Auto-delete: Cleaned up {deleted_count} sessions for user {user_settings.user_id} "
+                    f"(older than {user_settings.auto_delete_days} days)"
                 )
-            return 0
 
-        # Run cleanup
-        deleted_count = await session_repo.soft_delete_older_than(
-            days=user_settings.auto_delete_days, include_pinned=False
-        )
+        if total_deleted == 0 and not silent:
+            logger.info("Auto-delete: No sessions to clean up across all users")
 
-        if deleted_count > 0:
-            logger.info(
-                f"Auto-delete: Cleaned up {deleted_count} sessions older than {user_settings.auto_delete_days} days"
-            )
-        elif not silent:
-            logger.info(
-                f"Auto-delete: No sessions older than {user_settings.auto_delete_days} days to clean up"
-            )
-
-        return deleted_count
+        return total_deleted
 
     except Exception as e:
         logger.info(f"Auto-delete cleanup failed: {e}")
@@ -323,6 +320,7 @@ async def log_and_track_requests(request: Request, call_next):
 
 # Include routers
 app.include_router(health_router)  # Health checks and metrics
+app.include_router(auth_router)
 app.include_router(sessions_router)
 app.include_router(models_router)
 app.include_router(shared_router)
@@ -340,13 +338,6 @@ async def root():
     """
     return {"message": "LLM Council API", "status": "running", "version": VERSION}
 
-
-# Legacy endpoint for frontend compatibility
-@app.post("/query", response_model=SessionResponse)
-async def query(request: QueryRequest):
-    """Start a new council session (legacy endpoint)."""
-    repo = await get_session_repository()
-    return await create_session(request, repo)
 
 
 if __name__ == "__main__":
