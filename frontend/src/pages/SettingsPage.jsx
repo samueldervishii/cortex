@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useOutletContext } from 'react-router-dom'
 import { TopBar, Sidebar, CommandPalette } from '../components'
-import AppLoader from '../components/AppLoader'
 import Settings from './Settings'
 import useCouncil from '../hooks/useCouncil'
 import useTheme from '../hooks/useTheme'
@@ -10,9 +9,8 @@ import '../App.css'
 function SettingsPage() {
   const navigate = useNavigate()
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
-  const { sidebarOpen, toggleSidebar } = useOutletContext()
+  const { sidebarOpen, toggleSidebar, closeSidebarOnMobile } = useOutletContext()
   const {
-    appLoading,
     sessionId,
     sessions,
     mode,
@@ -46,10 +44,6 @@ function SettingsPage() {
     return () => window.removeEventListener('keydown', handleKeyDown, { capture: true })
   }, [])
 
-  if (appLoading) {
-    return <AppLoader />
-  }
-
   return (
     <div className="chat-app">
       <TopBar
@@ -73,6 +67,7 @@ function SettingsPage() {
               onTogglePinSession={togglePinSession}
               onShareSession={shareSession}
               onClose={toggleSidebar}
+              onCloseMobile={closeSidebarOnMobile}
               onNewChat={() => {
                 startNewChat()
                 navigate('/')

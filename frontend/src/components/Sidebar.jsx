@@ -20,6 +20,7 @@ function Sidebar({
   onShareSession,
   onBranchSession,
   onClose,
+  onCloseMobile,
   onNewChat,
   branchingEnabled = false,
 }) {
@@ -193,7 +194,9 @@ function Sidebar({
       onClick={(e) => {
         if (editingId === session.id) {
           e.preventDefault()
+          return
         }
+        onCloseMobile?.()
       }}
     >
       <div className="session-info">
@@ -283,7 +286,13 @@ function Sidebar({
         </h2>
       </div>
 
-      <button className="sidebar-new-chat" onClick={onNewChat}>
+      <button
+        className="sidebar-new-chat"
+        onClick={() => {
+          onNewChat()
+          onCloseMobile?.()
+        }}
+      >
         + New Chat
       </button>
 
@@ -345,6 +354,7 @@ function Sidebar({
       <Link
         to="/settings"
         className={`sidebar-settings ${location.pathname === '/settings' ? 'active' : ''}`}
+        onClick={() => onCloseMobile?.()}
       >
         <SettingsIcon size={16} />
         Settings

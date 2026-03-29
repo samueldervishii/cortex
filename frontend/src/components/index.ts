@@ -1,4 +1,3 @@
-export { default as AppLoader } from './AppLoader'
 export { default as ChatInput } from './ChatInput'
 export { default as ChatMessages } from './ChatMessages'
 export { default as ChatSkeleton } from './ChatSkeleton'

@@ -27,10 +27,10 @@ function WelcomeScreen({ question, onQuestionChange, onSubmit, loading }: Welcom
 
   const handleSuggestionClick = (prompt: string) => {
     onQuestionChange(prompt)
-    // Focus the input after selecting a suggestion
-    setTimeout(() => {
-      inputRef.current?.focus()
-    }, 0)
+  }
+
+  const focusInput = () => {
+    inputRef.current?.focus()
   }
 
   return (
@@ -48,7 +48,11 @@ function WelcomeScreen({ question, onQuestionChange, onSubmit, loading }: Welcom
         centered
       />
       {showSuggestions && (
-        <SuggestionCards onSelectSuggestion={handleSuggestionClick} isVisible={!question} />
+        <SuggestionCards
+          onSelectSuggestion={handleSuggestionClick}
+          onFocusInput={focusInput}
+          isVisible={!question}
+        />
       )}
     </div>
   )

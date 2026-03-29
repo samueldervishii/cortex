@@ -63,7 +63,7 @@ const SUGGESTION_CATEGORIES = [
   },
 ]
 
-function SuggestionCards({ onSelectSuggestion, isVisible = true }) {
+function SuggestionCards({ onSelectSuggestion, onFocusInput, isVisible = true }) {
   const [expandedIndex, setExpandedIndex] = useState(null)
   const [isAnimatingOut, setIsAnimatingOut] = useState(false)
 
@@ -80,9 +80,14 @@ function SuggestionCards({ onSelectSuggestion, isVisible = true }) {
   }
 
   const handlePromptClick = (prompt) => {
+    // Focus the input as the VERY FIRST thing — before any React state
+    // updates — so it stays at the top of the browser's user-gesture
+    // call chain. iOS Safari only opens the keyboard if focus() is the
+    // first operation after a tap.
+    onFocusInput?.()
     setIsAnimatingOut(true)
+    onSelectSuggestion(prompt)
     setTimeout(() => {
-      onSelectSuggestion(prompt)
       setExpandedIndex(null)
     }, 300)
   }

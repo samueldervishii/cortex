@@ -48,7 +48,6 @@ function useCouncil() {
   const [messages, setMessages] = useState([])
   const [loading, setLoading] = useState(false)
   const [currentStep, setCurrentStep] = useState('')
-  const [appLoading, setAppLoading] = useState(!cachedModels)
   const [sessionId, setSessionId] = useState(null)
   const [sessions, setSessions] = useState(cachedSessions || [])
   const [sessionLoadError, setSessionLoadError] = useState(null)
@@ -139,21 +138,9 @@ function useCouncil() {
     }
   }, [])
 
-  // Fetch models immediately on mount — hide the app loader once done
-  // Also set a max wait so the UI renders even if the backend is slow/down
-  // Skip the loading phase entirely if models are already cached (page navigation)
+  // Fetch models on mount — refresh in background if cached
   useEffect(() => {
-    if (cachedModels) {
-      setAppLoading(false)
-      fetchModels() // refresh in background
-      return
-    }
-    const maxWait = setTimeout(() => setAppLoading(false), 3000)
-    fetchModels().finally(() => {
-      clearTimeout(maxWait)
-      setAppLoading(false)
-    })
-    return () => clearTimeout(maxWait)
+    fetchModels()
   }, [fetchModels])
 
   const fetchSessions = useCallback(async () => {
@@ -168,10 +155,10 @@ function useCouncil() {
 
   // Fetch sessions on mount — use cache if available (page navigation)
   useEffect(() => {
-    if (!appLoading && !cachedSessions) {
+    if (!cachedSessions) {
       fetchSessions()
     }
-  }, [appLoading, fetchSessions])
+  }, [fetchSessions])
 
   const addMessage = (type, content, modelName = null, extras = {}) => {
     setMessages((prev) => [...prev, { type, content, modelName, timestamp: new Date(), ...extras }])
@@ -766,7 +753,6 @@ function useCouncil() {
     messages,
     loading,
     currentStep,
-    appLoading,
     hasMessages,
     sessionId,
     sessions,

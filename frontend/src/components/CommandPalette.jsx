@@ -206,7 +206,7 @@ function CommandPalette({ isOpen, onClose, sessions, onNewChat, onExport, curren
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
-          <div className="command-palette-hint">
+          <div className="command-palette-hint desktop-only">
             <kbd>Esc</kbd> to close
           </div>
         </div>

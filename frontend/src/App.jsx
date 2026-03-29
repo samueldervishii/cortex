@@ -11,7 +11,6 @@ import {
   PWAInstallPrompt,
   RightPanel,
 } from './components'
-import AppLoader from './components/AppLoader'
 import useCouncil from './hooks/useCouncil'
 import useTheme from './hooks/useTheme'
 import { apiClient } from './config/api'
@@ -21,14 +20,13 @@ function App() {
   const { sessionId: urlSessionId } = useParams()
   const navigate = useNavigate()
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
-  const { sidebarOpen, toggleSidebar } = useOutletContext()
+  const { sidebarOpen, toggleSidebar, closeSidebarOnMobile } = useOutletContext()
   const {
     question,
     setQuestion,
     messages,
     loading,
     currentStep,
-    appLoading,
     hasMessages,
     sessionId,
     sessions,
@@ -197,10 +195,10 @@ function App() {
 
   // Load session from URL if present
   useEffect(() => {
-    if (urlSessionId && urlSessionId !== sessionId && !appLoading) {
+    if (urlSessionId && urlSessionId !== sessionId) {
       loadSession(urlSessionId)
     }
-  }, [urlSessionId, appLoading])
+  }, [urlSessionId])
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -244,10 +242,6 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown, { capture: true })
   }, [handleNewChat, toggleSidebar])
 
-  if (appLoading) {
-    return <AppLoader />
-  }
-
   return (
     <div className="chat-app">
       <TopBar
@@ -276,6 +270,7 @@ function App() {
               onBranchSession={handleBranchFromSidebar}
               branchingEnabled={userSettings.branching_enabled !== false}
               onClose={toggleSidebar}
+              onCloseMobile={closeSidebarOnMobile}
               onNewChat={handleNewChat}
             />
           </>

@@ -183,10 +183,14 @@ function IncognitoChat({ isOpen, onClose, availableModels, selectedModels }) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // Focus textarea when modal opens
+  // Focus textarea when modal opens and scroll it into view
   useEffect(() => {
-    if (isOpen) {
-      setTimeout(() => textareaRef.current?.focus(), 100)
+    if (isOpen && textareaRef.current) {
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus()
+        // On mobile, scroll input into view above the keyboard
+        textareaRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      })
     }
   }, [isOpen])
 
@@ -371,6 +375,7 @@ function IncognitoChat({ isOpen, onClose, availableModels, selectedModels }) {
               placeholder="How can we help ?"
               rows={1}
               disabled={loading}
+              autoFocus
             />
             <button
               className="incognito-send"

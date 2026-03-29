@@ -285,11 +285,25 @@
     padding: 0.875rem 1rem;
   }
 
-  .command-palette-item {
-    padding: 0.625rem;
+  .command-palette-input input {
+    font-size: 16px; /* Prevent iOS zoom */
   }
 
-  .command-palette-footer {
+  .command-palette-item {
+    padding: 0.75rem;
+    min-height: 44px;
+  }
+
+  /* Hide keyboard hints on mobile but keep status visible */
+  .command-palette-footer-keys {
+    display: none;
+  }
+
+  .command-palette-hint.desktop-only {
+    display: none;
+  }
+
+  .command-palette-enter-hint {
     display: none;
   }
 }
