@@ -4,7 +4,7 @@ from typing import List, Optional
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from schemas import CouncilSession
+from schemas import ChatSession
 
 # Validate share tokens: alphanumeric, hyphens, underscores only
 _SHARE_TOKEN_PATTERN = re.compile(r"^[a-zA-Z0-9\-_]+$")
@@ -18,7 +18,7 @@ class SessionRepository:
     def __init__(self, database: AsyncIOMotorDatabase):
         self.collection = database[self.COLLECTION_NAME]
 
-    async def create(self, session: CouncilSession) -> CouncilSession:
+    async def create(self, session: ChatSession) -> ChatSession:
         """Create a new session in the database."""
         doc = session.model_dump()
         doc["created_at"] = datetime.now(timezone.utc)
@@ -28,7 +28,7 @@ class SessionRepository:
 
     async def get(
         self, session_id: str, include_deleted: bool = False, user_id: Optional[str] = None
-    ) -> Optional[CouncilSession]:
+    ) -> Optional[ChatSession]:
         """Get a session by ID, optionally scoped to a user."""
         query = {"id": session_id}
         if not include_deleted:
@@ -39,9 +39,9 @@ class SessionRepository:
         doc = await self.collection.find_one(query)
         if doc is None:
             return None
-        return CouncilSession(**doc)
+        return ChatSession(**doc)
 
-    async def update(self, session: CouncilSession) -> CouncilSession:
+    async def update(self, session: ChatSession) -> ChatSession:
         """
         Update an existing session with optimistic locking.
 
@@ -82,12 +82,7 @@ class SessionRepository:
     async def list_all(
         self, limit: int = 50, include_deleted: bool = False, user_id: Optional[str] = None
     ) -> List[dict]:
-        """List all sessions with basic info, ordered by pinned first, then most recent.
-
-        Uses aggregation to avoid loading full rounds data - only extracts
-        first question, last status, and round count for efficiency.
-        Optimized: Sorts in database instead of Python, uses $cond for efficient round counting.
-        """
+        """List all sessions with basic info, ordered by pinned first, then most recent."""
         match_stage = {}
         if not include_deleted:
             match_stage["is_deleted"] = {"$ne": True}
@@ -103,36 +98,35 @@ class SessionRepository:
                     "title": 1,
                     "created_at": 1,
                     "is_pinned": {"$ifNull": ["$is_pinned", False]},
-                    # Extract only what we need from rounds array
+                    # First user message as question (support both old rounds and new messages format)
                     "question": {
-                        "$ifNull": [{"$arrayElemAt": ["$rounds.question", 0]}, ""]
+                        "$ifNull": [
+                            {"$arrayElemAt": [
+                                {"$map": {
+                                    "input": {"$filter": {
+                                        "input": {"$ifNull": ["$messages", []]},
+                                        "cond": {"$eq": ["$$this.role", "user"]},
+                                    }},
+                                    "in": "$$this.content",
+                                }},
+                                0,
+                            ]},
+                            {"$ifNull": [{"$arrayElemAt": ["$rounds.question", 0]}, ""]},
+                        ]
                     },
-                    "status": {
-                        "$ifNull": [{"$arrayElemAt": ["$rounds.status", -1]}, "pending"]
-                    },
-                    # Optimize round counting - use conditional to avoid $size on large arrays when possible
-                    "round_count": {
+                    "status": "completed",
+                    "message_count": {
                         "$cond": {
-                            "if": {"$isArray": "$rounds"},
-                            "then": {"$size": "$rounds"},
+                            "if": {"$isArray": "$messages"},
+                            "then": {"$size": "$messages"},
                             "else": 0,
                         }
                     },
-                    # Add pinned_at for sorting (only needed for sort, not returned to client)
                     "pinned_at": {"$ifNull": ["$pinned_at", None]},
                 }
             },
-            # Sort by pinned (desc, so True first), then by created_at (desc, most recent first)
-            # For pinned sessions with pinned_at, use that for secondary sort
-            {
-                "$sort": {
-                    "is_pinned": -1,  # Pinned first
-                    "pinned_at": -1,  # Among pinned, most recently pinned first
-                    "created_at": -1,  # Among unpinned, most recent first
-                }
-            },
+            {"$sort": {"is_pinned": -1, "pinned_at": -1, "created_at": -1}},
             {"$limit": limit},
-            # Remove pinned_at from final output
             {"$project": {"pinned_at": 0}},
         ]
 
@@ -140,6 +134,61 @@ class SessionRepository:
         async for doc in self.collection.aggregate(pipeline):
             sessions.append(doc)
         return sessions
+
+    async def search(self, query: str, user_id: Optional[str] = None, limit: int = 20) -> List[dict]:
+        """Search sessions by content (title, messages)."""
+        regex = {"$regex": query, "$options": "i"}
+        match_stage = {
+            "is_deleted": {"$ne": True},
+            "$or": [
+                {"title": regex},
+                {"messages.content": regex},
+                # Legacy support for old round-based sessions
+                {"rounds.question": regex},
+                {"rounds.responses.content": regex},
+                {"rounds.chat_messages.content": regex},
+            ],
+        }
+        if user_id is not None:
+            match_stage["user_id"] = user_id
+
+        pipeline = [
+            {"$match": match_stage},
+            {"$project": {
+                "_id": 0,
+                "id": 1,
+                "title": 1,
+                "created_at": 1,
+                "is_pinned": {"$ifNull": ["$is_pinned", False]},
+                "question": {"$ifNull": [
+                    {"$arrayElemAt": [
+                        {"$map": {
+                            "input": {"$filter": {
+                                "input": {"$ifNull": ["$messages", []]},
+                                "cond": {"$eq": ["$$this.role", "user"]},
+                            }},
+                            "in": "$$this.content",
+                        }},
+                        0,
+                    ]},
+                    {"$ifNull": [{"$arrayElemAt": ["$rounds.question", 0]}, ""]},
+                ]},
+                "message_count": {
+                    "$cond": {
+                        "if": {"$isArray": "$messages"},
+                        "then": {"$size": "$messages"},
+                        "else": 0,
+                    }
+                },
+            }},
+            {"$sort": {"created_at": -1}},
+            {"$limit": limit},
+        ]
+
+        results = []
+        async for doc in self.collection.aggregate(pipeline):
+            results.append(doc)
+        return results
 
     async def soft_delete(self, session_id: str, user_id: Optional[str] = None) -> bool:
         """Soft delete a session by ID, optionally scoped to a user."""
@@ -184,7 +233,7 @@ class SessionRepository:
         result = await self.collection.delete_one(query)
         return result.deleted_count > 0
 
-    async def get_by_share_token(self, share_token: str) -> Optional[CouncilSession]:
+    async def get_by_share_token(self, share_token: str) -> Optional[ChatSession]:
         """Get a shared session by its share token."""
         if not share_token or not _SHARE_TOKEN_PATTERN.match(share_token):
             return None
@@ -194,7 +243,7 @@ class SessionRepository:
         )
         if doc is None:
             return None
-        return CouncilSession(**doc)
+        return ChatSession(**doc)
 
     async def soft_delete_all(self, include_pinned: bool = False, user_id: Optional[str] = None) -> int:
         """
@@ -228,7 +277,7 @@ class SessionRepository:
     async def get_all_full(
         self, include_deleted: bool = False, limit: int = 1000, batch_size: int = 100,
         user_id: Optional[str] = None
-    ) -> List[CouncilSession]:
+    ) -> List[ChatSession]:
         """
         Get all sessions with full data (for export).
         Returns complete session objects including all rounds and responses.
@@ -254,7 +303,7 @@ class SessionRepository:
         )
 
         async for doc in cursor:
-            sessions.append(CouncilSession(**doc))
+            sessions.append(ChatSession(**doc))
 
         return sessions
 

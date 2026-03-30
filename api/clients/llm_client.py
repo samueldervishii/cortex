@@ -9,7 +9,7 @@ import httpx
 from config import settings
 from core.circuit_breaker import with_circuit_breaker
 
-logger = logging.getLogger("llm-council.llm_client")
+logger = logging.getLogger("cortex.llm_client")
 
 # Retry configuration — exponential backoff (1s, 2s, 4s) for transient failures.
 # 3 retries balances reliability vs. user wait time for LLM API calls.
@@ -41,7 +41,6 @@ class LLMClient:
 
     def __init__(self):
         self.anthropic_api_key = settings.anthropic_api_key
-        self.groq_api_key = settings.groq_api_key
         self._client: Optional[httpx.AsyncClient] = None
 
     async def _get_client(self) -> httpx.AsyncClient:

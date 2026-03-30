@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { apiClient, API_BASE, API_KEY, getAccessToken } from '../config/api'
-import { roundToMessages } from '../utils'
+import { apiClient, API_BASE, getAccessToken } from '../config/api'
 
 /**
  * Parse SSE events from a ReadableStream.
@@ -39,8 +38,7 @@ async function* parseSSE(reader) {
   }
 }
 
-// Module-level caches: avoid re-fetching on page navigation (component remounts)
-let cachedModels = null
+// Module-level cache: avoid re-fetching on page navigation (component remounts)
 let cachedSessions = null
 
 function useCouncil() {
@@ -52,47 +50,10 @@ function useCouncil() {
   const [sessions, setSessions] = useState(cachedSessions || [])
   const [sessionLoadError, setSessionLoadError] = useState(null)
   const [isLoadingSession, setIsLoadingSession] = useState(false)
-  const [mode, setMode] = useState(() => {
-    const savedMode = localStorage.getItem('llm-council-mode')
-    return savedMode || 'formal'
-  })
-  const [availableModels, setAvailableModels] = useState(cachedModels || [])
-  const [selectedModels, setSelectedModels] = useState(() => {
-    const saved = localStorage.getItem('llm-council-selected-models')
-    return saved ? JSON.parse(saved) : []
-  })
-  const [systemPrompt, setSystemPrompt] = useState(() => {
-    return localStorage.getItem('llm-council-system-prompt') || ''
-  })
-  const [selectedLanguage, setSelectedLanguage] = useState(() => {
-    return localStorage.getItem('llm-council-language') || ''
-  })
 
   // AbortController ref — used to cancel in-flight SSE streams on unmount
   // or when the user starts a new request before the previous one finishes.
   const abortControllerRef = useRef(null)
-
-  // Persist mode to localStorage when it changes
-  useEffect(() => {
-    localStorage.setItem('llm-council-mode', mode)
-  }, [mode])
-
-  // Persist selected models to localStorage when they change
-  useEffect(() => {
-    if (selectedModels.length > 0) {
-      localStorage.setItem('llm-council-selected-models', JSON.stringify(selectedModels))
-    }
-  }, [selectedModels])
-
-  // Persist system prompt to localStorage
-  useEffect(() => {
-    localStorage.setItem('llm-council-system-prompt', systemPrompt)
-  }, [systemPrompt])
-
-  // Persist selected language to localStorage
-  useEffect(() => {
-    localStorage.setItem('llm-council-language', selectedLanguage)
-  }, [selectedLanguage])
 
   // Cleanup: abort any in-flight stream when the component using this hook unmounts
   useEffect(() => {
@@ -102,46 +63,6 @@ function useCouncil() {
       }
     }
   }, [])
-
-  // Fetch available models on mount
-  const fetchModels = useCallback(async () => {
-    try {
-      const res = await apiClient.get('/models')
-      const models = res.data.models
-      cachedModels = models
-      setAvailableModels(models)
-
-      const validModelIds = models.map((m) => m.id)
-      const savedModels = localStorage.getItem('llm-council-selected-models')
-
-      if (savedModels) {
-        const parsed = JSON.parse(savedModels)
-        const validSavedModels = parsed.filter((id) => validModelIds.includes(id))
-
-        if (validSavedModels.length !== parsed.length) {
-          console.log('Removed invalid cached model IDs')
-          localStorage.setItem('llm-council-selected-models', JSON.stringify(validSavedModels))
-        }
-
-        if (validSavedModels.length === 0) {
-          setSelectedModels(validModelIds)
-          localStorage.setItem('llm-council-selected-models', JSON.stringify(validModelIds))
-        } else {
-          setSelectedModels(validSavedModels)
-        }
-      } else {
-        setSelectedModels(validModelIds)
-        localStorage.setItem('llm-council-selected-models', JSON.stringify(validModelIds))
-      }
-    } catch (error) {
-      console.error('Error fetching models:', error)
-    }
-  }, [])
-
-  // Fetch models on mount — refresh in background if cached
-  useEffect(() => {
-    fetchModels()
-  }, [fetchModels])
 
   const fetchSessions = useCallback(async () => {
     try {
@@ -159,10 +80,6 @@ function useCouncil() {
       fetchSessions()
     }
   }, [fetchSessions])
-
-  const addMessage = (type, content, modelName = null, extras = {}) => {
-    setMessages((prev) => [...prev, { type, content, modelName, timestamp: new Date(), ...extras }])
-  }
 
   const loadSession = async (id) => {
     const startTime = Date.now()
@@ -183,13 +100,17 @@ function useCouncil() {
       const session = res.data.session
 
       setSessionId(session.id)
-      const loadedMessages = []
 
-      if (session.rounds && session.rounds.length > 0) {
-        for (const round of session.rounds) {
-          loadedMessages.push(...roundToMessages(round))
-        }
-      }
+      // Load messages from the session's messages array
+      const loadedMessages = (session.messages || []).map((msg) => ({
+        role: msg.role,
+        content: msg.content,
+        ...(msg.model_id && { modelId: msg.model_id }),
+        ...(msg.model_name && { modelName: msg.model_name }),
+        ...(msg.response_time_ms && { responseTime: msg.response_time_ms }),
+        ...(msg.is_artifact && { isArtifact: true }),
+        ...(msg.file && { file: { filename: msg.file.filename, size: msg.file.size } }),
+      }))
 
       const elapsedTime = Date.now() - startTime
       const remainingTime = Math.max(0, minLoadingTime - elapsedTime)
@@ -287,40 +208,13 @@ function useCouncil() {
     }
   }
 
-  const loadSharedSession = async (shareToken) => {
-    try {
-      setLoading(true)
-      setCurrentStep('Loading shared session...')
-      const res = await apiClient.get(`/shared/${shareToken}`)
-      const session = res.data.session
-
-      const loadedMessages = []
-      if (session.rounds && session.rounds.length > 0) {
-        for (const round of session.rounds) {
-          loadedMessages.push(...roundToMessages(round))
-        }
-      }
-
-      setMessages(loadedMessages)
-      setSessionId(null)
-      return session
-    } catch (error) {
-      console.error('Error loading shared session:', error)
-      throw error
-    } finally {
-      setLoading(false)
-      setCurrentStep('')
-    }
-  }
-
   /**
    * Stream SSE events from the /session/{id}/stream endpoint.
    * Uses native fetch() since EventSource only supports GET.
    * Handles token-level streaming for real-time typing effect.
    */
-  const streamCouncil = async (currentSessionId, targetModel = null) => {
+  const streamResponse = async (currentSessionId) => {
     // Cancel any in-flight stream before starting a new one.
-    // This prevents concurrent streams from interleaving tokens into the wrong messages.
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
     }
@@ -328,16 +222,13 @@ function useCouncil() {
     abortControllerRef.current = controller
 
     const headers = { 'Content-Type': 'application/json' }
-    if (API_KEY) headers['X-API-Key'] = API_KEY
     const token = getAccessToken()
     if (token) headers['Authorization'] = `Bearer ${token}`
-
-    const body = targetModel ? JSON.stringify({ target_model: targetModel }) : '{}'
 
     const response = await fetch(`${API_BASE}/session/${currentSessionId}/stream`, {
       method: 'POST',
       headers,
-      body,
+      body: '{}',
       signal: controller.signal,
     })
 
@@ -348,242 +239,66 @@ function useCouncil() {
 
     const reader = response.body.getReader()
 
-    // Track streaming message indices by model_id so tokens append to the right message
-    const streamingIndices = {}
+    // Index of the streaming assistant message
+    let streamingIndex = null
+    let isArtifact = false
 
     for await (const { event, data } of parseSSE(reader)) {
       switch (event) {
-        case 'step':
-          setCurrentStep(data.message)
-          if (data.step === 'responses') {
-            addMessage('system', 'Gathering responses from the council...')
-          } else if (data.step === 'synthesis') {
-            addMessage('system', 'Claude Sonnet 4.6 is reviewing all responses...')
-          } else if (data.step === 'eli5') {
-            addMessage('system', 'Generating explanations at multiple complexity levels...')
-          }
+        case 'artifact_hint':
+          isArtifact = true
           break
 
-        // --- Token-level formal mode events ---
-        case 'response_start':
-          setCurrentStep(`${data.model_name} is typing...`)
+        case 'message_start':
+          setCurrentStep('')
           setMessages((prev) => {
-            const idx = prev.length
-            streamingIndices[data.model_id] = idx
+            streamingIndex = prev.length
             return [
               ...prev,
               {
-                type: 'council',
+                role: 'assistant',
                 content: '',
-                modelName: data.model_name,
                 streaming: true,
-                timestamp: new Date(),
+                isArtifact,
+                ...(data.model_id && { modelId: data.model_id }),
+                ...(data.model_name && { modelName: data.model_name }),
               },
             ]
           })
           break
 
-        case 'response_token':
+        case 'token':
           setMessages((prev) => {
-            const idx = streamingIndices[data.model_id]
-            if (idx === undefined) return prev
+            if (streamingIndex === null) return prev
             const updated = [...prev]
-            updated[idx] = {
-              ...updated[idx],
-              content: updated[idx].content + data.token,
+            updated[streamingIndex] = {
+              ...updated[streamingIndex],
+              content: updated[streamingIndex].content + (data.content || data.token || ''),
             }
             return updated
           })
           break
 
-        case 'response_end':
+        case 'message_end':
           setMessages((prev) => {
-            const idx = streamingIndices[data.model_id]
-            if (idx === undefined) return prev
+            if (streamingIndex === null) return prev
             const updated = [...prev]
-            updated[idx] = {
-              ...updated[idx],
+            updated[streamingIndex] = {
+              ...updated[streamingIndex],
+              content: data.content || updated[streamingIndex].content,
               streaming: false,
-              responseTime: data.response_time_ms,
+              ...(data.response_time_ms && { responseTime: data.response_time_ms }),
             }
             return updated
           })
-          delete streamingIndices[data.model_id]
-          break
-
-        case 'error_response':
-          addMessage('error', `Error: ${data.error}`, data.model_name)
-          break
-
-        // --- ELI5 Ladder events ---
-        case 'eli5_level_start':
-          setCurrentStep(`Generating ${data.label} explanation...`)
-          setMessages((prev) => {
-            streamingIndices[data.level] = prev.length
-            return [
-              ...prev,
-              {
-                type: 'eli5',
-                content: '',
-                modelName: data.model_name,
-                level: data.level,
-                levelLabel: data.label,
-                streaming: true,
-                timestamp: new Date(),
-              },
-            ]
-          })
-          break
-
-        case 'eli5_level_token':
-          setMessages((prev) => {
-            const idx = streamingIndices[data.level]
-            if (idx === undefined) return prev
-            const updated = [...prev]
-            updated[idx] = { ...updated[idx], content: updated[idx].content + data.token }
-            return updated
-          })
-          break
-
-        case 'eli5_level_end':
-          setMessages((prev) => {
-            const idx = streamingIndices[data.level]
-            if (idx === undefined) return prev
-            const updated = [...prev]
-            updated[idx] = {
-              ...updated[idx],
-              streaming: false,
-              responseTime: data.response_time_ms,
-            }
-            return updated
-          })
-          delete streamingIndices[data.level]
-          break
-
-        // --- Token-level synthesis events ---
-        case 'synthesis_start':
-          setMessages((prev) => {
-            streamingIndices['__synthesis__'] = prev.length
-            return [
-              ...prev,
-              {
-                type: 'chairman',
-                content: '',
-                modelName: 'Claude Sonnet 4.6 (Head)',
-                streaming: true,
-                timestamp: new Date(),
-              },
-            ]
-          })
-          break
-
-        case 'synthesis_token':
-          setMessages((prev) => {
-            const idx = streamingIndices['__synthesis__']
-            if (idx === undefined) return prev
-            const updated = [...prev]
-            updated[idx] = {
-              ...updated[idx],
-              content: updated[idx].content + data.token,
-            }
-            return updated
-          })
-          break
-
-        case 'synthesis_end':
-          setMessages((prev) => {
-            const idx = streamingIndices['__synthesis__']
-            if (idx === undefined) return prev
-            const updated = [...prev]
-            updated[idx] = { ...updated[idx], streaming: false }
-            return updated
-          })
-          delete streamingIndices['__synthesis__']
-          break
-
-        // --- Token-level chat mode events ---
-        case 'chat_message_start':
-          setCurrentStep(`${data.model_name} is typing...`)
-          setMessages((prev) => {
-            streamingIndices[data.model_id] = prev.length
-            return [
-              ...prev,
-              {
-                type: 'chat',
-                content: '',
-                modelName: data.model_name,
-                streaming: true,
-                timestamp: new Date(),
-              },
-            ]
-          })
-          break
-
-        case 'chat_message_token':
-          setMessages((prev) => {
-            const idx = streamingIndices[data.model_id]
-            if (idx === undefined) return prev
-            const updated = [...prev]
-            updated[idx] = {
-              ...updated[idx],
-              content: updated[idx].content + data.token,
-            }
-            return updated
-          })
-          break
-
-        case 'chat_message_end':
-          setMessages((prev) => {
-            const idx = streamingIndices[data.model_id]
-            if (idx === undefined) return prev
-            const updated = [...prev]
-            updated[idx] = {
-              ...updated[idx],
-              content: data.content,
-              replyTo: data.reply_to,
-              responseTime: data.response_time_ms,
-              streaming: false,
-            }
-            return updated
-          })
-          delete streamingIndices[data.model_id]
-          break
-
-        // --- Legacy (non-streaming) fallbacks ---
-        case 'response':
-          setMessages((prev) => [
-            ...prev,
-            {
-              type: 'council',
-              content: data.response,
-              modelName: data.model_name,
-              responseTime: data.response_time_ms,
-              timestamp: new Date(),
-            },
-          ])
-          break
-
-        case 'synthesis':
-          addMessage('chairman', data.content, 'Claude Sonnet 4.6 (Head)')
-          break
-
-        case 'chat_message':
-          setCurrentStep(`${data.model_name} is typing...`)
-          setMessages((prev) => [
-            ...prev,
-            {
-              type: 'chat',
-              content: data.content,
-              modelName: data.model_name,
-              replyTo: data.reply_to,
-              responseTime: data.response_time_ms,
-              timestamp: new Date(),
-            },
-          ])
+          streamingIndex = null
           break
 
         case 'error':
-          addMessage('error', data.message || 'An error occurred')
+          setMessages((prev) => [
+            ...prev,
+            { role: 'error', content: data.message || 'An error occurred' },
+          ])
           break
 
         case 'done':
@@ -595,66 +310,107 @@ function useCouncil() {
     abortControllerRef.current = null
   }
 
-  const startCouncil = async () => {
+  const startChat = async () => {
     if (!question.trim()) return
 
     const userQuestion = question
     setQuestion('')
     setLoading(true)
 
-    addMessage('user', userQuestion)
+    setMessages((prev) => [...prev, { role: 'user', content: userQuestion }])
 
     try {
       let currentSessionId = sessionId
-      let activeMode = mode
 
-      // If we have an existing session, continue it; otherwise create new
       if (currentSessionId) {
+        // Continue existing session
         setCurrentStep('Continuing conversation...')
-        const continueRes = await apiClient.post(`/session/${currentSessionId}/continue`, {
+        await apiClient.post(`/session/${currentSessionId}/continue`, {
           question: userQuestion,
         })
-        const session = continueRes.data.session
-        activeMode = session.rounds[0]?.mode || mode
       } else {
+        // Create new session
         setCurrentStep('Creating session...')
-        const base = systemPrompt.trim()
-        const effectiveSystemPrompt = selectedLanguage
-          ? base
-            ? `Respond in ${selectedLanguage}.\n\n${base}`
-            : `Respond in ${selectedLanguage}.`
-          : base || null
-        const createRes = await apiClient.post('/query', {
+        const createRes = await apiClient.post('/session', {
           question: userQuestion,
-          mode: mode,
-          selected_models: selectedModels.length > 0 ? selectedModels : null,
-          system_prompt: effectiveSystemPrompt,
         })
         currentSessionId = createRes.data.session.id
         setSessionId(currentSessionId)
-        activeMode = mode
       }
 
-      if (activeMode === 'chat') {
-        // Build mention regex dynamically from available models instead of hardcoding names
-        const modelNames = availableModels.map((m) => m.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-        const mentionRegex = modelNames.length > 0 ? new RegExp(`@(${modelNames.join('|')})`) : null
-        const mentionMatch = mentionRegex ? userQuestion.match(mentionRegex) : null
-        const targetModel = mentionMatch ? mentionMatch[1] : null
-        setCurrentStep(targetModel ? `${targetModel} is typing...` : 'Models are typing...')
-        await streamCouncil(currentSessionId, targetModel)
-      } else {
-        setCurrentStep('Council is thinking...')
-        await streamCouncil(currentSessionId)
-      }
+      setCurrentStep('Assistant is typing...')
+      await streamResponse(currentSessionId)
 
       await fetchSessions()
     } catch (error) {
       // Don't show error messages for intentionally aborted streams
-      // (e.g. user submitted a new question or navigated away)
       if (error.name === 'AbortError') return
       console.error('Error:', error)
-      addMessage('error', error.response?.data?.detail || error.message)
+      setMessages((prev) => [
+        ...prev,
+        { role: 'error', content: error.response?.data?.detail || error.message },
+      ])
+    } finally {
+      setLoading(false)
+      setCurrentStep('')
+    }
+  }
+
+  const sendFileMessage = async (file, messageText) => {
+    setQuestion('')
+    setLoading(true)
+
+    const userText = messageText || `I've uploaded a file: ${file.name}. Please analyze it.`
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: 'user',
+        content: userText,
+        file: { filename: file.name, size: file.size },
+      },
+    ])
+
+    try {
+      let currentSessionId = sessionId
+
+      if (!currentSessionId) {
+        // Create an empty session first
+        setCurrentStep('Creating session...')
+        const createRes = await apiClient.post('/session', { question: userText })
+        currentSessionId = createRes.data.session.id
+        setSessionId(currentSessionId)
+
+        // Replace the auto-created plain message with the file message
+        // by removing the first message and uploading with file
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('question', userText)
+        formData.append('replace_last', 'true')
+
+        await apiClient.post(`/session/${currentSessionId}/upload-file`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        })
+      } else {
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('question', userText)
+
+        await apiClient.post(`/session/${currentSessionId}/upload-file`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        })
+      }
+
+      setCurrentStep('')
+      await streamResponse(currentSessionId)
+      await fetchSessions()
+    } catch (error) {
+      if (error.name === 'AbortError') return
+      console.error('Error:', error)
+      setMessages((prev) => [
+        ...prev,
+        { role: 'error', content: error.response?.data?.detail || error.message },
+      ])
     } finally {
       setLoading(false)
       setCurrentStep('')
@@ -667,28 +423,8 @@ function useCouncil() {
     setLoading(false)
     setCurrentStep('')
     setSessionId(null)
-  }
-
-  const toggleModel = (modelId) => {
-    setSelectedModels((prev) => {
-      if (prev.includes(modelId)) {
-        if (prev.length <= 1) return prev
-        return prev.filter((id) => id !== modelId)
-      }
-      return [...prev, modelId]
-    })
-  }
-
-  const selectAllModels = () => {
-    const allSelected =
-      availableModels.length > 0 && availableModels.every((m) => selectedModels.includes(m.id))
-
-    if (allSelected) {
-      const chairman = availableModels.find((m) => m.is_chairman)
-      setSelectedModels(chairman ? [chairman.id] : [availableModels[0]?.id])
-    } else {
-      setSelectedModels(availableModels.map((m) => m.id))
-    }
+    setSessionLoadError(null)
+    setIsLoadingSession(false)
   }
 
   const exportSession = async () => {
@@ -698,46 +434,26 @@ function useCouncil() {
       const res = await apiClient.get(`/session/${sessionId}`)
       const session = res.data.session
 
-      let markdown = `# LLM Council Session\n\n`
+      let markdown = `# Chat Session\n\n`
       markdown += `**Title:** ${session.title || 'Untitled'}\n\n`
       markdown += `---\n\n`
 
-      for (let i = 0; i < session.rounds.length; i++) {
-        const round = session.rounds[i]
-        markdown += `## Round ${i + 1}\n\n`
-        markdown += `### Question\n\n${round.question}\n\n`
-
-        if (round.chat_messages && round.chat_messages.length > 0) {
-          markdown += `### Group Chat\n\n`
-          for (const msg of round.chat_messages) {
-            const replyTag = msg.reply_to ? ` *(replying to @${msg.reply_to})*` : ''
-            markdown += `**${msg.model_name}**${replyTag}: ${msg.content}\n\n`
-          }
+      for (const msg of session.messages || []) {
+        if (msg.role === 'user') {
+          markdown += `### You\n\n${msg.content}\n\n`
+        } else if (msg.role === 'assistant') {
+          const label = msg.model_name || 'Assistant'
+          markdown += `### ${label}\n\n${msg.content}\n\n`
         }
-
-        if (round.responses && round.responses.length > 0) {
-          markdown += `### Council Responses\n\n`
-          for (const resp of round.responses) {
-            if (!resp.error) {
-              markdown += `#### ${resp.model_name}\n\n${resp.response}\n\n`
-            }
-          }
-        }
-
-        if (round.final_synthesis) {
-          markdown += `### Chairman's Synthesis\n\n${round.final_synthesis}\n\n`
-        }
-
-        markdown += `---\n\n`
       }
 
-      markdown += `\n*Exported from LLM Council*`
+      markdown += `\n*Exported from Cortex*`
 
       const blob = new Blob([markdown], { type: 'text/markdown' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `llm-council-${session.title?.slice(0, 30).replace(/[^a-z0-9]/gi, '-') || sessionId}.md`
+      a.download = `chat-${session.title?.slice(0, 30).replace(/[^a-z0-9]/gi, '-') || sessionId}.md`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -758,17 +474,8 @@ function useCouncil() {
     hasMessages,
     sessionId,
     sessions,
-    mode,
-    setMode,
-    availableModels,
-    selectedModels,
-    toggleModel,
-    selectAllModels,
-    systemPrompt,
-    setSystemPrompt,
-    selectedLanguage,
-    setSelectedLanguage,
-    startCouncil,
+    startChat,
+    sendFileMessage,
     startNewChat,
     loadSession,
     deleteSession,
@@ -778,7 +485,6 @@ function useCouncil() {
     shareSession,
     unshareSession,
     getShareInfo,
-    loadSharedSession,
     exportSession,
     sessionLoadError,
     isLoadingSession,

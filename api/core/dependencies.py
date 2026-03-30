@@ -12,7 +12,7 @@ from core.auth import decode_token
 from db import get_database, SessionRepository, SettingsRepository
 from db.user_repository import UserRepository
 
-logger = logging.getLogger("llm-council.security")
+logger = logging.getLogger("cortex.security")
 
 _bearer_scheme = HTTPBearer()
 

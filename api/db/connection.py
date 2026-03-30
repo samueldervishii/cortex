@@ -6,7 +6,7 @@ from pymongo import ASCENDING, DESCENDING
 
 from config import settings
 
-logger = logging.getLogger("llm-council.db")
+logger = logging.getLogger("cortex.db")
 
 _client: AsyncIOMotorClient | None = None
 _database: AsyncIOMotorDatabase | None = None
@@ -57,11 +57,15 @@ async def ensure_indexes(database: AsyncIOMotorDatabase) -> None:
             [("id", ASCENDING)], unique=True, name="idx_session_id"
         )
 
-        # Index for shared session lookup by token (unique to prevent collisions)
+        # Index for shared session lookup by token (unique, only for non-null values)
+        try:
+            await sessions_collection.drop_index("idx_share_token")
+        except Exception:
+            pass
         await sessions_collection.create_index(
             [("share_token", ASCENDING)],
-            sparse=True,
             unique=True,
+            partialFilterExpression={"share_token": {"$type": "string"}},
             name="idx_share_token",
         )
 

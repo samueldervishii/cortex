@@ -5,11 +5,11 @@ const MOBILE_BREAKPOINT = 768
 
 function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(() => {
-    return localStorage.getItem('llm-council-sidebar') === 'open'
+    return localStorage.getItem('cortex-sidebar') === 'open'
   })
 
   useEffect(() => {
-    localStorage.setItem('llm-council-sidebar', sidebarOpen ? 'open' : 'closed')
+    localStorage.setItem('cortex-sidebar', sidebarOpen ? 'open' : 'closed')
     // Prevent background scroll on mobile when sidebar is open
     if (sidebarOpen && window.innerWidth <= MOBILE_BREAKPOINT) {
       document.body.classList.add('sidebar-open')

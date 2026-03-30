@@ -1,20 +1,8 @@
 import { useState, memo } from 'react'
+import { API_BASE, getAccessToken } from '../config/api'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import rehypeSanitize from 'rehype-sanitize'
-import { MODEL_COLORS } from '../utils/modelColors'
-
-// Mention names → color (includes short aliases models actually use)
-const MENTION_COLORS = {
-  ...MODEL_COLORS,
-  'Claude Sonnet': '#d97706',
-  'Claude Haiku': '#8b5cf6',
-  Qwen: '#10b981',
-  User: '#9ca3af',
-}
-
-function getModelColor(modelName) {
-  return MODEL_COLORS[modelName] || MENTION_COLORS[modelName] || '#d4a574'
-}
 
 function formatResponseTime(ms) {
   if (!ms) return null
@@ -22,56 +10,26 @@ function formatResponseTime(ms) {
   return `${(ms / 1000).toFixed(1)}s`
 }
 
-// Parse @mentions in text and wrap them with styled spans
-function highlightMentions(text) {
-  if (!text) return text
-  const mentionNames = Object.keys(MENTION_COLORS)
-  // Sort by length descending so "Claude Sonnet 4.6" matches before "Claude Sonnet"
-  mentionNames.sort((a, b) => b.length - a.length)
-  const pattern = mentionNames.map((n) => `@${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).join('|')
-  const regex = new RegExp(`(${pattern})`, 'g')
-
-  const parts = text.split(regex)
-  if (parts.length === 1) return text
-
-  return parts.map((part, i) => {
-    if (part && part.startsWith('@')) {
-      const name = part.slice(1)
-      const color = MENTION_COLORS[name] || '#d4a574'
-      return (
-        <span
-          key={i}
-          className="mention-tag"
-          style={{ backgroundColor: `${color}20`, color, borderColor: `${color}40` }}
-        >
-          {part}
-        </span>
-      )
-    }
-    return part
-  })
-}
-
-function Message({
-  type,
-  content,
-  modelName,
-  disagreement,
-  replyTo,
-  responseTime,
-  streaming,
-  blindVoteProps,
-  level,
-  levelLabel,
-}) {
+function Message({ role, content, modelName, responseTime, streaming, file, messageIndex, sessionId, isArtifact }) {
   const [copied, setCopied] = useState(false)
-  const hasDisagreement = disagreement?.has_disagreement
-  const disagreementScore = disagreement?.disagreement_score
   const formattedTime = formatResponseTime(responseTime)
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(content)
+      // Strip markdown formatting for clean plain text copy
+      const plainText = content
+        .replace(/^#{1,6}\s+/gm, '')          // headings
+        .replace(/\*\*(.+?)\*\*/g, '$1')       // bold
+        .replace(/\*(.+?)\*/g, '$1')           // italic
+        .replace(/`{3}[\s\S]*?`{3}/g, (m) => m.replace(/`{3}\w*\n?/g, '')) // code blocks
+        .replace(/`(.+?)`/g, '$1')             // inline code
+        .replace(/^[-*]\s+/gm, '• ')           // bullet lists
+        .replace(/^\d+\.\s+/gm, (m) => m)      // keep numbered lists
+        .replace(/^---+$/gm, '')               // horizontal rules
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // links
+        .replace(/\n{3,}/g, '\n\n')            // collapse extra newlines
+        .trim()
+      await navigator.clipboard.writeText(plainText)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch (err) {
@@ -79,195 +37,160 @@ function Message({
     }
   }
 
-  // Only show copy for model responses
-  const showCopy = ['council', 'chairman', 'chat', 'eli5'].includes(type)
-
-  // ELI5 Ladder styling
-  if (type === 'eli5') {
-    const LEVEL_STYLES = {
-      beginner: { color: '#10b981', icon: '⚡' },
-      intermediate: { color: '#0467df', icon: '📖' },
-      expert: { color: '#d97706', icon: '🔬' },
-    }
-    const style = LEVEL_STYLES[level] || { color: '#888', icon: '•' }
-    const displayLabel = levelLabel || level || 'Unknown'
+  if (role === 'user') {
     return (
-      <div className="message eli5" style={{ '--eli5-color': style.color }}>
-        <div className="message-header">
-          <span
-            className="eli5-level-badge"
-            style={{
-              background: `${style.color}22`,
-              color: style.color,
-              border: `1px solid ${style.color}44`,
+      <div className="message user">
+        {file && (
+          <button
+            className="message-file-badge"
+            onClick={async () => {
+              if (!sessionId || messageIndex == null) return
+              try {
+                const token = getAccessToken()
+                const res = await fetch(`${API_BASE}/session/${sessionId}/file/${messageIndex}`, {
+                  headers: token ? { Authorization: `Bearer ${token}` } : {},
+                })
+                if (!res.ok) return
+                const blob = await res.blob()
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = file.filename
+                a.click()
+                URL.revokeObjectURL(url)
+              } catch (err) {
+                console.error('Download failed:', err)
+              }
             }}
+            title="Download file"
           >
-            {style.icon} {displayLabel}
-          </span>
-          {formattedTime && <span className="response-time">{formattedTime}</span>}
-          {showCopy && (
-            <button className="copy-btn" onClick={handleCopy} title="Copy response">
-              {copied ? (
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <polyline points="20 6 9 17 4 12" />
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+            </svg>
+            {file.filename}
+          </button>
+        )}
+        <div className="message-content">
+          <p>{content}</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (role === 'error') {
+    return (
+      <div className="message error">
+        <div className="message-content">
+          <p>{content}</p>
+        </div>
+      </div>
+    )
+  }
+
+  const handleDownloadDocx = async () => {
+    if (!sessionId || messageIndex == null) return
+    try {
+      const token = getAccessToken()
+      const res = await fetch(
+        `${API_BASE}/session/${sessionId}/message/${messageIndex}/export-docx`,
+        { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+      )
+      if (!res.ok) return
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'cortex-document.docx'
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('DOCX download failed:', err)
+    }
+  }
+
+  // Artifact card for generated documents
+  if (isArtifact) {
+    const titleMatch = content.match(/^#+ (.+)/m)
+    const artifactTitle = titleMatch ? titleMatch[1] : 'Generated Document'
+    const isEmpty = !content.trim()
+
+    return (
+      <div className="message assistant">
+        <div className="artifact-card">
+          <div className="artifact-header">
+            <div className="artifact-title-row">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+              </svg>
+              <span className="artifact-title">{isEmpty ? 'Generating...' : artifactTitle}</span>
+              {streaming && <span className="artifact-generating">writing</span>}
+            </div>
+          </div>
+          {isEmpty ? (
+            <div className="artifact-loading">
+              <div className="artifact-loading-dots">
+                <span /><span /><span />
+              </div>
+            </div>
+          ) : (
+            <div className="artifact-body">
+              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>{content}</ReactMarkdown>
+            </div>
+          )}
+          {!streaming && !isEmpty && (
+            <div className="artifact-footer">
+              <button className="artifact-btn" onClick={handleCopy} title="Copy text">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  {copied
+                    ? <polyline points="20 6 9 17 4 12" />
+                    : <><rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></>
+                  }
                 </svg>
-              ) : (
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                {copied ? 'Copied' : 'Copy'}
+              </button>
+              <button className="artifact-btn" onClick={handleDownloadDocx} title="Download as DOCX">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
                 </svg>
-              )}
-            </button>
+                DOCX
+              </button>
+            </div>
           )}
         </div>
-        <div className="message-content">
-          <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{content}</ReactMarkdown>
-          {streaming && <span className="streaming-cursor" />}
-        </div>
       </div>
     )
   }
 
-  // Chat mode styling
-  if (type === 'chat') {
-    const color = getModelColor(modelName)
-    return (
-      <div className="message chat">
-        <div className="chat-bubble">
-          <div className="chat-header" style={{ color }}>
-            <span className="chat-model-name">{modelName}</span>
-            {replyTo && <span className="chat-reply-to">replying to @{replyTo}</span>}
-            {formattedTime && <span className="response-time">{formattedTime}</span>}
-            <button className="copy-btn" onClick={handleCopy} title="Copy response">
-              {copied ? (
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              ) : (
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                </svg>
-              )}
-            </button>
-          </div>
-          <div className="chat-content">
-            <p>
-              {highlightMentions(content)}
-              {streaming && <span className="streaming-cursor" />}
-            </p>
-          </div>
-        </div>
-        <div className="chat-avatar" style={{ backgroundColor: color }}>
-          {modelName?.charAt(0) || 'A'}
-        </div>
-      </div>
-    )
-  }
-
-  // Default styling for other message types
+  // Normal assistant message
   return (
-    <div className={`message ${type} ${hasDisagreement ? 'has-disagreement' : ''}`}>
+    <div className="message assistant">
       {modelName && (
         <div className="message-header">
           <span className="model-name">{modelName}</span>
-          {hasDisagreement && (
-            <span
-              className="disagreement-badge"
-              title={`Disagreement score: ${(disagreementScore * 100).toFixed(0)}%`}
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                <line x1="12" y1="9" x2="12" y2="13" />
-                <line x1="12" y1="17" x2="12.01" y2="17" />
-              </svg>
-              Disputed
-            </span>
-          )}
-          {blindVoteProps?.isVotable && (
-            <button
-              className="vote-btn"
-              onClick={blindVoteProps.onVote}
-              title="Vote for this response"
-            >
-              Vote
-            </button>
-          )}
-          {blindVoteProps?.isVoted && <span className="voted-badge">Your Pick</span>}
           {formattedTime && <span className="response-time">{formattedTime}</span>}
-          {showCopy && (
-            <button className="copy-btn" onClick={handleCopy} title="Copy response">
-              {copied ? (
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              ) : (
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                </svg>
-              )}
-            </button>
-          )}
+          <button className="copy-btn" onClick={handleCopy} title="Copy response">
+            {copied ? (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+            )}
+          </button>
         </div>
       )}
       <div className="message-content">
-        <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{content}</ReactMarkdown>
-        {streaming && <span className="streaming-cursor" />}
+        <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>{content}</ReactMarkdown>
       </div>
-      {type === 'user' && <div className="user-avatar">U</div>}
     </div>
   )
 }
 
-// Memoize to prevent re-renders when parent updates
 export default memo(Message)

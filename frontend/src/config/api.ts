@@ -6,8 +6,8 @@ export const API_KEY: string = import.meta.env.VITE_API_KEY || ''
 export const FRONTEND_URL: string = import.meta.env.VITE_FRONTEND_URL || window.location.origin
 export const FRONTEND_VERSION: string = versionData.version
 
-const TOKEN_KEY = 'llm-council-access-token'
-const REFRESH_KEY = 'llm-council-refresh-token'
+const TOKEN_KEY = 'cortex-access-token'
+const REFRESH_KEY = 'cortex-refresh-token'
 
 export const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE,

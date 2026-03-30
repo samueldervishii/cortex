@@ -13,7 +13,7 @@ import time
 from functools import wraps
 from typing import Callable
 
-logger = logging.getLogger("llm-council.metrics")
+logger = logging.getLogger("cortex.metrics")
 
 # Global metrics objects
 _metrics_initialized = False

@@ -13,14 +13,7 @@ function SettingsPage() {
   const {
     sessionId,
     sessions,
-    mode,
-    setMode,
-    availableModels,
-    selectedModels,
-    toggleModel,
-    selectAllModels,
     startNewChat,
-    loadSession,
     deleteSession,
     renameSession,
     togglePinSession,
@@ -30,16 +23,13 @@ function SettingsPage() {
 
   const { theme, toggleTheme } = useTheme()
 
-  // Keyboard shortcuts for command palette
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // Ctrl+K or Ctrl+/ for command palette
       if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === '/')) {
         e.preventDefault()
         setIsCommandPaletteOpen(true)
       }
     }
-
     window.addEventListener('keydown', handleKeyDown, { capture: true })
     return () => window.removeEventListener('keydown', handleKeyDown, { capture: true })
   }, [])
@@ -77,16 +67,7 @@ function SettingsPage() {
         )}
 
         <div className="chat-content">
-          <Settings
-            theme={theme}
-            onToggleTheme={toggleTheme}
-            mode={mode}
-            onModeChange={setMode}
-            availableModels={availableModels}
-            selectedModels={selectedModels}
-            onToggleModel={toggleModel}
-            onSelectAllModels={selectAllModels}
-          />
+          <Settings theme={theme} onToggleTheme={toggleTheme} />
         </div>
       </div>
 

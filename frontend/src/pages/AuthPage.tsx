@@ -87,7 +87,7 @@ function AuthPage() {
     <div className="auth-page">
       <div className="auth-card">
         <div className="auth-header">
-          <h1>LLM Council</h1>
+          <h1>Cortex</h1>
           <p>{isRegister ? 'Create your account' : 'Welcome back'}</p>
         </div>
 

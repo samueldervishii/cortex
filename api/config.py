@@ -4,11 +4,10 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     # API Keys
     anthropic_api_key: str = ""
-    groq_api_key: str = ""
 
     # MongoDB
     mongodb_url: str = "mongodb://localhost:27017"
-    mongodb_database: str = "llm_council"
+    mongodb_database: str = "thesis_db"
 
     # CORS - comma-separated list of allowed origins for production
     cors_origins: str = ""
@@ -36,40 +35,13 @@ class Settings(BaseSettings):
 
     class Config:
         env_file = ".env"
+        extra = "ignore"
 
 
 settings = Settings()
 
-# Council member models — intentionally diverse mix of providers and sizes
-# to produce varied perspectives during debates. Groq models are served via
-# Groq's OpenAI-compatible API for fast inference.
-COUNCIL_MODELS = [
-    {
-        "id": "claude-haiku-4-5-20251001",
-        "name": "Claude Haiku 4.5",
-        "provider": "anthropic",
-    },
-    {
-        "id": "openai/gpt-oss-120b",
-        "name": "GPT OSS 120B",
-        "provider": "groq",
-    },
-    {
-        "id": "openai/gpt-oss-20b",
-        "name": "GPT OSS 20B",
-        "provider": "groq",
-    },
-    {
-        "id": "qwen/qwen3-32b",
-        "name": "Qwen 3 32B",
-        "provider": "groq",
-    },
-]
-
-# Head of the Council — Claude Sonnet 4.6 acts as chairman: it moderates debates,
-# synthesizes final answers in formal mode, and leads group chat discussions.
-# Chosen for its strong reasoning and instruction-following capabilities.
-CHAIRMAN_MODEL = {
+# The single AI model used for all conversations
+CHAT_MODEL = {
     "id": "claude-sonnet-4-6",
     "name": "Claude Sonnet 4.6",
     "provider": "anthropic",

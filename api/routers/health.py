@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Response, status
 
 from db import get_database
-from config import COUNCIL_MODELS, CHAIRMAN_MODEL, settings
+from config import CHAT_MODEL, settings
 from core.circuit_breaker import get_circuit_breaker_status
 from core.dependencies import verify_api_key
 
@@ -24,7 +24,7 @@ async def health_check():
 
     Returns 200 if the application is running.
     """
-    return {"status": "healthy", "service": "llm-council-api"}
+    return {"status": "healthy", "service": "cortex-api"}
 
 
 @router.get("/ready")
@@ -75,7 +75,7 @@ async def status_check(response: Response):
     """
     result = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "service": "llm-council-api",
+        "service": "cortex-api",
         "environment": settings.environment,
     }
 
@@ -130,24 +130,15 @@ async def status_check(response: Response):
     providers = {}
     providers["anthropic"] = {
         "configured": bool(settings.anthropic_api_key),
-        "models": [m["name"] for m in COUNCIL_MODELS if m["provider"] == "anthropic"]
-        + [CHAIRMAN_MODEL["name"]],
-    }
-    providers["groq"] = {
-        "configured": bool(settings.groq_api_key),
-        "models": [m["name"] for m in COUNCIL_MODELS if m["provider"] == "groq"],
+        "models": [CHAT_MODEL["name"]],
     }
 
     # Models
     models = {
-        "council_members": [
-            {"id": m["id"], "name": m["name"], "provider": m["provider"]}
-            for m in COUNCIL_MODELS
-        ],
-        "chairman": {
-            "id": CHAIRMAN_MODEL["id"],
-            "name": CHAIRMAN_MODEL["name"],
-            "provider": CHAIRMAN_MODEL["provider"],
+        "chat_model": {
+            "id": CHAT_MODEL["id"],
+            "name": CHAT_MODEL["name"],
+            "provider": CHAT_MODEL["provider"],
         },
     }
 

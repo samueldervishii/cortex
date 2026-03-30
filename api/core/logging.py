@@ -9,4 +9,4 @@ def setup_logging() -> None:
     )
 
 
-logger = logging.getLogger("llm-council")
+logger = logging.getLogger("cortex")

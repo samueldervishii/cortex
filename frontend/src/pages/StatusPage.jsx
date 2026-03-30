@@ -93,8 +93,8 @@ function StatusPage() {
             <div className="status-page-checks">
               {Object.entries(statusData.checks).map(([key, check]) => (
                 <div key={key} className="status-page-check-row">
-                  <div className="status-page-check-left">
-                    {getStatusIcon(check.status)}
+                  {getStatusIcon(check.status)}
+                  <div className="status-page-check-info">
                     <span className="status-page-check-name">
                       {key === 'api_server'
                         ? 'API Server'
@@ -104,9 +104,9 @@ function StatusPage() {
                             ? 'Anthropic Circuit Breaker'
                             : key}
                     </span>
+                    <span className="status-page-check-detail">{check.detail}</span>
                   </div>
                   <span className={`status-page-check-badge ${check.status}`}>{check.status}</span>
-                  <span className="status-page-check-detail">{check.detail}</span>
                 </div>
               ))}
             </div>
@@ -141,36 +141,19 @@ function StatusPage() {
           </section>
 
           <section className="status-page-section">
-            <h3>Council Configuration</h3>
+            <h3>AI Model</h3>
             <div className="status-page-council">
               <div className="status-page-council-chairman">
-                <span className="status-page-council-label">Chairman</span>
-                <span className="status-page-council-model">{statusData.models.chairman.name}</span>
+                <span className="status-page-council-label">Chat Model</span>
+                <span className="status-page-council-model">
+                  {statusData.models?.chat_model?.name || 'Unknown'}
+                </span>
                 <span className="status-page-council-provider">
-                  {statusData.models.chairman.provider}
+                  {statusData.models?.chat_model?.provider || ''}
                 </span>
-              </div>
-              <div className="status-page-council-members">
-                <span className="status-page-council-label">
-                  Council Members ({statusData.models.council_members.length})
-                </span>
-                {statusData.models.council_members.map((model) => (
-                  <div key={model.id} className="status-page-council-member">
-                    <span>{model.name}</span>
-                    <span className="status-page-council-provider">{model.provider}</span>
-                  </div>
-                ))}
               </div>
             </div>
           </section>
-
-          <footer className="status-page-footer">
-            <span>Environment: {statusData.environment}</span>
-            {lastChecked && <span>Last checked: {lastChecked.toLocaleTimeString()}</span>}
-            <button className="status-page-refresh" onClick={fetchStatus}>
-              Refresh
-            </button>
-          </footer>
         </>
       ) : null}
     </div>

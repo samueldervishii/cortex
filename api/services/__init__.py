@@ -1,4 +1,3 @@
-from .council import CouncilService
-from .prompts import Prompts
+from .chat import ChatService
 
-__all__ = ["CouncilService", "Prompts"]
+__all__ = ["ChatService"]

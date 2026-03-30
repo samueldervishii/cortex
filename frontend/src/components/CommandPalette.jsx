@@ -5,7 +5,6 @@ import {
   Download,
   Settings,
   Palette,
-  Cpu,
   Info,
   MessageSquare,
   Star,
@@ -20,6 +19,9 @@ let lastKnownStatus = 'checking'
 function CommandPalette({ isOpen, onClose, sessions, onNewChat, onExport, currentSessionId }) {
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
+  const [searchResults, setSearchResults] = useState(null)
+  const [searching, setSearching] = useState(false)
+  const searchTimer = useRef(null)
   const inputRef = useRef(null)
   const navigate = useNavigate()
   const [apiStatus, setApiStatus] = useState(() => lastKnownStatus)
@@ -42,12 +44,35 @@ function CommandPalette({ isOpen, onClose, sessions, onNewChat, onExport, curren
     return () => clearInterval(interval)
   }, [])
 
+  // Debounced backend search for message content
+  useEffect(() => {
+    if (searchTimer.current) clearTimeout(searchTimer.current)
+    if (!query.trim() || query.trim().length < 3) {
+      setSearchResults(null)
+      setSearching(false)
+      return
+    }
+    setSearching(true)
+    searchTimer.current = setTimeout(async () => {
+      try {
+        const res = await apiClient.get(`/sessions/search?q=${encodeURIComponent(query.trim())}`)
+        setSearchResults(res.data.sessions || [])
+      } catch {
+        setSearchResults(null)
+      } finally {
+        setSearching(false)
+      }
+    }, 300)
+    return () => clearTimeout(searchTimer.current)
+  }, [query])
+
   // Focus input when opened
   useEffect(() => {
     if (isOpen) {
       inputRef.current?.focus()
       setQuery('')
       setSelectedIndex(0)
+      setSearchResults(null)
     }
   }, [isOpen])
 
@@ -105,17 +130,6 @@ function CommandPalette({ isOpen, onClose, sessions, onNewChat, onExport, curren
 
     items.push({
       type: 'settings',
-      icon: Cpu,
-      title: 'Settings › Models',
-      description: 'Select and configure AI models',
-      action: () => {
-        navigate('/settings?tab=models')
-        onClose()
-      },
-    })
-
-    items.push({
-      type: 'settings',
       icon: Info,
       title: 'Settings › About',
       description: 'Version and keyboard shortcuts',
@@ -127,19 +141,30 @@ function CommandPalette({ isOpen, onClose, sessions, onNewChat, onExport, curren
 
     // Chat sessions — when not searching, show only 3 most recent (max 1 day old)
     const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000
-    const sessionsToShow = query.trim()
-      ? sessions
-      : sessions
-          .filter((s) => s.created_at && new Date(s.created_at).getTime() > oneDayAgo)
-          .slice(0, 3)
 
+    // Use backend search results when available, otherwise local sessions
+    const sessionsSource = searchResults && query.trim().length >= 3 ? searchResults : null
+    const sessionsToShow = sessionsSource
+      ? sessionsSource
+      : query.trim()
+        ? sessions
+        : sessions
+            .filter((s) => s.created_at && new Date(s.created_at).getTime() > oneDayAgo)
+            .slice(0, 3)
+
+    // Deduplicate by id (search results may overlap with local sessions)
+    const seen = new Set()
     sessionsToShow.forEach((session) => {
+      if (seen.has(session.id)) return
+      seen.add(session.id)
       const title = session.title || session.question || 'Untitled'
       items.push({
         type: 'session',
         icon: MessageSquare,
         title: title.length > 60 ? title.substring(0, 60) + '...' : title,
-        description: `${session.round_count} round${session.round_count > 1 ? 's' : ''}`,
+        description: sessionsSource
+          ? 'Content match'
+          : `${session.round_count} round${session.round_count > 1 ? 's' : ''}`,
         action: () => {
           navigate(`/sessions/${session.id}`)
           onClose()
@@ -214,7 +239,7 @@ function CommandPalette({ isOpen, onClose, sessions, onNewChat, onExport, curren
         <div className="command-palette-results">
           {filteredItems.length === 0 ? (
             <div className="command-palette-empty">
-              <p>No results found for "{query}"</p>
+              <p>{searching ? 'Searching messages...' : `No results found for "${query}"`}</p>
             </div>
           ) : (
             <>

@@ -5,7 +5,7 @@ type Theme = 'dark' | 'light'
 function useTheme() {
   const [theme, setTheme] = useState<Theme>(() => {
     // Check localStorage first
-    const saved = localStorage.getItem('llm-council-theme')
+    const saved = localStorage.getItem('cortex-theme')
     if (saved === 'dark' || saved === 'light') return saved
     // Check system preference
     if (window.matchMedia('(prefers-color-scheme: light)').matches) {
@@ -17,7 +17,7 @@ function useTheme() {
   useEffect(() => {
     // Apply theme to document
     document.documentElement.setAttribute('data-theme', theme)
-    localStorage.setItem('llm-council-theme', theme)
+    localStorage.setItem('cortex-theme', theme)
   }, [theme])
 
   const toggleTheme = () => {

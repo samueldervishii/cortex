@@ -6,6 +6,7 @@ import { ErrorBoundary } from './components'
 import Layout from './components/Layout'
 import ProtectedRoute from './components/ProtectedRoute'
 import { AuthProvider } from './contexts/AuthContext'
+import { ToastProvider } from './contexts/ToastContext'
 
 // Lazy load pages - only load when needed
 const App = lazy(() => import('./App'))
@@ -18,30 +19,32 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
       <AuthProvider>
-        <BrowserRouter>
-          <Suspense fallback={null}>
-            <Routes>
-              {/* Public routes */}
-              <Route path="/login" element={<AuthPage />} />
-              <Route path="/register" element={<AuthPage />} />
-              <Route path="/shared/:shareToken" element={<SharedSession />} />
+        <ToastProvider>
+          <BrowserRouter>
+            <Suspense fallback={null}>
+              <Routes>
+                {/* Public routes */}
+                <Route path="/login" element={<AuthPage />} />
+                <Route path="/register" element={<AuthPage />} />
+                <Route path="/shared/:shareToken" element={<SharedSession />} />
 
-              {/* Protected routes */}
-              <Route
-                element={
-                  <ProtectedRoute>
-                    <Layout />
-                  </ProtectedRoute>
-                }
-              >
-                <Route path="/" element={<App />} />
-                <Route path="/sessions/:sessionId" element={<App />} />
-                <Route path="/settings" element={<SettingsPage />} />
-                <Route path="/status" element={<StatusPage />} />
-              </Route>
-            </Routes>
-          </Suspense>
-        </BrowserRouter>
+                {/* Protected routes */}
+                <Route
+                  element={
+                    <ProtectedRoute>
+                      <Layout />
+                    </ProtectedRoute>
+                  }
+                >
+                  <Route path="/" element={<App />} />
+                  <Route path="/sessions/:sessionId" element={<App />} />
+                  <Route path="/settings" element={<SettingsPage />} />
+                  <Route path="/status" element={<StatusPage />} />
+                </Route>
+              </Routes>
+            </Suspense>
+          </BrowserRouter>
+        </ToastProvider>
       </AuthProvider>
     </ErrorBoundary>
   </StrictMode>

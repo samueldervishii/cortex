@@ -19,9 +19,12 @@ from schemas.user import (
     UserResponse,
     TokenResponse,
     RefreshRequest,
+    ProfileUpdate,
+    PasswordChange,
+    DeleteAccount,
 )
 
-logger = logging.getLogger("llm-council.auth")
+logger = logging.getLogger("cortex.auth")
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -100,8 +103,88 @@ async def get_me(
     return UserResponse(
         id=user["id"],
         email=user["email"],
+        display_name=user.get("display_name", ""),
+        username=user.get("username", ""),
         created_at=user["created_at"].isoformat(),
     )
+
+
+@router.patch("/profile", response_model=UserResponse)
+async def update_profile(
+    request: ProfileUpdate,
+    current_user_id: str = Depends(get_current_user),
+    user_repo: UserRepository = Depends(get_user_repository),
+):
+    """Update the current user's profile (display name, username)."""
+    # Check username uniqueness if provided
+    if request.username:
+        existing = await user_repo.get_by_username(request.username)
+        if existing and existing["id"] != current_user_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This username is already taken",
+            )
+
+    user = await user_repo.update_profile(
+        current_user_id, request.display_name, request.username
+    )
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    return UserResponse(
+        id=user["id"],
+        email=user["email"],
+        display_name=user.get("display_name", ""),
+        username=user.get("username", ""),
+        created_at=user["created_at"].isoformat(),
+    )
+
+
+@router.post("/change-password")
+async def change_password(
+    request: PasswordChange,
+    current_user_id: str = Depends(get_current_user),
+    user_repo: UserRepository = Depends(get_user_repository),
+):
+    """Change the current user's password."""
+    user = await user_repo.get_by_id(current_user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    if not verify_password(request.current_password, user["hashed_password"]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Current password is incorrect",
+        )
+
+    await user_repo.update_password(current_user_id, hash_password(request.new_password))
+    logger.info(f"User changed password: {user['email']}")
+    return {"message": "Password changed successfully"}
+
+
+@router.delete("/account")
+async def delete_account(
+    request: DeleteAccount,
+    current_user_id: str = Depends(get_current_user),
+    user_repo: UserRepository = Depends(get_user_repository),
+):
+    """Permanently delete the current user's account."""
+    user = await user_repo.get_by_id(current_user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    if not verify_password(request.password, user["hashed_password"]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Password is incorrect",
+        )
+
+    await user_repo.delete(current_user_id)
+    logger.info(f"User deleted account: {user['email']}")
+    return {"message": "Account deleted successfully"}
 
 
 @router.post("/refresh", response_model=TokenResponse)

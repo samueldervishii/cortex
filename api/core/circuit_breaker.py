@@ -11,7 +11,7 @@ from typing import Optional, Callable, Any
 
 from config import settings
 
-logger = logging.getLogger("llm-council.circuit_breaker")
+logger = logging.getLogger("cortex.circuit_breaker")
 
 # Global circuit breaker instances with lock for thread-safe initialization
 _breakers: dict[str, Any] = {}

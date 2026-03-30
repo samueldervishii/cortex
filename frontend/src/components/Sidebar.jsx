@@ -18,11 +18,9 @@ function Sidebar({
   onRenameSession,
   onTogglePinSession,
   onShareSession,
-  onBranchSession,
   onClose,
   onCloseMobile,
   onNewChat,
-  branchingEnabled = false,
 }) {
   const [shareModal, setShareModal] = useState({ open: false, url: '', loading: false })
   const [deleteConfirm, setDeleteConfirm] = useState({ open: false, sessionId: null, title: '' })

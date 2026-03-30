@@ -71,7 +71,7 @@ export default function PWAInstallPrompt() {
       <div className="pwa-install-content">
         <Download size={20} />
         <div className="pwa-install-text">
-          <strong>Install LLM Council</strong>
+          <strong>Install Cortex</strong>
           <span>Add to your home screen for quick access</span>
         </div>
       </div>

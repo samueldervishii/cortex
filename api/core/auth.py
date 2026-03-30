@@ -7,7 +7,7 @@ from jose import JWTError, jwt
 
 from config import settings
 
-logger = logging.getLogger("llm-council.auth")
+logger = logging.getLogger("cortex.auth")
 
 
 def _check_jwt_secret():

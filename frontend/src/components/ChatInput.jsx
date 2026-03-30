@@ -1,136 +1,88 @@
-import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
-import { MODEL_COLORS } from '../utils/modelColors'
+import { useState, useEffect, useRef, forwardRef, useImperativeHandle, useCallback } from 'react'
 
-const ALL_MODELS = Object.keys(MODEL_COLORS)
+const ALLOWED_TYPES = [
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain',
+  'text/markdown',
+  'text/csv',
+]
+const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 
 const ChatInput = forwardRef(
-  ({ value, onChange, onSubmit, disabled, placeholder, centered = false, mode }, ref) => {
+  ({ value, onChange, onSubmit, onFileUpload, disabled, placeholder, centered = false }, ref) => {
     const textareaRef = useRef(null)
-    const dropdownRef = useRef(null)
-    const [showMentions, setShowMentions] = useState(false)
-    const [mentionFilter, setMentionFilter] = useState('')
-    const [mentionStartIndex, setMentionStartIndex] = useState(-1)
-    const [selectedIndex, setSelectedIndex] = useState(0)
+    const fileInputRef = useRef(null)
+    const [attachedFile, setAttachedFile] = useState(null)
+    const [dragOver, setDragOver] = useState(false)
+    const [fileError, setFileError] = useState('')
 
-    // Expose focus method to parent
     useImperativeHandle(ref, () => ({
       focus: () => {
         textareaRef.current?.focus()
       },
     }))
 
-    // Filter models based on what user typed after @
-    const filteredModels = ALL_MODELS.filter((name) =>
-      name.toLowerCase().includes(mentionFilter.toLowerCase())
-    )
-
-    // Reset selected index when filter changes
-    useEffect(() => {
-      setSelectedIndex(0)
-    }, [mentionFilter])
-
-    // Close dropdown on outside click
-    useEffect(() => {
-      const handleClickOutside = (e) => {
-        if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
-          setShowMentions(false)
-        }
+    const handleKeyDown = (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault()
+        handleSend()
       }
-      document.addEventListener('mousedown', handleClickOutside)
-      return () => document.removeEventListener('mousedown', handleClickOutside)
-    }, [])
-
-    const insertMention = (modelName) => {
-      // Replace the @partial text with the full @ModelName
-      const before = value.substring(0, mentionStartIndex)
-      const after = value.substring(textareaRef.current?.selectionStart || value.length)
-      const newValue = `${before}@${modelName} ${after}`
-      onChange(newValue)
-      setShowMentions(false)
-      setMentionFilter('')
-      setMentionStartIndex(-1)
-
-      // Re-focus textarea
-      setTimeout(() => {
-        const textarea = textareaRef.current
-        if (textarea) {
-          const cursorPos = before.length + modelName.length + 2 // +2 for @ and space
-          textarea.focus()
-          textarea.setSelectionRange(cursorPos, cursorPos)
-        }
-      }, 0)
     }
 
-    const handleChange = (e) => {
-      const newValue = e.target.value
-      const cursorPos = e.target.selectionStart
-      onChange(newValue)
+    const handleSend = () => {
+      if (disabled) return
+      if (attachedFile) {
+        onFileUpload?.(attachedFile, value.trim())
+        setAttachedFile(null)
+        setFileError('')
+      } else if (value.trim()) {
+        onSubmit()
+      }
+    }
 
-      // Only show mention dropdown in chat mode
-      if (mode !== 'chat') {
-        setShowMentions(false)
+    const validateAndAttach = useCallback((file) => {
+      setFileError('')
+      if (!file) return
+
+      if (!ALLOWED_TYPES.includes(file.type) && !file.name.match(/\.(pdf|docx|txt|md|csv)$/i)) {
+        setFileError('Unsupported file type. Use PDF, DOCX, TXT, MD, or CSV.')
+        return
+      }
+      if (file.size > MAX_FILE_SIZE) {
+        setFileError(`File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Max 10MB.`)
         return
       }
 
-      // Check if user just typed @ or is typing after @
-      const textBeforeCursor = newValue.substring(0, cursorPos)
-      const lastAtIndex = textBeforeCursor.lastIndexOf('@')
+      setAttachedFile(file)
+    }, [])
 
-      if (lastAtIndex !== -1) {
-        // Check there's no space between @ and cursor (unless it's part of a model name)
-        const textAfterAt = textBeforeCursor.substring(lastAtIndex + 1)
-        // Model names can have spaces, so check if it's a valid partial match
-        const hasNewline = textAfterAt.includes('\n')
-
-        if (!hasNewline && textAfterAt.length <= 20) {
-          setShowMentions(true)
-          setMentionFilter(textAfterAt)
-          setMentionStartIndex(lastAtIndex)
-          return
-        }
-      }
-
-      setShowMentions(false)
-      setMentionFilter('')
-      setMentionStartIndex(-1)
+    const handleFileSelect = (e) => {
+      validateAndAttach(e.target.files?.[0])
+      e.target.value = '' // Reset so same file can be re-selected
     }
 
-    const handleKeyDown = (e) => {
-      // Handle mention dropdown navigation
-      if (showMentions && filteredModels.length > 0) {
-        if (e.key === 'ArrowDown') {
-          e.preventDefault()
-          setSelectedIndex((prev) => (prev + 1) % filteredModels.length)
-          return
-        }
-        if (e.key === 'ArrowUp') {
-          e.preventDefault()
-          setSelectedIndex((prev) => (prev - 1 + filteredModels.length) % filteredModels.length)
-          return
-        }
-        if (e.key === 'Enter' || e.key === 'Tab') {
-          e.preventDefault()
-          insertMention(filteredModels[selectedIndex])
-          return
-        }
-        if (e.key === 'Escape') {
-          e.preventDefault()
-          setShowMentions(false)
-          return
-        }
-      }
-
-      // Ctrl+Enter or Cmd+Enter to send
-      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault()
-        if (value.trim() && !disabled) {
-          onSubmit()
-        }
-      }
-      // Regular Enter creates new line (default behavior)
+    const handleDragOver = (e) => {
+      e.preventDefault()
+      setDragOver(true)
     }
 
-    // Auto-resize textarea based on content
+    const handleDragLeave = (e) => {
+      e.preventDefault()
+      setDragOver(false)
+    }
+
+    const handleDrop = (e) => {
+      e.preventDefault()
+      setDragOver(false)
+      validateAndAttach(e.dataTransfer.files?.[0])
+    }
+
+    const removeFile = () => {
+      setAttachedFile(null)
+      setFileError('')
+    }
+
     useEffect(() => {
       const textarea = textareaRef.current
       if (textarea) {
@@ -143,48 +95,88 @@ const ChatInput = forwardRef(
       }
     }, [value])
 
+    const hasContent = value.trim() || attachedFile
+
+    const getFileExt = (name) => {
+      const ext = name.split('.').pop()?.toUpperCase()
+      return ext || 'FILE'
+    }
+
+    const getFileInfo = (file) => {
+      const kb = file.size / 1024
+      if (kb < 1) return `${file.size} B`
+      if (kb < 1024) return `${Math.round(kb)} KB`
+      return `${(kb / 1024).toFixed(1)} MB`
+    }
+
     return (
-      <div className={`input-container ${centered ? 'centered' : 'bottom'}`}>
-        <div className="input-wrapper" style={{ position: 'relative' }}>
-          {/* @mention dropdown */}
-          {showMentions && filteredModels.length > 0 && (
-            <div className="mention-dropdown" ref={dropdownRef}>
-              {filteredModels.map((name, i) => (
-                <div
-                  key={name}
-                  className={`mention-option ${i === selectedIndex ? 'selected' : ''}`}
-                  onClick={() => insertMention(name)}
-                  onMouseEnter={() => setSelectedIndex(i)}
-                >
-                  <span className="mention-avatar" style={{ backgroundColor: MODEL_COLORS[name] }}>
-                    {name.charAt(0)}
-                  </span>
-                  <span className="mention-name">{name}</span>
-                </div>
-              ))}
+      <div
+        className={`input-container ${centered ? 'centered' : 'bottom'} ${dragOver ? 'drag-over' : ''}`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        {fileError && <div className="file-error">{fileError}</div>}
+
+        <div className={`input-wrapper ${attachedFile ? 'has-file' : ''}`}>
+          {attachedFile && (
+            <div className="file-card">
+              <button className="file-card-remove" onClick={removeFile}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+              <div className="file-card-name">{attachedFile.name}</div>
+              <div className="file-card-meta">{getFileInfo(attachedFile)}</div>
+              <div className="file-card-badge">{getFileExt(attachedFile.name)}</div>
             </div>
           )}
 
-          <textarea
-            ref={textareaRef}
-            value={value}
-            onChange={handleChange}
-            onKeyDown={handleKeyDown}
-            placeholder={placeholder}
-            rows={1}
-            disabled={disabled}
-            autoFocus={centered}
-          />
-          <button onClick={onSubmit} disabled={disabled || !value.trim()} title="Send (Ctrl+Enter)">
-            <span className="send-icon">↑</span>
-          </button>
+          <div className="input-row">
+            <button
+              className="attach-btn"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={disabled}
+              title="Attach file (PDF, DOCX, TXT)"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+              </svg>
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.docx,.txt,.md,.csv"
+              onChange={handleFileSelect}
+              hidden
+            />
+            <textarea
+              ref={textareaRef}
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={attachedFile ? 'Add a message about this file...' : placeholder}
+              rows={1}
+              disabled={disabled}
+              autoFocus={centered}
+            />
+            <button onClick={handleSend} disabled={disabled || !hasContent} title="Send (Enter)">
+              <span className="send-icon">&uarr;</span>
+            </button>
+          </div>
         </div>
-        <div className="input-hints">
-          <span>Ctrl+Enter to send</span>
-          {mode === 'chat' && <span>@ to mention a model</span>}
-          <span>Alt+N new chat</span>
-          <span>Ctrl+\ sidebar</span>
-        </div>
+
+        {dragOver && (
+          <div className="drop-overlay">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+            <span>Drop file here</span>
+          </div>
+        )}
       </div>
     )
   }

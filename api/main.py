@@ -9,7 +9,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from config import COUNCIL_MODELS, CHAIRMAN_MODEL, settings
+from config import CHAT_MODEL, settings
 from core import setup_logging
 from core.dependencies import (
     get_session_repository,
@@ -18,14 +18,14 @@ from core.dependencies import (
 )
 from core.metrics import init_metrics, track_request
 from db import get_database, close_database, ensure_indexes
-from routers import sessions_router, models_router, shared_router, settings_router, auth_router
+from routers import sessions_router, shared_router, settings_router, auth_router
 from routers.health import router as health_router
 
 
 
 # Configure logging
 setup_logging()
-logger = logging.getLogger("llm-council.requests")
+logger = logging.getLogger("cortex.requests")
 
 
 async def run_auto_delete_cleanup(silent: bool = False):
@@ -46,10 +46,6 @@ async def run_auto_delete_cleanup(silent: bool = False):
         total_deleted = 0
 
         for user_settings in all_settings:
-            # Check if auto_delete beta feature is enabled for this user
-            if "auto_delete" not in (user_settings.enabled_beta_features or []):
-                continue
-
             if user_settings.auto_delete_days not in valid_days:
                 continue
 
@@ -106,9 +102,8 @@ async def auto_delete_background_task():
 async def lifespan(_app: FastAPI):
     """Application lifespan handler."""
     global _auto_delete_task
-    logger.info("LLM Council API starting...")
-    logger.info(f"Council members: {[m['name'] for m in COUNCIL_MODELS]}")
-    logger.info(f"Chairman: {CHAIRMAN_MODEL['name']}")
+    logger.info("Cortex API starting...")
+    logger.info(f"AI Model: {CHAT_MODEL['name']}")
 
     # Initialize Prometheus metrics
     init_metrics()
@@ -140,7 +135,7 @@ async def lifespan(_app: FastAPI):
         logger.info(f"MongoDB connection failed: {type(e).__name__}")
 
     yield
-    logger.info("LLM Council API shutting down...")
+    logger.info("Cortex API shutting down...")
 
     # Cancel auto-delete background task
     if _auto_delete_task is not None:
@@ -165,41 +160,32 @@ with open(VERSION_FILE) as f:
     VERSION = json.load(f)["version"]
 
 DESCRIPTION = """
-# LLM Council API
+# Cortex API
 
-A powerful framework for querying multiple Large Language Models simultaneously and synthesizing their collective intelligence.
+A clean AI chat platform powered by Claude Sonnet 4.6.
 
 ## Overview
 
-The LLM Council enables you to:
-- **Query multiple LLMs** in parallel with a single question
-- **Collect peer reviews** where each model evaluates others' responses
-- **Synthesize a final answer** using a chairman model that considers all perspectives
-
-## How It Works
-
-1. **Create a Session** - Start a new council session with your question
-2. **Collect Responses** - Each council member (LLM) provides their answer
-3. **Peer Review** - Models review and rank each other's responses
-4. **Synthesis** - The chairman analyzes all responses and reviews to produce a final, well-rounded answer
+- **Chat sessions** with persistent conversation history
+- **Token-level SSE streaming** for real-time responses
+- **User authentication** with JWT tokens
+- **Session management** — pin, share, export, auto-delete
 
 ## Quick Start
 
-Use `/session/{id}/run-all` to execute the full council process in one call, or step through each phase individually for more control.
+1. `POST /session` — Create a new chat session
+2. `POST /session/{id}/stream` — Stream the AI response via SSE
+3. `POST /session/{id}/continue` — Send a follow-up message
 """
 
 tags_metadata = [
     {
         "name": "sessions",
-        "description": "Manage council sessions - create, retrieve, delete, and run the council deliberation process.",
-    },
-    {
-        "name": "models",
-        "description": "View configured council member models and the chairman model.",
+        "description": "Manage chat sessions — create, continue, stream, and organize conversations.",
     },
     {
         "name": "settings",
-        "description": "User settings and preferences - configure timeouts, analytics, debug mode, and other options.",
+        "description": "User preferences — auto-delete, data export.",
     },
 ]
 
@@ -207,13 +193,13 @@ tags_metadata = [
 is_production = settings.environment == "production"
 
 app = FastAPI(
-    title="LLM Council API",
+    title="Cortex API",
     description=DESCRIPTION,
     version=VERSION,
     lifespan=lifespan,
     openapi_tags=tags_metadata,
     contact={
-        "name": "LLM Council",
+        "name": "Cortex",
     },
     license_info={
         "name": "MIT",
@@ -319,10 +305,9 @@ async def log_and_track_requests(request: Request, call_next):
 
 
 # Include routers
-app.include_router(health_router)  # Health checks and metrics
+app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(sessions_router)
-app.include_router(models_router)
 app.include_router(shared_router)
 app.include_router(settings_router)
 
@@ -336,7 +321,7 @@ async def root():
     Returns the current status and version of the API.
     Use this endpoint to verify the API is running.
     """
-    return {"message": "LLM Council API", "status": "running", "version": VERSION}
+    return {"message": "Cortex API", "status": "running", "version": VERSION}
 
 
 

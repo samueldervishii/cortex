@@ -3,10 +3,12 @@ import secrets
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Depends, Request, Query, Body
+from fastapi import APIRouter, HTTPException, Depends, Request, Query, File, UploadFile, Form
+from fastapi.responses import StreamingResponse
 
-logger = logging.getLogger("llm-council.sessions")
+logger = logging.getLogger("cortex.sessions")
 
+from clients import LLMClient
 from core.dependencies import (
     get_session_repository,
     get_settings_repository,
@@ -19,44 +21,38 @@ from db import SessionRepository, SettingsRepository
 from schemas import (
     QueryRequest,
     ContinueRequest,
-    BranchRequest,
-    RunAllRequest,
+    ChatSession,
+    Message,
     SessionResponse,
-    CouncilSession,
-    ConversationRound,
     SessionListResponse,
     SessionSummary,
     SessionUpdateRequest,
     ShareResponse,
-    CouncilMode,
 )
-from services import CouncilService
-from services.council import analyze_disagreement
+from services.chat import ChatService
 
 router = APIRouter(prefix="/session", tags=["sessions"])
 
 
-def get_council_service(client=Depends(get_llm_client)) -> CouncilService:
-    return CouncilService(client)
+def get_chat_service(client: LLMClient = Depends(get_llm_client)) -> ChatService:
+    return ChatService(client)
+
+
+def _strip_file_data(session):
+    """Strip data_base64 from session messages before sending to client."""
+    for msg in session.messages:
+        if msg.file:
+            msg.file.data_base64 = ""
+    return session
 
 
 @router.get("s", response_model=SessionListResponse)
 async def list_sessions(
-    limit: int = Query(
-        default=50, ge=1, le=500, description="Maximum number of sessions to return"
-    ),
+    limit: int = Query(default=50, ge=1, le=500),
     repo: SessionRepository = Depends(get_session_repository),
     user_id: str = Depends(get_current_user),
 ):
-    """
-    List All Sessions
-
-    Retrieves a list of all council sessions, ordered by most recent first.
-    Returns summary information for each session including title, status, and round count.
-
-    - **limit**: Maximum number of sessions to return (default: 50, max: 500)
-    """
-    # Sessions are already sorted in database (pinned first, then by created_at desc)
+    """List all sessions, ordered by pinned first, then most recent."""
     sessions = await repo.list_all(limit=limit, user_id=user_id)
     summaries = []
     for s in sessions:
@@ -65,14 +61,38 @@ async def list_sessions(
             SessionSummary(
                 id=s["id"],
                 title=s.get("title"),
-                question=s["question"],
-                status=s["status"],
-                round_count=s.get("round_count", 1),
+                question=s.get("question", ""),
+                status=s.get("status", "completed"),
+                message_count=s.get("message_count", 0),
                 created_at=created_at.isoformat() if created_at else None,
                 is_pinned=s.get("is_pinned", False),
             )
         )
+    return SessionListResponse(sessions=summaries, count=len(summaries))
 
+
+@router.get("s/search", response_model=SessionListResponse)
+async def search_sessions(
+    q: str = Query(..., min_length=1, max_length=200),
+    repo: SessionRepository = Depends(get_session_repository),
+    user_id: str = Depends(get_current_user),
+):
+    """Search sessions by content."""
+    results = await repo.search(query=q, user_id=user_id)
+    summaries = []
+    for s in results:
+        created_at = s.get("created_at")
+        summaries.append(
+            SessionSummary(
+                id=s["id"],
+                title=s.get("title"),
+                question=s.get("question", ""),
+                status="completed",
+                message_count=s.get("message_count", 0),
+                created_at=created_at.isoformat() if created_at else None,
+                is_pinned=s.get("is_pinned", False),
+            )
+        )
     return SessionListResponse(sessions=summaries, count=len(summaries))
 
 
@@ -83,43 +103,23 @@ async def create_session(
     user_id: str = Depends(get_current_user),
     _rate_limit: None = Depends(check_rate_limit),
 ):
-    """
-    Create New Session
-
-    Starts a new council session with your question. This creates a session
-    with a pending first round, ready for council deliberation.
-
-    **Mode options:**
-    - `formal`: Traditional council with parallel responses, peer reviews, and synthesis
-    - `chat`: Group chat style where models respond sequentially and interact naturally
-
-    **Next step**: Call `POST /session/{id}/run-all` to run the full council process.
-    """
+    """Create a new chat session with an initial message."""
     session_id = str(uuid.uuid4())
 
-    # Create first round with the specified mode and selected models
-    first_round = ConversationRound(
-        question=request.question,
-        mode=request.mode,
-        selected_models=request.selected_models,
-        system_prompt=request.system_prompt,
-        status="pending",
-    )
+    user_message = Message(role="user", content=request.question)
 
-    # Sanitize and limit title to prevent XSS and ensure clean data
-    session = CouncilSession(
+    session = ChatSession(
         id=session_id,
         user_id=user_id,
         title=sanitize_title(request.question, max_length=100),
-        rounds=[first_round],
+        messages=[user_message],
     )
 
     await repo.create(session)
 
-    mode_msg = "group chat" if request.mode == CouncilMode.CHAT else "formal council"
     return SessionResponse(
         session=session,
-        message=f"Session created in {mode_msg} mode. Call /session/{{id}}/run-all to start.",
+        message="Session created. Call /session/{id}/stream to get a response.",
     )
 
 
@@ -129,17 +129,11 @@ async def get_session(
     repo: SessionRepository = Depends(get_session_repository),
     user_id: str = Depends(get_current_user),
 ):
-    """
-    Get Session Details
-
-    Retrieves the complete state of a session including all rounds,
-    responses, peer reviews, and synthesis results.
-    """
+    """Get full session with all messages."""
     session = await repo.get(session_id, user_id=user_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
-
-    return SessionResponse(session=session, message="Session retrieved")
+    return SessionResponse(session=_strip_file_data(session), message="Session retrieved")
 
 
 @router.delete("/{session_id}")
@@ -148,16 +142,10 @@ async def delete_session(
     repo: SessionRepository = Depends(get_session_repository),
     user_id: str = Depends(get_current_user),
 ):
-    """
-    Delete Session
-
-    Soft-deletes a session. The session data is preserved but marked as deleted
-    and will no longer appear in session lists.
-    """
+    """Soft-delete a session."""
     deleted = await repo.soft_delete(session_id, user_id=user_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Session not found")
-
     return {"message": "Session deleted"}
 
 
@@ -168,18 +156,11 @@ async def update_session(
     repo: SessionRepository = Depends(get_session_repository),
     user_id: str = Depends(get_current_user),
 ):
-    """
-    Update Session
-
-    Updates session properties like title or pinned status.
-    Only provided fields will be updated.
-    """
+    """Update session title or pinned status."""
     session = await repo.get(session_id, user_id=user_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    # Pin-only update: use direct method to avoid version conflicts
-    # (pin toggling can race with council operations that also update the session)
     if request.is_pinned is not None and request.title is None:
         pinned_at = datetime.now(timezone.utc).isoformat() if request.is_pinned else None
         success = await repo.update_pin(session_id, request.is_pinned, pinned_at, user_id=user_id)
@@ -189,26 +170,16 @@ async def update_session(
         session.pinned_at = pinned_at
         return SessionResponse(session=session, message="Session updated")
 
-    # Update title if provided (sanitize for security)
     if request.title is not None:
         session.title = sanitize_title(request.title, max_length=200)
-
-    # Update pinned status if provided (combined with title update)
     if request.is_pinned is not None:
         session.is_pinned = request.is_pinned
-        if request.is_pinned:
-            session.pinned_at = datetime.now(timezone.utc).isoformat()
-        else:
-            session.pinned_at = None
+        session.pinned_at = datetime.now(timezone.utc).isoformat() if request.is_pinned else None
 
     try:
         await repo.update(session)
     except ValueError as e:
-        logger.warning(f"Version conflict updating session {session_id}: {e}")
-        raise HTTPException(
-            status_code=409,
-            detail="Session was modified by another request. Please retry.",
-        )
+        raise HTTPException(status_code=409, detail="Session was modified. Please retry.")
 
     return SessionResponse(session=session, message="Session updated")
 
@@ -221,313 +192,296 @@ async def continue_session(
     user_id: str = Depends(get_current_user),
     _rate_limit: None = Depends(check_rate_limit),
 ):
-    """
-    Continue Session
-
-    Adds a follow-up question to an existing session, creating a new round.
-    The previous round must be fully completed before continuing.
-
-    This allows for multi-turn conversations where the council can build on
-    previous context and answers.
-    """
+    """Add a follow-up message to an existing session."""
     session = await repo.get(session_id, user_id=user_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    # Check if last round is complete
-    if session.rounds:
-        last_round = session.rounds[-1]
-        # Allow continuing if synthesized (formal) or chat_complete (chat mode)
-        if last_round.status not in ["synthesized", "chat_complete"]:
-            raise HTTPException(
-                status_code=400,
-                detail="Previous round must be completed before continuing",
-            )
-
-    # Inherit mode, selected models, and system_prompt from the first round
-    first_round = session.rounds[0] if session.rounds else None
-    session_mode = first_round.mode if first_round else CouncilMode.FORMAL
-    session_models = first_round.selected_models if first_round else None
-    session_system_prompt = first_round.system_prompt if first_round else None
-
-    # Add new round with same mode, models, and system prompt as session
-    new_round = ConversationRound(
-        question=request.question,
-        mode=session_mode,
-        selected_models=session_models,
-        system_prompt=session_system_prompt,
-        status="pending",
-    )
-    session.rounds.append(new_round)
-
-    await repo.update(session)
-
-    mode_msg = "group chat" if session_mode == CouncilMode.CHAT else "council responses"
-    return SessionResponse(
-        session=session,
-        message=f"New round added. Call /session/{{id}}/run-all to get {mode_msg}.",
-    )
-
-
-@router.post("/{session_id}/responses", response_model=SessionResponse)
-async def get_responses(
-    session_id: str,
-    repo: SessionRepository = Depends(get_session_repository),
-    council_service: CouncilService = Depends(get_council_service),
-    user_id: str = Depends(get_current_user),
-    _rate_limit: None = Depends(check_rate_limit),
-):
-    """
-    Collect Council Responses
-
-    Queries all council member LLMs in parallel and collects their responses
-    to the current round's question. Each model provides its independent answer.
-
-    **Step 1 of 3** in the council deliberation process.
-
-    **Next step**: Call `POST /session/{id}/reviews` for peer reviews.
-    """
-    session = await repo.get(session_id, user_id=user_id)
-    if session is None:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    if not session.rounds:
-        raise HTTPException(status_code=400, detail="No rounds in session")
-
-    current_round = session.rounds[-1]
-    previous_rounds = session.rounds[:-1] if len(session.rounds) > 1 else None
-
-    if current_round.status != "pending":
-        return SessionResponse(
-            session=session, message="Responses already collected for this round"
-        )
-
-    responses = await council_service.get_council_responses(
-        current_round, previous_rounds
-    )
-    current_round.responses = responses
-    current_round.status = "responses_complete"
-
+    user_message = Message(role="user", content=request.question)
+    session.messages.append(user_message)
     await repo.update(session)
 
     return SessionResponse(
         session=session,
-        message="All council responses collected. Call /session/{id}/reviews for peer reviews.",
+        message="Message added. Call /session/{id}/stream to get a response.",
     )
 
 
-@router.post("/{session_id}/reviews", response_model=SessionResponse)
-async def get_reviews(
+@router.post("/{session_id}/upload-file", response_model=SessionResponse)
+async def upload_file_to_session(
     session_id: str,
+    file: UploadFile = File(...),
+    question: str = Form(""),
+    replace_last: str = Form("false"),
     repo: SessionRepository = Depends(get_session_repository),
-    council_service: CouncilService = Depends(get_council_service),
     user_id: str = Depends(get_current_user),
     _rate_limit: None = Depends(check_rate_limit),
 ):
-    """
-    Collect Peer Reviews
+    """Upload a file (PDF, DOCX, TXT) and add it as context to the conversation."""
+    import base64
+    from services.file_extractor import validate_file, extract_text
+    from schemas import FileAttachment
 
-    Each council member reviews and ranks the other models' responses.
-    This provides multiple perspectives on the quality and accuracy of each answer.
-
-    **Step 2 of 3** in the council deliberation process.
-    Requires responses to be collected first.
-
-    **Next step**: Call `POST /session/{id}/synthesize` for the final synthesis.
-    """
     session = await repo.get(session_id, user_id=user_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    if not session.rounds:
-        raise HTTPException(status_code=400, detail="No rounds in session")
-
-    current_round = session.rounds[-1]
-    previous_rounds = session.rounds[:-1] if len(session.rounds) > 1 else None
-
-    if current_round.status == "pending":
-        raise HTTPException(status_code=400, detail="Must collect responses first")
-
-    if current_round.status in ["reviews_complete", "synthesized"]:
-        return SessionResponse(
-            session=session, message="Reviews already collected for this round"
-        )
-
-    valid_responses = [r for r in current_round.responses if not r.error]
-
-    if len(valid_responses) < 2:
-        current_round.status = "reviews_complete"
-        await repo.update(session)
-        return SessionResponse(
-            session=session, message="Not enough valid responses for peer review"
-        )
-
-    reviews = await council_service.get_peer_reviews(current_round, previous_rounds)
-    current_round.peer_reviews = reviews
-    current_round.status = "reviews_complete"
-
-    # Analyze disagreement
-    current_round.disagreement_analysis = analyze_disagreement(
-        current_round.responses, current_round.peer_reviews
-    )
-
-    await repo.update(session)
-
-    return SessionResponse(
-        session=session,
-        message="Peer reviews complete. Call /session/{id}/synthesize for final answer.",
-    )
-
-
-@router.post("/{session_id}/synthesize", response_model=SessionResponse)
-async def synthesize(
-    session_id: str,
-    repo: SessionRepository = Depends(get_session_repository),
-    council_service: CouncilService = Depends(get_council_service),
-    user_id: str = Depends(get_current_user),
-    _rate_limit: None = Depends(check_rate_limit),
-):
-    """
-    Synthesize Final Answer
-
-    The chairman model analyzes all council responses and peer reviews to
-    produce a comprehensive, well-reasoned final answer that incorporates
-    the best insights from each council member.
-
-    **Step 3 of 3** in the council deliberation process.
-    Completes the current round.
-
-    **Next step**: Optionally call `POST /session/{id}/continue` to ask a follow-up question.
-    """
-    session = await repo.get(session_id, user_id=user_id)
-    if session is None:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    if not session.rounds:
-        raise HTTPException(status_code=400, detail="No rounds in session")
-
-    current_round = session.rounds[-1]
-    previous_rounds = session.rounds[:-1] if len(session.rounds) > 1 else None
-
-    if current_round.status == "synthesized":
-        return SessionResponse(
-            session=session, message="Already synthesized for this round"
-        )
-
-    if current_round.status == "pending":
-        raise HTTPException(status_code=400, detail="Must collect responses first")
+    content = await file.read()
 
     try:
-        final_response = await council_service.synthesize_response(
-            current_round, previous_rounds
-        )
-        current_round.final_synthesis = final_response
-        current_round.status = "synthesized"
-
-        await repo.update(session)
-
-        return SessionResponse(session=session, message="Synthesis complete!")
-    except Exception as e:
-        logger.error(f"Synthesis failed for session {session_id}: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail="Synthesis failed. Please try again later.",
-        )
-
-
-@router.post("/{session_id}/run-all", response_model=SessionResponse)
-async def run_full_council(
-    session_id: str,
-    request: RunAllRequest = Body(None),
-    repo: SessionRepository = Depends(get_session_repository),
-    council_service: CouncilService = Depends(get_council_service),
-    user_id: str = Depends(get_current_user),
-    _rate_limit: None = Depends(check_rate_limit),
-):
-    """
-    Run Full Council Process
-
-    Executes the complete council deliberation in one call.
-
-    **In FORMAL mode:**
-    1. **Collect Responses** - Query all council members in parallel
-    2. **Peer Reviews** - Each model evaluates the others
-    3. **Synthesis** - Chairman produces the final answer
-
-    **In CHAT mode:**
-    - Models respond sequentially, seeing and replying to each other
-    - Creates a natural group conversation (like WhatsApp)
-    - If target_model is set, only that specific model responds (like @mentioning in WhatsApp)
-
-    This is the recommended endpoint for most use cases.
-    """
-    session = await repo.get(session_id, user_id=user_id)
-    if session is None:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    if not session.rounds:
-        raise HTTPException(status_code=400, detail="No rounds in session")
-
-    current_round = session.rounds[-1]
-    previous_rounds = session.rounds[:-1] if len(session.rounds) > 1 else None
-    target_model = request.target_model if request else None
-
-    # Check if using chat mode
-    if current_round.mode == CouncilMode.CHAT:
-        # Chat mode: run group chat (1 turn = each model responds once, then user can continue)
-        if current_round.status == "pending" or target_model:
-            chat_messages = await council_service.run_group_chat(
-                current_round, previous_rounds, num_turns=1,
-                target_model=target_model,
-            )
-            # Append to existing messages if targeting a specific model
-            if target_model and current_round.chat_messages:
-                current_round.chat_messages.extend(chat_messages)
-            else:
-                current_round.chat_messages = chat_messages
-            current_round.status = "chat_complete"
-            await repo.update(session)
-
-        return SessionResponse(session=session, message="Group chat complete!")
-
-    # Formal mode: traditional 3-step process (optimized to single DB write)
-    # Step 1: Get responses
-    if current_round.status == "pending":
-        responses = await council_service.get_council_responses(
-            current_round, previous_rounds
-        )
-        current_round.responses = responses
-        current_round.status = "responses_complete"
-
-    # Step 2: Get peer reviews
-    if current_round.status == "responses_complete":
-        reviews = await council_service.get_peer_reviews(current_round, previous_rounds)
-        current_round.peer_reviews = reviews
-        current_round.status = "reviews_complete"
-        # Analyze disagreement
-        current_round.disagreement_analysis = analyze_disagreement(
-            current_round.responses, current_round.peer_reviews
-        )
-
-    # Step 3: Synthesize
-    if current_round.status == "reviews_complete":
-        final_response = await council_service.synthesize_response(
-            current_round, previous_rounds
-        )
-        current_round.final_synthesis = final_response
-        current_round.status = "synthesized"
-
-    # Single database write at the end instead of 3 separate writes (major performance improvement)
-    try:
-        await repo.update(session)
+        validate_file(file.filename, file.content_type, len(content))
     except ValueError as e:
-        logger.warning(f"Version conflict for session {session_id}: {e}")
-        raise HTTPException(
-            status_code=409,
-            detail="Session was modified by another request. Please retry.",
+        raise HTTPException(status_code=400, detail=str(e))
+
+    try:
+        extracted_text = extract_text(file.filename, content)
+    except Exception as e:
+        logger.error(f"File extraction failed: {e}")
+        raise HTTPException(status_code=400, detail=f"Could not extract text from file: {e}")
+
+    attachment = FileAttachment(
+        filename=file.filename,
+        content_type=file.content_type,
+        size=len(content),
+        extracted_text=extracted_text,
+        data_base64=base64.b64encode(content).decode("ascii"),
+    )
+
+    user_text = question.strip() if question.strip() else f"I've uploaded a file: {file.filename}. Please analyze it."
+    user_message = Message(role="user", content=user_text, file=attachment)
+
+    # If replace_last is true, replace the last user message (used when creating session + uploading file)
+    if replace_last == "true" and session.messages:
+        last_msg = session.messages[-1]
+        if last_msg.role == "user" and not last_msg.file:
+            session.messages[-1] = user_message
+        else:
+            session.messages.append(user_message)
+    else:
+        session.messages.append(user_message)
+
+    await repo.update(session)
+
+    return SessionResponse(
+        session=_strip_file_data(session),
+        message=f"File '{file.filename}' uploaded.",
+    )
+
+
+@router.post("/{session_id}/stream")
+async def stream_response(
+    session_id: str,
+    repo: SessionRepository = Depends(get_session_repository),
+    chat_service: ChatService = Depends(get_chat_service),
+    user_id: str = Depends(get_current_user),
+    _rate_limit: None = Depends(check_rate_limit),
+):
+    """Stream AI response via Server-Sent Events."""
+    session = await repo.get(session_id, user_id=user_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    if not session.messages:
+        raise HTTPException(status_code=400, detail="No messages in session")
+
+    # Get the last user message
+    last_user_msg = None
+    for msg in reversed(session.messages):
+        if msg.role == "user":
+            last_user_msg = msg
+            break
+
+    if not last_user_msg:
+        raise HTTPException(status_code=400, detail="No user message to respond to")
+
+    # Detect if user wants a document/artifact generated
+    # Must match a VERB + DOCUMENT TYPE pattern, not just any keyword
+    _doc_verbs = ["write", "draft", "compose", "prepare", "generate", "create"]
+    _doc_types = [
+        "essay", "report", "letter", "document", "thesis", "paper",
+        "article", "proposal", "outline", "chapter", "introduction",
+        "conclusion", "abstract", "review", "analysis", "assignment",
+        "paragraph", "cover letter", "resume", "cv",
+    ]
+    user_text_lower = last_user_msg.content.lower()
+    has_verb = any(v in user_text_lower for v in _doc_verbs)
+    has_doc_type = any(d in user_text_lower for d in _doc_types)
+    is_artifact = has_verb and has_doc_type
+
+    # Build the question — include file content if attached
+    question_text = last_user_msg.content
+    if last_user_msg.file and last_user_msg.file.extracted_text:
+        question_text = (
+            f"{last_user_msg.content}\n\n"
+            f"--- Attached File: {last_user_msg.file.filename} ---\n"
+            f"{last_user_msg.file.extracted_text}"
         )
 
-    return SessionResponse(session=session, message="Full council process complete!")
+    # Build conversation history (all messages except the last user message)
+    history = []
+    for msg in session.messages[:-1]:
+        msg_content = msg.content
+        # Include file text in history too so the model has full context
+        if msg.file and msg.file.extracted_text:
+            msg_content = f"{msg.content}\n\n--- Attached File: {msg.file.filename} ---\n{msg.file.extracted_text}"
+        history.append({"role": msg.role, "content": msg_content})
+
+    system_prompt = (
+        "You are Cortex, a helpful AI assistant. "
+        "When the user asks you to write, create, or generate a document (essay, thesis, report, letter, etc.), "
+        "output the document content directly in markdown. The platform will add download buttons automatically. "
+        "For normal questions and conversations, respond naturally and conversationally. "
+        "Use markdown code blocks with language tags for code snippets."
+    )
+
+    async def event_stream():
+        import json as _json
+        full_response = ""
+        model_id = None
+        model_name = None
+        response_time_ms = None
+
+        # Tell frontend if this is an artifact response
+        if is_artifact:
+            yield f"event: artifact_hint\ndata: {_json.dumps({'is_artifact': True})}\n\n"
+
+        try:
+            async for event in chat_service.stream_response(
+                question=question_text,
+                history=history,
+                system_prompt=system_prompt,
+            ):
+                yield event
+                # Parse the event to capture the full response for saving
+                if "message_end" in event:
+                    import json
+                    try:
+                        data_start = event.index("data: ") + 6
+                        data = json.loads(event[data_start:].strip())
+                        full_response = data.get("content", "")
+                        model_id = data.get("model_id")
+                        response_time_ms = data.get("response_time_ms")
+                    except (ValueError, json.JSONDecodeError):
+                        pass
+                elif "message_start" in event:
+                    import json
+                    try:
+                        data_start = event.index("data: ") + 6
+                        data = json.loads(event[data_start:].strip())
+                        model_name = data.get("model_name")
+                    except (ValueError, json.JSONDecodeError):
+                        pass
+
+            # Save assistant message to session
+            if full_response:
+                assistant_msg = Message(
+                    role="assistant",
+                    content=full_response,
+                    model_id=model_id,
+                    model_name=model_name,
+                    response_time_ms=response_time_ms,
+                    is_artifact=is_artifact,
+                )
+                session.messages.append(assistant_msg)
+                await repo.update(session)
+
+        except Exception as exc:
+            logger.error(f"Stream error for session {session_id}: {exc}")
+            yield f'event: error\ndata: {{"message": "An error occurred."}}\n\n'
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.get("/{session_id}/file/{message_index}")
+async def download_file(
+    session_id: str,
+    message_index: int,
+    repo: SessionRepository = Depends(get_session_repository),
+    user_id: str = Depends(get_current_user),
+):
+    """Download an attached file from a message."""
+    import base64
+    from fastapi.responses import Response
+
+    session = await repo.get(session_id, user_id=user_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    if message_index < 0 or message_index >= len(session.messages):
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    msg = session.messages[message_index]
+    if not msg.file or not msg.file.data_base64:
+        raise HTTPException(status_code=404, detail="No file attached to this message")
+
+    file_bytes = base64.b64decode(msg.file.data_base64)
+    return Response(
+        content=file_bytes,
+        media_type=msg.file.content_type,
+        headers={"Content-Disposition": f'attachment; filename="{msg.file.filename}"'},
+    )
+
+
+@router.get("/{session_id}/export-docx")
+async def export_session_docx(
+    session_id: str,
+    repo: SessionRepository = Depends(get_session_repository),
+    user_id: str = Depends(get_current_user),
+):
+    """Export a session as a DOCX document."""
+    from fastapi.responses import Response
+    from services.docx_export import session_to_docx
+
+    session = await repo.get(session_id, user_id=user_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    docx_bytes = session_to_docx(session)
+    title_slug = (session.title or "chat")[:30].replace(" ", "-").lower()
+    filename = f"cortex-{title_slug}.docx"
+
+    return Response(
+        content=docx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/{session_id}/message/{message_index}/export-docx")
+async def export_message_docx(
+    session_id: str,
+    message_index: int,
+    repo: SessionRepository = Depends(get_session_repository),
+    user_id: str = Depends(get_current_user),
+):
+    """Export a single message as a DOCX document."""
+    from fastapi.responses import Response
+    from services.docx_export import message_to_docx
+
+    session = await repo.get(session_id, user_id=user_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    if message_index < 0 or message_index >= len(session.messages):
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    msg = session.messages[message_index]
+    docx_bytes = message_to_docx(msg.content, session.title)
+    filename = f"cortex-document.docx"
+
+    return Response(
+        content=docx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.post("/{session_id}/share", response_model=ShareResponse)
@@ -537,26 +491,17 @@ async def share_session(
     repo: SessionRepository = Depends(get_session_repository),
     user_id: str = Depends(get_current_user),
 ):
-    """
-    Share Session
-
-    Generates a public share link for a session. Anyone with the link can view
-    the session in read-only mode without authentication.
-
-    Returns the share token and full URL for sharing.
-    """
+    """Generate a public share link for a session."""
     session = await repo.get(session_id, user_id=user_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    # Generate new share token if not already shared
     if not session.is_shared or not session.share_token:
         session.share_token = secrets.token_urlsafe(16)
         session.is_shared = True
         session.shared_at = datetime.now(timezone.utc).isoformat()
         await repo.update(session)
 
-    # Build share URL from request
     base_url = str(request.base_url).rstrip("/")
     share_url = f"{base_url}/shared/{session.share_token}"
 
@@ -573,122 +518,15 @@ async def unshare_session(
     repo: SessionRepository = Depends(get_session_repository),
     user_id: str = Depends(get_current_user),
 ):
-    """
-    Revoke Session Sharing
-
-    Removes public access to a shared session. The share link will no longer work.
-    """
+    """Revoke public sharing."""
     session = await repo.get(session_id, user_id=user_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
-
-    if not session.is_shared:
-        return {"message": "Session was not shared"}
-
     session.is_shared = False
     session.share_token = None
     session.shared_at = None
     await repo.update(session)
-
     return {"message": "Session sharing revoked"}
-
-
-@router.get("/{session_id}/share-info")
-async def get_share_info(
-    session_id: str,
-    request: Request,
-    repo: SessionRepository = Depends(get_session_repository),
-    user_id: str = Depends(get_current_user),
-):
-    """
-    Get Share Info
-
-    Returns the current sharing status and share URL if the session is shared.
-    """
-    session = await repo.get(session_id, user_id=user_id)
-    if session is None:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    if not session.is_shared or not session.share_token:
-        return {"is_shared": False, "share_token": None, "share_url": None}
-
-    base_url = str(request.base_url).rstrip("/")
-    return {
-        "is_shared": True,
-        "share_token": session.share_token,
-        "share_url": f"{base_url}/shared/{session.share_token}",
-        "shared_at": session.shared_at,
-    }
-
-
-@router.post("/{session_id}/branch", response_model=SessionResponse)
-async def branch_session(
-    session_id: str,
-    request: BranchRequest,
-    repo: SessionRepository = Depends(get_session_repository),
-    user_id: str = Depends(get_current_user),
-):
-    """
-    Branch Session
-
-    Creates a new session that is a fork of an existing session at a specific point.
-    The new session will contain all rounds up to (and including) the specified round index.
-
-    - **from_round_index**: Round index to branch from (0-indexed). If None, branches from current state (all rounds).
-
-    **Use Cases:**
-    - Branch from current state: Explore different paths without losing the original discussion
-    - Branch from specific round: Go back and try a different question at a specific point
-
-    Returns the newly created branched session.
-    """
-    # Get original session
-    original_session = await repo.get(session_id, user_id=user_id)
-    if original_session is None:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    # Determine which rounds to copy
-    from_round_index = request.from_round_index
-    if from_round_index is None:
-        # Branch from current state - copy all rounds
-        rounds_to_copy = original_session.rounds
-        from_round_index = (
-            len(original_session.rounds) - 1 if original_session.rounds else None
-        )
-    else:
-        # Validate round index
-        if from_round_index < 0 or from_round_index >= len(original_session.rounds):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid round index. Session has {len(original_session.rounds)} rounds (0-{len(original_session.rounds) - 1})",
-            )
-        # Copy rounds up to and including the specified index
-        rounds_to_copy = original_session.rounds[: from_round_index + 1]
-
-    # Create new branched session (sanitize title for security)
-    new_session_id = str(uuid.uuid4())
-    original_title = original_session.title or "Untitled"
-    branched_title = sanitize_title(f"{original_title} (Branch)", max_length=200)
-
-    branched_session = CouncilSession(
-        id=new_session_id,
-        user_id=user_id,
-        title=branched_title,
-        rounds=rounds_to_copy,
-        parent_session_id=session_id,
-        branched_from_round=from_round_index,
-        is_deleted=False,
-        is_pinned=False,
-        is_shared=False,
-    )
-
-    # Save branched session
-    await repo.create(branched_session)
-
-    return SessionResponse(
-        session=branched_session,
-        message=f"Session branched successfully from round {from_round_index + 1 if from_round_index is not None else 'current state'}",
-    )
 
 
 @router.delete("s/all")
@@ -698,30 +536,11 @@ async def delete_all_sessions(
     repo: SessionRepository = Depends(get_session_repository),
     user_id: str = Depends(get_current_user),
 ):
-    """
-    Clear All History
-
-    Deletes all chat sessions (soft delete).
-    By default, pinned sessions are preserved.
-
-    **Warning:** This action cannot be undone!
-
-    - **confirm**: Must be True to proceed (safety check)
-    - **include_pinned**: If True, also deletes pinned sessions (default: False)
-    """
+    """Clear all sessions."""
     if not confirm:
-        raise HTTPException(
-            status_code=400, detail="Must set confirm=true to delete all sessions"
-        )
-
+        raise HTTPException(status_code=400, detail="Must set confirm=true")
     deleted_count = await repo.soft_delete_all(include_pinned=include_pinned, user_id=user_id)
-
-    if include_pinned:
-        message = f"All {deleted_count} sessions deleted successfully"
-    else:
-        message = f"{deleted_count} sessions deleted (pinned sessions preserved)"
-
-    return {"message": message, "deleted_count": deleted_count}
+    return {"message": f"{deleted_count} sessions deleted", "deleted_count": deleted_count}
 
 
 @router.post("s/cleanup")
@@ -730,179 +549,51 @@ async def cleanup_old_sessions(
     settings_repo: SettingsRepository = Depends(get_settings_repository),
     user_id: str = Depends(get_current_user),
 ):
-    """
-    Cleanup Old Sessions (Auto-Delete)
-
-    Runs the auto-delete cleanup based on user settings.
-    Deletes sessions older than the configured number of days.
-
-    This endpoint is designed to be called:
-    - Manually by the user
-    - By a cron job or scheduled task
-    - On application startup
-
-    **Requirements:**
-    - User must have `auto_delete_days` configured (30, 60, or 90)
-
-    Pinned sessions are always preserved.
-    Recently-active sessions (updated within the retention period) are also preserved.
-    """
-    # Get user settings
+    """Auto-delete old sessions based on user settings."""
     user_settings = await settings_repo.get(user_id=user_id)
-
-    # Check if auto_delete_days is configured
     if user_settings.auto_delete_days is None:
-        return {
-            "message": "Auto-delete is enabled but no retention period configured",
-            "deleted_count": 0,
-            "skipped": True,
-        }
+        return {"message": "Auto-delete not configured", "deleted_count": 0, "skipped": True}
 
-    # Validate days value — restricted to these options in the Settings UI
     valid_days = [30, 60, 90]
     if user_settings.auto_delete_days not in valid_days:
-        return {
-            "message": f"Invalid auto_delete_days value. Must be one of: {valid_days}",
-            "deleted_count": 0,
-            "skipped": True,
-        }
+        return {"message": "Invalid auto_delete_days", "deleted_count": 0, "skipped": True}
 
-    # Run cleanup (never delete pinned sessions)
     deleted_count = await session_repo.soft_delete_older_than(
         days=user_settings.auto_delete_days, include_pinned=False, user_id=user_id
     )
-
     return {
-        "message": f"Auto-delete completed. {deleted_count} sessions older than {user_settings.auto_delete_days} days deleted.",
+        "message": f"{deleted_count} sessions older than {user_settings.auto_delete_days} days deleted",
         "deleted_count": deleted_count,
-        "retention_days": user_settings.auto_delete_days,
     }
-
-
-@router.post("/{session_id}/stream")
-async def stream_council(
-    session_id: str,
-    request: RunAllRequest = Body(None),
-    repo: SessionRepository = Depends(get_session_repository),
-    settings_repo: SettingsRepository = Depends(get_settings_repository),
-    council_service: CouncilService = Depends(get_council_service),
-    user_id: str = Depends(get_current_user),
-    _rate_limit: None = Depends(check_rate_limit),
-):
-    """
-    Stream Council Process (SSE)
-
-    Same as run-all but streams results via Server-Sent Events with token-level streaming.
-    Tokens arrive as they're generated for a real-time typing effect.
-
-    **Events:**
-    - `step` — progress update
-    - `response_start` / `response_token` / `response_end` — token-level model responses
-    - `synthesis_start` / `synthesis_token` / `synthesis_end` — token-level synthesis
-    - `chat_message_start` / `chat_message_token` / `chat_message_end` — token-level chat
-    - `error_response` — model that failed to respond
-    - `done` — stream complete
-    """
-    from fastapi.responses import StreamingResponse
-
-    session = await repo.get(session_id, user_id=user_id)
-    if session is None:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    if not session.rounds:
-        raise HTTPException(status_code=400, detail="No rounds in session")
-
-    current_round = session.rounds[-1]
-    previous_rounds = session.rounds[:-1] if len(session.rounds) > 1 else None
-    target_model = request.target_model if request else None
-
-    # Load model personas from user settings
-    user_settings = await settings_repo.get(user_id=user_id)
-    personas = user_settings.model_personas if user_settings.model_personas else {}
-
-    async def event_stream():
-        try:
-            if current_round.mode == CouncilMode.CHAT:
-                async for event in council_service.stream_group_chat(
-                    current_round, previous_rounds, target_model=target_model,
-                    personas=personas,
-                ):
-                    yield event
-            elif current_round.mode == CouncilMode.ELI5_LADDER:
-                async for event in council_service.stream_eli5_ladder(
-                    current_round, previous_rounds, personas=personas,
-                ):
-                    yield event
-            else:
-                async for event in council_service.stream_formal_council(
-                    current_round, previous_rounds, personas=personas,
-                ):
-                    yield event
-
-            # Save session after streaming completes
-            await repo.update(session)
-        except Exception as exc:
-            logger.error(f"Stream error for session {session_id}: {exc}")
-            yield f"event: error\ndata: {{\"message\": \"An error occurred during processing.\"}}\n\n"
-
-    return StreamingResponse(
-        event_stream(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
 
 
 @router.get("s/export")
 async def export_sessions(
     format: str = "json",
     include_deleted: bool = False,
-    limit: int = Query(
-        default=1000, ge=1, le=5000, description="Maximum sessions to export"
-    ),
+    limit: int = Query(default=1000, ge=1, le=5000),
     repo: SessionRepository = Depends(get_session_repository),
     user_id: str = Depends(get_current_user),
 ):
-    """
-    Export All Data
-
-    Exports chat sessions in the specified format.
-    Useful for backing up your data or importing into other tools.
-
-    - **format**: Export format - "json" or "markdown" (default: "json")
-    - **include_deleted**: Include soft-deleted sessions (default: False)
-    - **limit**: Maximum number of sessions to export (default: 1000, max: 5000)
-
-    Returns the export data with appropriate Content-Disposition header for download.
-    """
+    """Export sessions as JSON or Markdown."""
     from fastapi.responses import Response
     from services.export import format_as_json, format_as_markdown
 
-    # Validate format
     if format not in ["json", "markdown", "md"]:
-        raise HTTPException(
-            status_code=400, detail="Invalid format. Must be 'json' or 'markdown'"
-        )
-
-    # Normalize format
+        raise HTTPException(status_code=400, detail="Invalid format")
     if format == "md":
         format = "markdown"
 
-    # Get sessions with limit to prevent memory issues
     sessions = await repo.get_all_full(include_deleted=include_deleted, limit=limit, user_id=user_id)
 
-    # Format based on requested type
     if format == "json":
         content = format_as_json(sessions)
         media_type = "application/json"
-        filename = f"llm_council_export_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.json"
-    else:  # markdown
+        filename = f"chat_export_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.json"
+    else:
         content = format_as_markdown(sessions)
         media_type = "text/markdown"
-        filename = f"llm_council_export_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.md"
+        filename = f"chat_export_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.md"
 
     return Response(
         content=content,

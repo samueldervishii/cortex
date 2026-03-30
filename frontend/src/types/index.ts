@@ -1,4 +1,4 @@
-// Shared type definitions for the LLM Council frontend.
+// Shared type definitions for the Cortex frontend.
 // These mirror the backend Pydantic schemas and are used across components.
 
 export interface Model {
