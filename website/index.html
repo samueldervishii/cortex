@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cortex — AI Chat for Students & Researchers</title>
+    <meta
+      name="description"
+      content="A clean, fast AI chat platform powered by Claude. Designed to help students write, research, and build their thesis."
+    />
+    <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- Navigation -->
+    <nav class="nav">
+      <a href="index.html" class="nav-brand">
+        <img src="assets/logo.svg" alt="" />
+        Cortex
+      </a>
+      <div class="nav-links">
+        <a href="about.html">About</a>
+        <a href="personalization.html">Help</a>
+        <a href="usage-policy.html">Usage Policy</a>
+        <a href="https://ai-deliberate.vercel.app/login" class="nav-cta">
+          Try Cortex
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+          >
+            <path d="M5 12h14M12 5l7 7-7 7" />
+          </svg>
+        </a>
+      </div>
+      <button class="nav-toggle" aria-label="Menu">
+        <svg
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+        >
+          <line x1="3" y1="6" x2="21" y2="6" />
+          <line x1="3" y1="12" x2="21" y2="12" />
+          <line x1="3" y1="18" x2="21" y2="18" />
+        </svg>
+      </button>
+    </nav>
+
+    <!-- Hero -->
+    <section class="hero">
+      <div class="hero-left">
+        <h1 class="anim-hero">
+          <span class="anim-word">AI</span>
+          <span class="anim-word"><span class="underline">research</span></span>
+          <span class="anim-word">and</span><br />
+          <span class="anim-word"><span class="underline">writing</span></span>
+          <span class="anim-word">that</span>
+          <span class="anim-word">puts</span><br />
+          <span class="anim-word">students</span>
+          <span class="anim-word">first</span>
+        </h1>
+      </div>
+      <div class="hero-right anim-fade-in" style="--delay: 0.6s">
+        <p>
+          Cortex is a clean, fast AI chat platform powered by Anthropic's
+          Claude. Designed to help students write, research, and build their
+          thesis &mdash; simply, securely, and affordably.
+        </p>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section class="features">
+      <p class="features-label anim-scroll">Features</p>
+      <h2 class="anim-scroll">Everything you need, nothing you don't</h2>
+      <div class="features-grid">
+        <div class="feature-card anim-scroll">
+          <div class="feature-icon">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path
+                d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
+              />
+            </svg>
+          </div>
+          <h3>Real-time Streaming</h3>
+          <p>
+            Responses stream token-by-token as they're generated. No waiting for
+            the full answer &mdash; start reading immediately.
+          </p>
+        </div>
+        <div class="feature-card anim-scroll">
+          <div class="feature-icon">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path
+                d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+              />
+              <polyline points="14 2 14 8 20 8" />
+            </svg>
+          </div>
+          <h3>File Uploads</h3>
+          <p>
+            Upload PDFs, DOCX, and text files directly into your conversation.
+            Cortex extracts and understands the content.
+          </p>
+        </div>
+        <div class="feature-card anim-scroll">
+          <div class="feature-icon">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <path d="M3 9h18" />
+            </svg>
+          </div>
+          <h3>Artifact Generation</h3>
+          <p>
+            Cortex detects when you need a document &mdash; thesis
+            introductions, essays, reports &mdash; and renders them in styled
+            cards with export to DOCX.
+          </p>
+        </div>
+        <div class="feature-card anim-scroll">
+          <div class="feature-icon">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <rect x="3" y="11" width="18" height="11" rx="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+          </div>
+          <h3>Secure by Design</h3>
+          <p>
+            JWT authentication, bcrypt passwords, account lockout, rate
+            limiting, and encrypted file storage. Your data stays yours.
+          </p>
+        </div>
+        <div class="feature-card anim-scroll">
+          <div class="feature-icon">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="3" />
+              <path
+                d="M12 1v6M12 17v6M4.22 4.22l4.24 4.24M15.54 15.54l4.24 4.24M1 12h6M17 12h6M4.22 19.78l4.24-4.24M15.54 8.46l4.24-4.24"
+              />
+            </svg>
+          </div>
+          <h3>Personalized</h3>
+          <p>
+            Set your field of work, communication style, and preferences once.
+            Cortex adapts to you across every conversation.
+          </p>
+        </div>
+        <div class="feature-card anim-scroll">
+          <div class="feature-icon">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+              <polyline points="16 6 12 2 8 6" />
+              <line x1="12" y1="2" x2="12" y2="15" />
+            </svg>
+          </div>
+          <h3>Export Anything</h3>
+          <p>
+            Export individual messages or entire sessions to DOCX. Download all
+            your data as JSON or Markdown anytime.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Highlights -->
+    <section class="highlights">
+      <div class="highlights-grid">
+        <div class="highlight-item anim-scroll">
+          <div class="highlight-value">Claude 4.6</div>
+          <div class="highlight-label">Powered by Anthropic</div>
+        </div>
+        <div class="highlight-item anim-scroll">
+          <div class="highlight-value">SSE</div>
+          <div class="highlight-label">Real-time streaming</div>
+        </div>
+        <div class="highlight-item anim-scroll">
+          <div class="highlight-value">PDF, DOCX</div>
+          <div class="highlight-label">File upload support</div>
+        </div>
+        <div class="highlight-item anim-scroll">
+          <div class="highlight-value">Free</div>
+          <div class="highlight-label">Open source</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="cta-banner">
+      <div class="cta-banner-inner anim-scroll">
+        <div>
+          <h2>Ready to get started?</h2>
+          <p>Create your free account and start chatting in seconds.</p>
+        </div>
+        <a
+          href="https://ai-deliberate.vercel.app/register"
+          class="cta-banner-btn"
+        >
+          Try Cortex
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+          >
+            <path d="M5 12h14M12 5l7 7-7 7" />
+          </svg>
+        </a>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <div class="footer-inner">
+        <a href="index.html" class="footer-brand">
+          <img src="assets/logo.svg" alt="" />
+          Cortex
+        </a>
+        <div class="footer-links">
+          <a href="about.html">About</a>
+          <a href="personalization.html">Help</a>
+          <a href="usage-policy.html">Usage Policy</a>
+          <a
+            href="https://github.com/samueldervishii/cortex"
+            target="_blank"
+            rel="noopener noreferrer"
+            >GitHub</a
+          >
+        </div>
+        <span class="footer-copy"
+          >&copy; 2026 Cortex. Built by Samuel Dervishi.</span
+        >
+      </div>
+    </footer>
+
+    <script>
+      // Scroll-triggered animations
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              entry.target.classList.add("visible");
+              observer.unobserve(entry.target);
+            }
+          });
+        },
+        { threshold: 0.15 },
+      );
+
+      document
+        .querySelectorAll(".anim-scroll")
+        .forEach((el) => observer.observe(el));
+    </script>
+  </body>
+</html>
