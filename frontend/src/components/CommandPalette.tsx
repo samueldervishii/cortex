@@ -9,24 +9,57 @@ import {
   MessageSquare,
   Star,
   Search,
+  type LucideIcon,
 } from 'lucide-react'
 import { apiClient } from '../config/api'
 import './CommandPalette.css'
 
-// Persists across component remounts so reopening the palette doesn't flash "checking"
+interface Session {
+  id: string
+  title?: string
+  question?: string
+  round_count?: number
+  created_at?: string
+  is_pinned?: boolean
+}
+
+interface CommandItem {
+  type: 'action' | 'settings' | 'session'
+  icon: LucideIcon
+  title: string
+  description: string
+  action: () => void
+  isPinned?: boolean
+}
+
+interface CommandPaletteProps {
+  isOpen: boolean
+  onClose: () => void
+  sessions: Session[]
+  onNewChat: () => void
+  onExport: () => void
+  currentSessionId: string | null
+}
+
 let lastKnownStatus = 'checking'
 
-function CommandPalette({ isOpen, onClose, sessions, onNewChat, onExport, currentSessionId }) {
+function CommandPalette({
+  isOpen,
+  onClose,
+  sessions,
+  onNewChat,
+  onExport,
+  currentSessionId,
+}: CommandPaletteProps) {
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
-  const [searchResults, setSearchResults] = useState(null)
+  const [searchResults, setSearchResults] = useState<Session[] | null>(null)
   const [searching, setSearching] = useState(false)
-  const searchTimer = useRef(null)
-  const inputRef = useRef(null)
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
   const navigate = useNavigate()
   const [apiStatus, setApiStatus] = useState(() => lastKnownStatus)
 
-  // Check API health status periodically
   useEffect(() => {
     const checkHealth = async () => {
       try {
@@ -38,13 +71,11 @@ function CommandPalette({ isOpen, onClose, sessions, onNewChat, onExport, curren
         lastKnownStatus = 'unhealthy'
       }
     }
-
     checkHealth()
     const interval = setInterval(checkHealth, 300000)
     return () => clearInterval(interval)
   }, [])
 
-  // Debounced backend search for message content
   useEffect(() => {
     if (searchTimer.current) clearTimeout(searchTimer.current)
     if (!query.trim() || query.trim().length < 3) {
@@ -63,10 +94,11 @@ function CommandPalette({ isOpen, onClose, sessions, onNewChat, onExport, curren
         setSearching(false)
       }
     }, 300)
-    return () => clearTimeout(searchTimer.current)
+    return () => {
+      if (searchTimer.current) clearTimeout(searchTimer.current)
+    }
   }, [query])
 
-  // Focus input when opened
   useEffect(() => {
     if (isOpen) {
       inputRef.current?.focus()
@@ -76,11 +108,9 @@ function CommandPalette({ isOpen, onClose, sessions, onNewChat, onExport, curren
     }
   }, [isOpen])
 
-  // Define all available commands and items
-  const getItems = () => {
-    const items = []
+  const getItems = (): CommandItem[] => {
+    const items: CommandItem[] = []
 
-    // Quick Actions
     items.push({
       type: 'action',
       icon: Plus,
@@ -105,7 +135,6 @@ function CommandPalette({ isOpen, onClose, sessions, onNewChat, onExport, curren
       })
     }
 
-    // Settings sections
     items.push({
       type: 'settings',
       icon: Settings,
@@ -116,7 +145,6 @@ function CommandPalette({ isOpen, onClose, sessions, onNewChat, onExport, curren
         onClose()
       },
     })
-
     items.push({
       type: 'settings',
       icon: Palette,
@@ -127,7 +155,6 @@ function CommandPalette({ isOpen, onClose, sessions, onNewChat, onExport, curren
         onClose()
       },
     })
-
     items.push({
       type: 'settings',
       icon: Info,
@@ -139,10 +166,7 @@ function CommandPalette({ isOpen, onClose, sessions, onNewChat, onExport, curren
       },
     })
 
-    // Chat sessions — when not searching, show only 3 most recent (max 1 day old)
     const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000
-
-    // Use backend search results when available, otherwise local sessions
     const sessionsSource = searchResults && query.trim().length >= 3 ? searchResults : null
     const sessionsToShow = sessionsSource
       ? sessionsSource
@@ -152,8 +176,7 @@ function CommandPalette({ isOpen, onClose, sessions, onNewChat, onExport, curren
             .filter((s) => s.created_at && new Date(s.created_at).getTime() > oneDayAgo)
             .slice(0, 3)
 
-    // Deduplicate by id (search results may overlap with local sessions)
-    const seen = new Set()
+    const seen = new Set<string>()
     sessionsToShow.forEach((session) => {
       if (seen.has(session.id)) return
       seen.add(session.id)
@@ -164,7 +187,7 @@ function CommandPalette({ isOpen, onClose, sessions, onNewChat, onExport, curren
         title: title.length > 60 ? title.substring(0, 60) + '...' : title,
         description: sessionsSource
           ? 'Content match'
-          : `${session.round_count} round${session.round_count > 1 ? 's' : ''}`,
+          : `${session.round_count} round${(session.round_count || 0) > 1 ? 's' : ''}`,
         action: () => {
           navigate(`/sessions/${session.id}`)
           onClose()
@@ -178,19 +201,15 @@ function CommandPalette({ isOpen, onClose, sessions, onNewChat, onExport, curren
 
   const items = getItems()
 
-  // Filter items based on query
   const filteredItems = query.trim()
-    ? items.filter((item) => {
-        const searchText = `${item.title} ${item.description}`.toLowerCase()
-        return searchText.includes(query.toLowerCase())
-      })
+    ? items.filter((item) =>
+        `${item.title} ${item.description}`.toLowerCase().includes(query.toLowerCase())
+      )
     : items
 
-  // Keyboard navigation
   useEffect(() => {
-    const handleKeyDown = (e) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (!isOpen) return
-
       if (e.key === 'ArrowDown') {
         e.preventDefault()
         setSelectedIndex((prev) => (prev + 1) % filteredItems.length)
@@ -199,25 +218,27 @@ function CommandPalette({ isOpen, onClose, sessions, onNewChat, onExport, curren
         setSelectedIndex((prev) => (prev - 1 + filteredItems.length) % filteredItems.length)
       } else if (e.key === 'Enter') {
         e.preventDefault()
-        if (filteredItems[selectedIndex]) {
-          filteredItems[selectedIndex].action()
-        }
+        if (filteredItems[selectedIndex]) filteredItems[selectedIndex].action()
       } else if (e.key === 'Escape') {
         e.preventDefault()
         onClose()
       }
     }
-
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isOpen, filteredItems, selectedIndex, onClose])
 
-  // Reset selected index when query changes
   useEffect(() => {
     setSelectedIndex(0)
   }, [query])
 
   if (!isOpen) return null
+
+  const typeLabels: Record<string, string> = {
+    action: 'Quick Actions',
+    settings: 'Settings',
+    session: 'Chat Sessions',
+  }
 
   return (
     <div className="command-palette-overlay" onClick={onClose}>
@@ -243,21 +264,13 @@ function CommandPalette({ isOpen, onClose, sessions, onNewChat, onExport, curren
             </div>
           ) : (
             <>
-              {/* Group by type */}
-              {['action', 'settings', 'session'].map((type) => {
+              {(['action', 'settings', 'session'] as const).map((type) => {
                 const typeItems = filteredItems.filter((item) => item.type === type)
                 if (typeItems.length === 0) return null
-
-                const typeLabels = {
-                  action: 'Quick Actions',
-                  settings: 'Settings',
-                  session: 'Chat Sessions',
-                }
-
                 return (
                   <div key={type} className="command-palette-group">
                     <div className="command-palette-group-title">{typeLabels[type]}</div>
-                    {typeItems.map((item, index) => {
+                    {typeItems.map((item) => {
                       const globalIndex = filteredItems.indexOf(item)
                       const IconComponent = item.icon
                       return (

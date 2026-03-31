@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import Header, HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-from clients import LLMClient
+from clients import AIClient
 from config import settings
 from core.auth import decode_token
 from db import get_database, SessionRepository, SettingsRepository
@@ -21,7 +21,7 @@ _bearer_scheme = HTTPBearer()
 # creating duplicate instances during startup: the outer `if None` check is
 # fast (no lock), and the inner check under the lock guarantees only one
 # coroutine actually initializes the singleton.
-_llm_client: LLMClient | None = None
+_ai_client: AIClient | None = None
 _session_repository: SessionRepository | None = None
 _settings_repository: SettingsRepository | None = None
 _user_repository: UserRepository | None = None
@@ -91,20 +91,20 @@ async def get_current_user(
     return user_id
 
 
-def get_llm_client() -> LLMClient:
+def get_ai_client() -> AIClient:
     """Get the LLM client dependency."""
-    global _llm_client
-    if _llm_client is None:
-        _llm_client = LLMClient()
-    return _llm_client
+    global _ai_client
+    if _ai_client is None:
+        _ai_client = AIClient()
+    return _ai_client
 
 
-async def close_llm_client() -> None:
+async def close_ai_client() -> None:
     """Close the LLM client and cleanup resources."""
-    global _llm_client
-    if _llm_client is not None:
-        await _llm_client.close()
-        _llm_client = None
+    global _ai_client
+    if _ai_client is not None:
+        await _ai_client.close()
+        _ai_client = None
 
 
 async def verify_api_key(

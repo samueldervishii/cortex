@@ -14,7 +14,6 @@ export const apiClient: AxiosInstance = axios.create({
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
-    ...(API_KEY && { 'X-API-Key': API_KEY }),
   },
 })
 

@@ -4,7 +4,7 @@ import json
 import time
 from typing import AsyncGenerator, List, Optional
 
-from clients import LLMClient
+from clients import AIClient
 from config import CHAT_MODEL
 from core.logging import logger
 
@@ -28,7 +28,7 @@ TOKEN_BATCH_TIMEOUT = 0.05  # max seconds to hold tokens before flushing
 class ChatService:
     """Simple chat service using a single Anthropic model."""
 
-    def __init__(self, client: LLMClient):
+    def __init__(self, client: AIClient):
         self.client = client
 
     def _truncate_history(self, history: List[dict]) -> List[dict]:
@@ -94,7 +94,6 @@ class ChatService:
                 model_id=model["id"],
                 prompt=prompt,
                 system_prompt=system_prompt,
-                provider=model["provider"],
                 max_tokens=8192,
             ):
                 full_response += token

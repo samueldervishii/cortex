@@ -9,7 +9,7 @@ import '../App.css'
 function SettingsPage() {
   const navigate = useNavigate()
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
-  const { sidebarOpen, toggleSidebar, closeSidebarOnMobile } = useOutletContext()
+  const { sidebarOpen, toggleSidebar, closeSidebarOnMobile } = useOutletContext<any>()
   const {
     sessionId,
     sessions,
@@ -19,12 +19,12 @@ function SettingsPage() {
     togglePinSession,
     shareSession,
     exportSession,
-  } = useCouncil()
+  } = useCouncil() as any
 
-  const { theme, toggleTheme } = useTheme()
+  const { theme, toggleTheme } = useTheme() as any
 
   useEffect(() => {
-    const handleKeyDown = (e) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === '/')) {
         e.preventDefault()
         setIsCommandPaletteOpen(true)
@@ -36,15 +36,6 @@ function SettingsPage() {
 
   return (
     <div className="chat-app">
-      <TopBar
-        onNewChat={() => {
-          startNewChat()
-          navigate('/')
-        }}
-        onToggleSidebar={toggleSidebar}
-        onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
-      />
-
       <div className="chat-body">
         {sidebarOpen && (
           <>
@@ -67,6 +58,15 @@ function SettingsPage() {
         )}
 
         <div className="chat-content">
+          <TopBar
+            onNewChat={() => {
+              startNewChat()
+              navigate('/')
+            }}
+            onToggleSidebar={toggleSidebar}
+            onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+            sidebarOpen={sidebarOpen}
+          />
           <Settings theme={theme} onToggleTheme={toggleTheme} />
         </div>
       </div>

@@ -8,12 +8,13 @@ from fastapi.responses import StreamingResponse
 
 logger = logging.getLogger("cortex.sessions")
 
-from clients import LLMClient
+from clients import AIClient
 from core.dependencies import (
     get_session_repository,
     get_settings_repository,
-    get_llm_client,
+    get_ai_client,
     get_current_user,
+    verify_api_key,
 )
 from core.rate_limit import check_rate_limit, user_usage
 from core.sanitization import sanitize_title, sanitize_text
@@ -34,7 +35,7 @@ from services.chat import ChatService
 router = APIRouter(prefix="/session", tags=["sessions"])
 
 
-def get_chat_service(client: LLMClient = Depends(get_llm_client)) -> ChatService:
+def get_chat_service(client: AIClient = Depends(get_ai_client)) -> ChatService:
     return ChatService(client)
 
 
@@ -64,7 +65,7 @@ async def list_sessions(
                 question=s.get("question", ""),
                 status=s.get("status", "completed"),
                 message_count=s.get("message_count", 0),
-                created_at=created_at.isoformat() if created_at else None,
+                created_at=(created_at.isoformat() + "Z") if created_at else None,
                 is_pinned=s.get("is_pinned", False),
             )
         )
@@ -89,7 +90,7 @@ async def search_sessions(
                 question=s.get("question", ""),
                 status="completed",
                 message_count=s.get("message_count", 0),
-                created_at=created_at.isoformat() if created_at else None,
+                created_at=(created_at.isoformat() + "Z") if created_at else None,
                 is_pinned=s.get("is_pinned", False),
             )
         )
@@ -277,6 +278,7 @@ async def stream_response(
     repo: SessionRepository = Depends(get_session_repository),
     chat_service: ChatService = Depends(get_chat_service),
     user_id: str = Depends(get_current_user),
+    _api_key: bool = Depends(verify_api_key),
     _rate_limit: None = Depends(check_rate_limit),
 ):
     """Stream AI response via Server-Sent Events."""

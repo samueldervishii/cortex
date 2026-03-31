@@ -3,11 +3,20 @@ import { useSearchParams } from 'react-router-dom'
 import { FRONTEND_VERSION, apiClient } from '../config/api'
 import './Settings.css'
 
-function Settings({ theme, onToggleTheme }) {
+interface SettingsData {
+  auto_delete_days: number | null
+}
+
+interface SettingsProps {
+  theme: string
+  onToggleTheme: () => void
+}
+
+function Settings({ theme, onToggleTheme }: SettingsProps) {
   const [searchParams, setSearchParams] = useSearchParams()
   const [activeTab, setActiveTab] = useState('general')
 
-  const [settings, setSettings] = useState({ auto_delete_days: null })
+  const [settings, setSettings] = useState<SettingsData>({ auto_delete_days: null })
   const [settingsLoading, setSettingsLoading] = useState(true)
   const [settingsSaved, setSettingsSaved] = useState(false)
 
@@ -30,7 +39,7 @@ function Settings({ theme, onToggleTheme }) {
     }
   }
 
-  const saveSettings = async (updates) => {
+  const saveSettings = async (updates: Partial<SettingsData>) => {
     try {
       const res = await apiClient.patch('/settings', updates)
       setSettings(res.data.settings)
@@ -82,7 +91,7 @@ function Settings({ theme, onToggleTheme }) {
     }
   }, [searchParams])
 
-  const handleTabChange = (tab) => {
+  const handleTabChange = (tab: string) => {
     setActiveTab(tab)
     setSearchParams({ tab })
   }
@@ -142,7 +151,6 @@ function Settings({ theme, onToggleTheme }) {
         {activeTab === 'data' && (
           <div className="settings-section">
             <h2>Data Management</h2>
-
             <div className="settings-option">
               <div className="settings-option-info">
                 <h3>Auto-Delete Old Chats</h3>
@@ -162,7 +170,6 @@ function Settings({ theme, onToggleTheme }) {
                 <option value="90">90 days</option>
               </select>
             </div>
-
             <div className="settings-action">
               <div className="settings-action-info">
                 <h3>Export Data</h3>
@@ -175,7 +182,6 @@ function Settings({ theme, onToggleTheme }) {
                 Export
               </button>
             </div>
-
             <div className="settings-action danger">
               <div className="settings-action-info">
                 <h3>Clear All History</h3>
@@ -195,14 +201,21 @@ function Settings({ theme, onToggleTheme }) {
           <div className="settings-section about-section">
             <div className="about-header">
               <h2>Cortex</h2>
-              <p className="about-tagline">A clean AI chat experience powered by Claude Sonnet 4.6</p>
+              <p className="about-tagline">
+                A clean AI chat experience powered by Claude Sonnet 4.6
+              </p>
               <p className="about-meta">
                 v{FRONTEND_VERSION}
                 {' · '}
-                <a href="https://github.com/samueldervishii/llm-council" target="_blank" rel="noopener noreferrer">GitHub</a>
+                <a
+                  href="https://github.com/samueldervishii/cortex"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  GitHub
+                </a>
               </p>
             </div>
-
             <div className="about-shortcuts">
               <h3>Keyboard Shortcuts</h3>
               <div className="shortcuts-list">

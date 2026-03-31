@@ -22,8 +22,7 @@ async def get_database() -> AsyncIOMotorDatabase:
         async with _db_lock:
             if _database is None:
                 # Pool settings tuned for moderate load (~10-20 concurrent users).
-                # maxPoolSize=20 matches the typical number of parallel LLM calls
-                # during a formal council session (5 models × potential retries).
+                # maxPoolSize=20 handles concurrent API calls with retries.
                 # minPoolSize=5 keeps connections warm to avoid cold-start latency.
                 _client = AsyncIOMotorClient(
                     settings.mongodb_url,

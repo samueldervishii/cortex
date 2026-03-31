@@ -1,4 +1,9 @@
-function KeyboardShortcutsModal({ isOpen, onClose }) {
+interface KeyboardShortcutsModalProps {
+  isOpen: boolean
+  onClose: () => void
+}
+
+function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShortcutsModalProps) {
   if (!isOpen) return null
 
   const shortcuts = [

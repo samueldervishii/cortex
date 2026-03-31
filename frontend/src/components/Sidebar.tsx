@@ -8,8 +8,31 @@ import {
   Search as SearchIcon,
   Settings as SettingsIcon,
   MoreVertical,
+  MessageSquare,
+  SquarePen,
 } from 'lucide-react'
 import { FRONTEND_URL } from '../config/api'
+
+interface Session {
+  id: string
+  title?: string
+  question?: string
+  created_at?: string
+  round_count?: number
+  is_pinned?: boolean
+}
+
+interface SidebarProps {
+  sessions: Session[]
+  currentSessionId: string | null
+  onDeleteSession: (id: string) => Promise<void>
+  onRenameSession: (id: string, title: string) => Promise<void>
+  onTogglePinSession: (id: string) => Promise<void>
+  onShareSession: (id: string) => Promise<{ share_token: string }>
+  onClose: () => void
+  onCloseMobile?: () => void
+  onNewChat: () => void
+}
 
 function Sidebar({
   sessions,
@@ -21,27 +44,30 @@ function Sidebar({
   onClose,
   onCloseMobile,
   onNewChat,
-}) {
+}: SidebarProps) {
   const [shareModal, setShareModal] = useState({ open: false, url: '', loading: false })
-  const [deleteConfirm, setDeleteConfirm] = useState({ open: false, sessionId: null, title: '' })
+  const [deleteConfirm, setDeleteConfirm] = useState({
+    open: false,
+    sessionId: null as string | null,
+    title: '',
+  })
   const [showToast, setShowToast] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
-  const [editingId, setEditingId] = useState(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
-  const [openMenuId, setOpenMenuId] = useState(null)
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [visibleCount, setVisibleCount] = useState(10)
+  const [searchOpen, setSearchOpen] = useState(false)
 
-  const searchInputRef = useRef(null)
-  const editInputRef = useRef(null)
-  const menuRef = useRef(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const editInputRef = useRef<HTMLInputElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
   const location = useLocation()
 
-  // Reset pagination when search changes
   useEffect(() => {
     setVisibleCount(10)
   }, [searchQuery])
 
-  // Filter sessions based on search query
   const filteredSessions = sessions.filter((session) => {
     if (!searchQuery.trim()) return true
     const query = searchQuery.toLowerCase()
@@ -50,14 +76,12 @@ function Sidebar({
     return title.includes(query) || question.includes(query)
   })
 
-  // Separate pinned and unpinned
   const pinnedSessions = filteredSessions.filter((s) => s.is_pinned)
   const recentSessions = filteredSessions.filter((s) => !s.is_pinned)
 
-  // Close menu when clicking outside
   useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setOpenMenuId(null)
       }
     }
@@ -65,9 +89,8 @@ function Sidebar({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Ctrl+F to focus search (only when sidebar is open)
   useEffect(() => {
-    const handleKeyDown = (e) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
         e.preventDefault()
         e.stopPropagation()
@@ -81,31 +104,36 @@ function Sidebar({
     return () => window.removeEventListener('keydown', handleKeyDown, { capture: true })
   }, [searchQuery])
 
-  const toggleMenu = (e, sessionId) => {
+  const toggleMenu = (e: React.MouseEvent, sessionId: string) => {
     e.preventDefault()
     e.stopPropagation()
     setOpenMenuId(openMenuId === sessionId ? null : sessionId)
   }
 
-  const formatDate = (dateString) => {
-    if (!dateString) return ''
-    const date = new Date(dateString)
-    const now = new Date()
-    const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24))
-
-    if (diffDays === 0) return 'Today'
-    if (diffDays === 1) return 'Yesterday'
-    if (diffDays < 7) return `${diffDays} days ago`
-    return date.toLocaleDateString()
-  }
-
-  const truncateQuestion = (question, maxLength = 30) => {
-    if (!question) return 'Empty session'
+  const truncateQuestion = (question?: string, maxLength = 40) => {
+    if (!question) return 'New conversation'
     if (question.length <= maxLength) return question
     return question.substring(0, maxLength) + '...'
   }
 
-  const handleShare = async (e, sessionId) => {
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return ''
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMs / 3600000)
+    const diffDays = Math.floor(diffMs / 86400000)
+
+    if (diffMins < 1) return 'Just now'
+    if (diffMins < 60) return `${diffMins}m ago`
+    if (diffHours < 24) return `${diffHours}h ago`
+    if (diffDays === 1) return 'Yesterday'
+    if (diffDays < 7) return `${diffDays}d ago`
+    return date.toLocaleDateString()
+  }
+
+  const handleShare = async (e: React.MouseEvent, sessionId: string) => {
     e.preventDefault()
     e.stopPropagation()
     setShareModal({ open: true, url: '', loading: true })
@@ -113,7 +141,7 @@ function Sidebar({
       const data = await onShareSession(sessionId)
       const frontendUrl = `${FRONTEND_URL}/shared/${data.share_token}`
       setShareModal({ open: true, url: frontendUrl, loading: false })
-    } catch (error) {
+    } catch {
       setShareModal({ open: false, url: '', loading: false })
     }
   }
@@ -124,7 +152,7 @@ function Sidebar({
     setTimeout(() => setShowToast(false), 2000)
   }
 
-  const startEditing = (e, session) => {
+  const startEditing = (e: React.MouseEvent, session: Session) => {
     e.preventDefault()
     e.stopPropagation()
     setEditingId(session.id)
@@ -132,9 +160,8 @@ function Sidebar({
     setTimeout(() => editInputRef.current?.focus(), 0)
   }
 
-  const saveEdit = async (e) => {
+  const saveEdit = async (e?: React.FocusEvent | React.MouseEvent) => {
     e?.preventDefault()
-    e?.stopPropagation()
     if (editingId && editTitle.trim()) {
       await onRenameSession(editingId, editTitle.trim())
     }
@@ -142,28 +169,27 @@ function Sidebar({
     setEditTitle('')
   }
 
-  const cancelEdit = (e) => {
+  const cancelEdit = (e?: React.MouseEvent) => {
     e?.preventDefault()
-    e?.stopPropagation()
     setEditingId(null)
     setEditTitle('')
   }
 
-  const handleEditKeyDown = (e) => {
+  const handleEditKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
-      saveEdit(e)
+      saveEdit()
     } else if (e.key === 'Escape') {
-      cancelEdit(e)
+      cancelEdit()
     }
   }
 
-  const handlePin = async (e, sessionId) => {
+  const handlePin = async (e: React.MouseEvent, sessionId: string) => {
     e.preventDefault()
     e.stopPropagation()
     await onTogglePinSession(sessionId)
   }
 
-  const confirmDelete = (e, session) => {
+  const confirmDelete = (e: React.MouseEvent, session: Session) => {
     e.preventDefault()
     e.stopPropagation()
     setDeleteConfirm({
@@ -184,7 +210,7 @@ function Sidebar({
     setDeleteConfirm({ open: false, sessionId: null, title: '' })
   }
 
-  const renderSessionItem = (session) => (
+  const renderSessionItem = (session: Session) => (
     <Link
       key={session.id}
       to={`/sessions/${session.id}`}
@@ -212,12 +238,10 @@ function Sidebar({
         ) : (
           <>
             <div className="session-name">
-              {truncateQuestion(session.title || session.question)}
+              <MessageSquare size={14} />
+              <span>{truncateQuestion(session.title || session.question)}</span>
             </div>
-            <div className="session-meta">
-              {formatDate(session.created_at)} - {session.round_count}{' '}
-              {session.round_count === 1 ? 'round' : 'rounds'}
-            </div>
+            <div className="session-date">{formatDate(session.created_at)}</div>
           </>
         )}
       </div>
@@ -228,7 +252,7 @@ function Sidebar({
             onClick={(e) => toggleMenu(e, session.id)}
             title="More options"
           >
-            <MoreVertical size={16} />
+            <MoreVertical size={14} />
           </button>
           {openMenuId === session.id && (
             <div className="session-menu-dropdown">
@@ -278,49 +302,93 @@ function Sidebar({
 
   return (
     <div className="sidebar">
-      <div className="sidebar-header">
-        <h2>
-          Chat History <span className="session-count">({sessions.length})</span>
-        </h2>
+      <div className="sidebar-brand">
+        <div className="sidebar-logo">
+          <img src="/logo.svg" alt="Cortex" className="sidebar-logo-icon" />
+          {/* <span>Cortex</span> */}
+        </div>
+        <button className="sidebar-toggle-btn" onClick={onClose} title="Close sidebar">
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          >
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <line x1="9" y1="3" x2="9" y2="21" />
+          </svg>
+        </button>
       </div>
 
-      <button
-        className="sidebar-new-chat"
-        onClick={() => {
-          onNewChat()
-          onCloseMobile?.()
-        }}
-      >
-        + New Chat
-      </button>
-
-      <div className="sidebar-search">
-        <SearchIcon size={14} />
-        <input
-          ref={searchInputRef}
-          type="text"
-          placeholder="Search chats... (Ctrl+F)"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
-        {searchQuery && (
-          <button className="search-clear" onClick={() => setSearchQuery('')}>
-            <X size={14} />
-          </button>
-        )}
+      <div className="sidebar-nav">
+        <button
+          className="sidebar-nav-item"
+          onClick={() => {
+            onNewChat()
+            onCloseMobile?.()
+          }}
+        >
+          <SquarePen size={16} />
+          <span>New chat</span>
+          <kbd className="sidebar-nav-shortcut">Alt+N</kbd>
+        </button>
+        <button
+          className="sidebar-nav-item"
+          onClick={() => {
+            setSearchOpen(true)
+            setTimeout(() => searchInputRef.current?.focus(), 50)
+          }}
+        >
+          <SearchIcon size={16} />
+          <span>Search chats</span>
+        </button>
       </div>
+
+      {searchOpen && (
+        <div className="sidebar-search visible">
+          <SearchIcon size={14} />
+          <input
+            ref={searchInputRef}
+            type="text"
+            placeholder="Search..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onBlur={() => {
+              if (!searchQuery) {
+                setTimeout(() => setSearchOpen(false), 150)
+              }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                setSearchQuery('')
+                setSearchOpen(false)
+              }
+            }}
+          />
+          {searchQuery && (
+            <button className="search-clear" onClick={() => setSearchQuery('')}>
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className="sidebar-divider" />
 
       <div className="sidebar-sessions">
         {filteredSessions.length === 0 ? (
           <p className="sidebar-empty">
-            {searchQuery ? `No results for '${searchQuery}'` : 'No chat history yet'}
+            {searchQuery ? `No results for "${searchQuery}"` : 'No conversations yet'}
           </p>
         ) : (
           <>
             {pinnedSessions.length > 0 && (
               <>
                 <div className="sidebar-section-header">
-                  <Pin size={12} fill="currentColor" />
+                  <Pin size={11} fill="currentColor" />
                   <span>Pinned</span>
                 </div>
                 {pinnedSessions.map((session) => renderSessionItem(session))}

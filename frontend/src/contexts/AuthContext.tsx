@@ -40,7 +40,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const logout = useCallback(() => {
-    clearTokens()
+    // Clear everything from localStorage
+    localStorage.clear()
+    document.documentElement.setAttribute('data-theme', 'light')
     setUser(null)
   }, [])
 

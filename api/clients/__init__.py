@@ -1,3 +1,3 @@
-from .llm_client import LLMClient
+from .ai_client import AIClient
 
-__all__ = ["LLMClient"]
+__all__ = ["AIClient"]

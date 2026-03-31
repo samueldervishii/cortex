@@ -3,19 +3,41 @@ import { useNavigate } from 'react-router-dom'
 import { apiClient, FRONTEND_VERSION } from '../config/api'
 import '../App.css'
 
+interface Check {
+  status: string
+  detail: string
+}
+
+interface Provider {
+  configured: boolean
+  models: string[]
+}
+
+interface StatusData {
+  overall_status: string
+  checks: Record<string, Check>
+  providers: Record<string, Provider>
+  models?: {
+    chat_model?: {
+      name: string
+      provider: string
+    }
+  }
+}
+
 function StatusPage() {
   const navigate = useNavigate()
-  const [statusData, setStatusData] = useState(null)
+  const [statusData, setStatusData] = useState<StatusData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [lastChecked, setLastChecked] = useState(null)
+  const [error, setError] = useState<string | null>(null)
+  const [lastChecked, setLastChecked] = useState<Date | null>(null)
 
   const fetchStatus = useCallback(async () => {
     try {
       const res = await apiClient.get('/status')
       setStatusData(res.data)
       setError(null)
-    } catch (err) {
+    } catch (err: any) {
       setError(err.response?.data?.detail || 'Unable to reach API server')
       setStatusData(null)
     } finally {
@@ -30,7 +52,7 @@ function StatusPage() {
     return () => clearInterval(interval)
   }, [fetchStatus])
 
-  const getStatusIcon = (status) => {
+  const getStatusIcon = (status: string) => {
     switch (status) {
       case 'operational':
         return <span className="status-page-icon operational">&#x25CF;</span>

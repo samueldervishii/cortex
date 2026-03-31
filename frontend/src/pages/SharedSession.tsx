@@ -1,15 +1,24 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { apiClient, FRONTEND_VERSION } from '../config/api'
+import { apiClient } from '../config/api'
 import { ChatMessages, ChatSkeleton } from '../components'
 import { loadMessagesFromSession } from '../utils'
 import '../App.css'
 
+interface SharedMessage {
+  role: 'user' | 'assistant' | 'error'
+  content: string
+  modelName?: string
+  responseTime?: number
+  file?: { filename: string }
+  isArtifact?: boolean
+}
+
 function SharedSession() {
   const { shareToken } = useParams()
-  const [messages, setMessages] = useState([])
+  const [messages, setMessages] = useState<SharedMessage[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const [error, setError] = useState<string | null>(null)
   const [sessionTitle, setSessionTitle] = useState('')
 
   useEffect(() => {
@@ -18,9 +27,8 @@ function SharedSession() {
         setLoading(true)
         const res = await apiClient.get(`/shared/${shareToken}`)
         const session = res.data.session
-
         setSessionTitle(session.title || 'Shared Session')
-        setMessages(loadMessagesFromSession(session))
+        setMessages(loadMessagesFromSession(session) as SharedMessage[])
       } catch (err) {
         console.error('Error loading shared session:', err)
         setError('This shared session is not available or has been revoked.')
@@ -28,7 +36,6 @@ function SharedSession() {
         setLoading(false)
       }
     }
-
     loadSharedSession()
   }, [shareToken])
 
@@ -101,14 +108,6 @@ function SharedSession() {
         onSubmit={() => {}}
         readOnly={true}
       />
-
-      {/* <div className="shared-footer">
-        <span>v{FRONTEND_VERSION}</span>
-        <span>|</span>
-        <a href="https://llm-council-docs.netlify.app/" target="_blank" rel="noopener noreferrer">
-          Documentation
-        </a>
-      </div> */}
     </div>
   )
 }

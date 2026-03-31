@@ -12,14 +12,13 @@ import {
 import KeyboardShortcutsModal from './components/KeyboardShortcutsModal'
 import useCouncil from './hooks/useCouncil'
 import useTheme from './hooks/useTheme'
-import { apiClient } from './config/api'
 import './App.css'
 
 function App() {
   const { sessionId: urlSessionId } = useParams()
   const navigate = useNavigate()
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
-  const { sidebarOpen, toggleSidebar, closeSidebarOnMobile } = useOutletContext()
+  const { sidebarOpen, toggleSidebar, closeSidebarOnMobile } = useOutletContext<any>()
   const {
     question,
     setQuestion,
@@ -40,12 +39,11 @@ function App() {
     exportSession,
     sessionLoadError,
     isLoadingSession,
-  } = useCouncil()
+  } = useCouncil() as any
 
-  const { theme, toggleTheme } = useTheme()
+  const { theme, toggleTheme } = useTheme() as any
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
 
-  // Load user settings on mount and trigger auto-delete cleanup
   useEffect(() => {
     const runAutoDeleteCleanup = async () => {
       try {
@@ -54,9 +52,9 @@ function App() {
         if (lastCleanup && Date.now() - parseInt(lastCleanup, 10) < oneDayMs) {
           return
         }
-        await apiClient.post('/sessions/cleanup')
+        await (await import('./config/api')).apiClient.post('/sessions/cleanup')
         localStorage.setItem('lastAutoDeleteCleanup', Date.now().toString())
-      } catch (error) {
+      } catch (error: any) {
         console.debug('Auto-delete cleanup:', error.response?.data?.message || 'skipped')
       }
     }
@@ -68,16 +66,14 @@ function App() {
     navigate('/')
   }
 
-  // Load session from URL if present
   useEffect(() => {
     if (urlSessionId && urlSessionId !== sessionId) {
       loadSession(urlSessionId)
     }
   }, [urlSessionId])
 
-  // Global keyboard shortcuts
   useEffect(() => {
-    const handleKeyDown = (e) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault()
         setIsCommandPaletteOpen(true)
@@ -106,7 +102,7 @@ function App() {
         !e.ctrlKey &&
         !e.metaKey &&
         !e.altKey &&
-        !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)
+        !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName || '')
       ) {
         e.preventDefault()
         setShortcutsOpen(true)
@@ -118,12 +114,6 @@ function App() {
 
   return (
     <div className="chat-app">
-      <TopBar
-        onNewChat={handleNewChat}
-        onToggleSidebar={toggleSidebar}
-        onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
-      />
-
       <div className="chat-body">
         {sidebarOpen && (
           <>
@@ -143,6 +133,12 @@ function App() {
         )}
 
         <div className="chat-content">
+          <TopBar
+            onNewChat={handleNewChat}
+            onToggleSidebar={toggleSidebar}
+            onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+            sidebarOpen={sidebarOpen}
+          />
           {isLoadingSession ? (
             <ChatSkeleton />
           ) : sessionLoadError ? (

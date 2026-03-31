@@ -145,7 +145,7 @@ async def get_me(
         email=user["email"],
         display_name=user.get("display_name", ""),
         username=user.get("username", ""),
-        created_at=user["created_at"].isoformat(),
+        created_at=user["created_at"].isoformat() + "Z",
     )
 
 
@@ -179,7 +179,7 @@ async def update_profile(
         email=user["email"],
         display_name=user.get("display_name", ""),
         username=user.get("username", ""),
-        created_at=user["created_at"].isoformat(),
+        created_at=user["created_at"].isoformat() + "Z",
     )
 
 

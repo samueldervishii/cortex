@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, Response, status
 from db import get_database
 from config import CHAT_MODEL, settings
 from core.circuit_breaker import get_circuit_breaker_status
-from core.dependencies import verify_api_key, get_current_user
+from core.dependencies import get_current_user
 
 router = APIRouter(tags=["health"])
 
@@ -120,16 +120,3 @@ async def status_check(
     return result
 
 
-@router.get("/metrics")
-async def metrics_endpoint(_auth: bool = Depends(verify_api_key)):
-    """Prometheus Metrics Endpoint. Requires authentication."""
-    try:
-        from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
-
-        metrics = generate_latest()
-        return Response(content=metrics, media_type=CONTENT_TYPE_LATEST)
-    except ImportError:
-        return {
-            "error": "Prometheus client not installed",
-            "message": "Install prometheus-client to enable metrics",
-        }

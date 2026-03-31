@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { apiClient, API_BASE, getAccessToken } from '../config/api'
+import { apiClient, API_BASE, API_KEY, getAccessToken } from '../config/api'
 
 /**
  * Parse SSE events from a ReadableStream.
@@ -224,6 +224,7 @@ function useCouncil() {
     const headers = { 'Content-Type': 'application/json' }
     const token = getAccessToken()
     if (token) headers['Authorization'] = `Bearer ${token}`
+    if (API_KEY) headers['X-API-Key'] = API_KEY
 
     const response = await fetch(`${API_BASE}/session/${currentSessionId}/stream`, {
       method: 'POST',

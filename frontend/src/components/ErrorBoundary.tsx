@@ -1,20 +1,29 @@
-import { Component } from 'react'
+import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { AlertCircle, RefreshCw, RotateCcw } from 'lucide-react'
 import './ErrorBoundary.css'
 
-class ErrorBoundary extends Component {
-  constructor(props) {
+interface Props {
+  children: ReactNode
+}
+
+interface State {
+  hasError: boolean
+  error: Error | null
+  errorInfo: ErrorInfo | null
+}
+
+class ErrorBoundary extends Component<Props, State> {
+  constructor(props: Props) {
     super(props)
     this.state = { hasError: false, error: null, errorInfo: null }
   }
 
-  static getDerivedStateFromError(error) {
+  static getDerivedStateFromError(error: Error): Partial<State> {
     return { hasError: true, error }
   }
 
-  componentDidCatch(error, errorInfo) {
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     this.setState({ errorInfo })
-    // Log error to console in development
     console.error('ErrorBoundary caught an error:', error, errorInfo)
   }
 
@@ -37,7 +46,7 @@ class ErrorBoundary extends Component {
             <h1>Something went wrong</h1>
             <p>An unexpected error occurred. Please try again or reload the page.</p>
 
-            {process.env.NODE_ENV === 'development' && this.state.error && (
+            {import.meta.env.DEV && this.state.error && (
               <details className="error-details">
                 <summary>Error Details</summary>
                 <pre>{this.state.error.toString()}</pre>

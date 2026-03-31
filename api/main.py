@@ -14,7 +14,7 @@ from core import setup_logging
 from core.dependencies import (
     get_session_repository,
     get_settings_repository,
-    close_llm_client,
+    close_ai_client,
 )
 from core.metrics import init_metrics, track_request
 from db import get_database, close_database, ensure_indexes
@@ -146,7 +146,7 @@ async def lifespan(_app: FastAPI):
             pass
 
     # Close HTTP clients gracefully
-    await close_llm_client()
+    await close_ai_client()
     logger.info("LLM client closed")
 
     # Close database connection

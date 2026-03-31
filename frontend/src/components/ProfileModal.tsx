@@ -1,14 +1,19 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 
-function ProfileModal({ isOpen, onClose, onToast }) {
-  const { user, updateProfile, changePassword, deleteAccount } = useAuth()
+interface ProfileModalProps {
+  isOpen: boolean
+  onClose: () => void
+  onToast?: (message: string) => void
+}
+
+function ProfileModal({ isOpen, onClose, onToast }: ProfileModalProps) {
+  const { user, updateProfile, changePassword, deleteAccount } = useAuth() as any
   const [displayName, setDisplayName] = useState('')
   const [username, setUsername] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  // Password change
   const [showPasswordSection, setShowPasswordSection] = useState(false)
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -16,7 +21,6 @@ function ProfileModal({ isOpen, onClose, onToast }) {
   const [passwordError, setPasswordError] = useState('')
   const [changingPassword, setChangingPassword] = useState(false)
 
-  // Delete account
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deletePassword, setDeletePassword] = useState('')
   const [deleteError, setDeleteError] = useState('')
@@ -44,7 +48,7 @@ function ProfileModal({ isOpen, onClose, onToast }) {
     .split(/[\s@]/)
     .filter(Boolean)
     .slice(0, 2)
-    .map((s) => s[0].toUpperCase())
+    .map((s: string) => s[0].toUpperCase())
     .join('')
 
   const handleSave = async () => {
@@ -54,7 +58,7 @@ function ProfileModal({ isOpen, onClose, onToast }) {
       await updateProfile(displayName.trim(), username.trim())
       onToast?.('Profile updated')
       onClose()
-    } catch (err) {
+    } catch (err: any) {
       const msg = err?.response?.data?.detail
       setError(msg || 'Failed to save profile')
     } finally {
@@ -80,7 +84,7 @@ function ProfileModal({ isOpen, onClose, onToast }) {
       setNewPassword('')
       setConfirmPassword('')
       onToast?.('Password changed')
-    } catch (err) {
+    } catch (err: any) {
       const msg = err?.response?.data?.detail
       setPasswordError(msg || 'Failed to change password')
     } finally {
@@ -93,7 +97,7 @@ function ProfileModal({ isOpen, onClose, onToast }) {
     setDeleting(true)
     try {
       await deleteAccount(deletePassword)
-    } catch (err) {
+    } catch (err: any) {
       const msg = err?.response?.data?.detail
       setDeleteError(msg || 'Failed to delete account')
       setDeleting(false)
@@ -151,7 +155,6 @@ function ProfileModal({ isOpen, onClose, onToast }) {
             </button>
           </div>
 
-          {/* Password Change Section */}
           <div className="profile-divider" />
 
           {!showPasswordSection ? (
@@ -210,7 +213,6 @@ function ProfileModal({ isOpen, onClose, onToast }) {
             </div>
           )}
 
-          {/* Delete Account Section */}
           <div className="profile-divider" />
 
           {!showDeleteConfirm ? (

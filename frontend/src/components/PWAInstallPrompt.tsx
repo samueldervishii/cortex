@@ -1,34 +1,35 @@
 import { useState, useEffect } from 'react'
 import { Download, X } from 'lucide-react'
 
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
+}
+
 export default function PWAInstallPrompt() {
-  const [deferredPrompt, setDeferredPrompt] = useState(null)
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const [showPrompt, setShowPrompt] = useState(false)
   const [isInstalled, setIsInstalled] = useState(false)
 
   useEffect(() => {
-    // Check if already installed
     if (window.matchMedia('(display-mode: standalone)').matches) {
       setIsInstalled(true)
       return
     }
 
-    // Check if user dismissed the prompt before
     const dismissed = localStorage.getItem('pwa-install-dismissed')
     if (dismissed) {
       const dismissedTime = new Date(dismissed).getTime()
       const now = new Date().getTime()
       const daysSinceDismissed = (now - dismissedTime) / (1000 * 60 * 60 * 24)
-      // Show again after 7 days
       if (daysSinceDismissed < 7) {
         return
       }
     }
 
-    const handleBeforeInstallPrompt = (e) => {
+    const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault()
-      setDeferredPrompt(e)
-      // Show prompt after a short delay for better UX
+      setDeferredPrompt(e as BeforeInstallPromptEvent)
       setTimeout(() => setShowPrompt(true), 2000)
     }
 
@@ -49,10 +50,8 @@ export default function PWAInstallPrompt() {
 
   const handleInstall = async () => {
     if (!deferredPrompt) return
-
     deferredPrompt.prompt()
     const { outcome } = await deferredPrompt.userChoice
-
     if (outcome === 'accepted') {
       setShowPrompt(false)
     }

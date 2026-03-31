@@ -10,5 +10,7 @@ interface ChatInputProps {
   centered?: boolean
 }
 
-declare const ChatInput: React.ForwardRefExoticComponent<ChatInputProps & React.RefAttributes<{ focus: () => void }>>
+declare const ChatInput: React.ForwardRefExoticComponent<
+  ChatInputProps & React.RefAttributes<{ focus: () => void }>
+>
 export default ChatInput

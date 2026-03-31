@@ -10,7 +10,6 @@ function Layout() {
 
   useEffect(() => {
     localStorage.setItem('cortex-sidebar', sidebarOpen ? 'open' : 'closed')
-    // Prevent background scroll on mobile when sidebar is open
     if (sidebarOpen && window.innerWidth <= MOBILE_BREAKPOINT) {
       document.body.classList.add('sidebar-open')
     } else {
@@ -23,7 +22,6 @@ function Layout() {
     setSidebarOpen((prev) => !prev)
   }, [])
 
-  // Close sidebar only on mobile-width screens (used after navigation actions)
   const closeSidebarOnMobile = useCallback(() => {
     if (window.innerWidth <= MOBILE_BREAKPOINT) {
       setSidebarOpen(false)
