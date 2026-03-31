@@ -1,148 +1,182 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>About — Cortex</title>
-  <meta name="description" content="Learn about Cortex — a clean AI chat platform built to help students research and write their thesis.">
-  <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-
-  <!-- Navigation -->
-  <nav class="nav">
-    <a href="index.html" class="nav-brand">
-      <img src="assets/logo.svg" alt="">
-      Cortex
-    </a>
-    <div class="nav-links">
-      <a href="about.html">About</a>
-      <a href="personalization.html">Help</a>
-      <a href="usage-policy.html">Usage Policy</a>
-      <a href="https://cortex-al-app.vercel.app/login" class="nav-cta">
-        Try Cortex
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-          <path d="M5 12h14M12 5l7 7-7 7"/>
-        </svg>
-      </a>
-    </div>
-    <button class="nav-toggle" aria-label="Menu">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-        <line x1="3" y1="6" x2="21" y2="6"/>
-        <line x1="3" y1="12" x2="21" y2="12"/>
-        <line x1="3" y1="18" x2="21" y2="18"/>
-      </svg>
-    </button>
-  </nav>
-
-  <!-- Hero -->
-  <section class="about-hero">
-    <h1>AI chat that helps you<br>think and write better</h1>
-    <p>
-      Cortex is a clean, focused AI chat platform designed specifically for students
-      and researchers. No clutter, no complexity &mdash; just a powerful conversation
-      with one of the best AI models available, at a price that works for everyone.
-    </p>
-  </section>
-
-  <!-- Content -->
-  <section class="about-content">
-    <div class="about-grid">
-      <div class="about-card">
-        <h3>Why Cortex?</h3>
-        <p>
-          Premium AI assistants cost $20/month or more. For students in many parts of
-          the world, that's out of reach. Cortex provides access to Anthropic's Claude &mdash;
-          one of the most capable AI models &mdash; through a clean, purpose-built interface
-          at an accessible price point.
-        </p>
-      </div>
-      <div class="about-card">
-        <h3>Built for Academics</h3>
-        <p>
-          From thesis outlines to literature reviews, Cortex understands the academic workflow.
-          Upload your research papers, get structured feedback, export polished documents
-          in DOCX &mdash; all in one place.
-        </p>
-      </div>
-      <div class="about-card">
-        <h3>Privacy First</h3>
-        <p>
-          Your conversations are yours. Encrypted storage, secure authentication,
-          and the ability to export or delete all your data at any time.
-          No tracking, no data selling, no surprises.
-        </p>
-      </div>
-      <div class="about-card">
-        <h3>Open Source</h3>
-        <p>
-          Cortex is fully open source. Inspect the code, contribute improvements,
-          or self-host your own instance. Transparency isn't a feature &mdash; it's
-          the foundation.
-        </p>
-      </div>
-    </div>
-
-    <div class="about-grid">
-      <div class="about-card">
-        <h3>The Stack</h3>
-        <ul>
-          <li><strong>Frontend</strong> &mdash; React + Vite + TypeScript</li>
-          <li><strong>Backend</strong> &mdash; FastAPI (Python, async)</li>
-          <li><strong>Database</strong> &mdash; MongoDB Atlas</li>
-          <li><strong>AI</strong> &mdash; Anthropic Claude Sonnet 4.6</li>
-          <li><strong>Auth</strong> &mdash; JWT + bcrypt + refresh tokens</li>
-          <li><strong>Streaming</strong> &mdash; Server-Sent Events (SSE)</li>
-        </ul>
-      </div>
-      <div class="about-card">
-        <h3>Key Features</h3>
-        <ul>
-          <li>Real-time token streaming</li>
-          <li>PDF, DOCX, TXT file uploads</li>
-          <li>Artifact detection &amp; DOCX export</li>
-          <li>Session sharing via unique links</li>
-          <li>Profile personalization</li>
-          <li>Auto-generated identicon avatars</li>
-          <li>Keyboard shortcuts &amp; command palette</li>
-        </ul>
-      </div>
-    </div>
-  </section>
-
-  <!-- CTA -->
-  <section class="cta-banner">
-    <div class="cta-banner-inner">
-      <div>
-        <h2>Ready to get started?</h2>
-        <p>Create your free account and start chatting in seconds.</p>
-      </div>
-      <a href="https://cortex-al-app.vercel.app/register" class="cta-banner-btn">
-        Try Cortex
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-          <path d="M5 12h14M12 5l7 7-7 7"/>
-        </svg>
-      </a>
-    </div>
-  </section>
-
-  <!-- Footer -->
-  <footer class="footer">
-    <div class="footer-inner">
-      <a href="index.html" class="footer-brand">
-        <img src="assets/logo.svg" alt="">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>About — Cortex</title>
+    <meta
+      name="description"
+      content="Learn about Cortex — a clean AI chat platform built to help students research and write their thesis."
+    />
+    <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- Navigation -->
+    <nav class="nav">
+      <a href="index.html" class="nav-brand">
+        <img src="assets/logo.svg" alt="" />
         Cortex
       </a>
-      <div class="footer-links">
+      <div class="nav-links">
         <a href="about.html">About</a>
         <a href="personalization.html">Help</a>
         <a href="usage-policy.html">Usage Policy</a>
-        <a href="https://github.com/samueldervishii/cortex" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a href="https://cortex-al-app.vercel.app/login" class="nav-cta">
+          Try Cortex
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+          >
+            <path d="M5 12h14M12 5l7 7-7 7" />
+          </svg>
+        </a>
       </div>
-      <span class="footer-copy">&copy; 2026 Cortex. Built by Samuel Dervishi.</span>
-    </div>
-  </footer>
+      <button class="nav-toggle" aria-label="Menu">
+        <svg
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+        >
+          <line x1="3" y1="6" x2="21" y2="6" />
+          <line x1="3" y1="12" x2="21" y2="12" />
+          <line x1="3" y1="18" x2="21" y2="18" />
+        </svg>
+      </button>
+    </nav>
 
-</body>
+    <!-- Hero -->
+    <section class="about-hero">
+      <h1>AI chat that helps you<br />think and write better</h1>
+      <p>
+        Cortex is a clean, focused AI chat platform designed specifically for
+        students and researchers. No clutter, no complexity &mdash; just a
+        powerful conversation with one of the best AI models available, at a
+        price that works for everyone.
+      </p>
+    </section>
+
+    <!-- Content -->
+    <section class="about-content">
+      <div class="about-grid">
+        <div class="about-card">
+          <h3>Why Cortex?</h3>
+          <p>
+            Premium AI assistants cost $20/month or more. For students in many
+            parts of the world, that's out of reach. Cortex provides access to
+            Anthropic's Claude &mdash; one of the most capable AI models &mdash;
+            through a clean, purpose-built interface at an accessible price
+            point.
+          </p>
+        </div>
+        <div class="about-card">
+          <h3>Built for Academics</h3>
+          <p>
+            From thesis outlines to literature reviews, Cortex understands the
+            academic workflow. Upload your research papers, get structured
+            feedback, export polished documents in DOCX &mdash; all in one
+            place.
+          </p>
+        </div>
+        <div class="about-card">
+          <h3>Privacy First</h3>
+          <p>
+            Your conversations are yours. Encrypted storage, secure
+            authentication, and the ability to export or delete all your data at
+            any time. No tracking, no data selling, no surprises.
+          </p>
+        </div>
+        <div class="about-card">
+          <h3>Open Source</h3>
+          <p>
+            Cortex is fully open source. Inspect the code, contribute
+            improvements, or self-host your own instance. Transparency isn't a
+            feature &mdash; it's the foundation.
+          </p>
+        </div>
+      </div>
+
+      <div class="about-grid">
+        <div class="about-card">
+          <h3>The Stack</h3>
+          <ul>
+            <li><strong>Frontend</strong> &mdash; React + Vite + TypeScript</li>
+            <li><strong>Backend</strong> &mdash; FastAPI (Python, async)</li>
+            <li><strong>Database</strong> &mdash; MongoDB Atlas</li>
+            <li><strong>AI</strong> &mdash; Anthropic Claude Sonnet 4.6</li>
+            <li><strong>Auth</strong> &mdash; JWT + bcrypt + refresh tokens</li>
+            <li><strong>Streaming</strong> &mdash; Server-Sent Events (SSE)</li>
+          </ul>
+        </div>
+        <div class="about-card">
+          <h3>Key Features</h3>
+          <ul>
+            <li>Real-time token streaming</li>
+            <li>PDF, DOCX, TXT file uploads</li>
+            <li>Artifact detection &amp; DOCX export</li>
+            <li>Session sharing via unique links</li>
+            <li>Profile personalization</li>
+            <li>Auto-generated identicon avatars</li>
+            <li>Keyboard shortcuts &amp; command palette</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="cta-banner">
+      <div class="cta-banner-inner">
+        <div>
+          <h2>Ready to get started?</h2>
+          <p>Create your free account and start chatting in seconds.</p>
+        </div>
+        <a
+          href="https://cortex-al-app.vercel.app/register"
+          class="cta-banner-btn"
+        >
+          Try Cortex
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+          >
+            <path d="M5 12h14M12 5l7 7-7 7" />
+          </svg>
+        </a>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <div class="footer-inner">
+        <a href="index.html" class="footer-brand">
+          <img src="assets/logo.svg" alt="" />
+          Cortex
+        </a>
+        <div class="footer-links">
+          <a href="about.html">About</a>
+          <a href="personalization.html">Help</a>
+          <a href="usage-policy.html">Usage Policy</a>
+          <a
+            href="https://github.com/samueldervishii/cortex"
+            target="_blank"
+            rel="noopener noreferrer"
+            >GitHub</a
+          >
+        </div>
+        <span class="footer-copy">&copy; 2026 Cortex. </span>
+      </div>
+    </footer>
+  </body>
 </html>

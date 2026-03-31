@@ -1,119 +1,178 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Personalization — Cortex</title>
-  <meta name="description" content="Learn how Cortex uses your profile to personalize AI responses.">
-  <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-
-  <!-- Navigation -->
-  <nav class="nav">
-    <a href="index.html" class="nav-brand">
-      <img src="assets/logo.svg" alt="">
-      Cortex
-    </a>
-    <div class="nav-links">
-      <a href="about.html">About</a>
-      <a href="personalization.html">Help</a>
-      <a href="usage-policy.html">Usage Policy</a>
-      <a href="https://cortex-al-app.vercel.app/login" class="nav-cta">
-        Try Cortex
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-          <path d="M5 12h14M12 5l7 7-7 7"/>
-        </svg>
-      </a>
-    </div>
-    <button class="nav-toggle" aria-label="Menu">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-        <line x1="3" y1="6" x2="21" y2="6"/>
-        <line x1="3" y1="12" x2="21" y2="12"/>
-        <line x1="3" y1="18" x2="21" y2="18"/>
-      </svg>
-    </button>
-  </nav>
-
-  <!-- Hero -->
-  <div class="article-hero">
-    <h1>Understanding Cortex's<br>Personalization Features</h1>
-  </div>
-
-  <!-- Content -->
-  <div class="article-content">
-    <p>
-      Cortex offers several ways to personalize your experience through your profile settings.
-      These help Cortex better understand and meet your needs in every conversation.
-    </p>
-
-    <h2>Profile Preferences</h2>
-    <p>
-      Profile preferences are account-wide settings that help Cortex understand your general
-      preferences. These are set in your profile settings and include:
-    </p>
-    <ul>
-      <li><strong>Display name &amp; username</strong> &mdash; How Cortex addresses you in conversations and how you appear in shared sessions.</li>
-      <li><strong>Field of work</strong> &mdash; Helps Cortex tailor responses to your professional context. An engineer will get different explanations than a student or marketer.</li>
-      <li><strong>Personal preferences</strong> &mdash; Free-form instructions that apply to all your conversations. For example: "I primarily code in Python", "Keep explanations concise", or "I'm a beginner in machine learning".</li>
-    </ul>
-
-    <h2>How It Works</h2>
-    <p>
-      When you start a conversation, Cortex includes your profile context alongside your message.
-      This means the AI can:
-    </p>
-    <ul>
-      <li>Adjust the technical depth of explanations based on your field of work</li>
-      <li>Follow your communication preferences (brief vs. detailed, formal vs. casual)</li>
-      <li>Remember your tools and technologies without you having to repeat them</li>
-      <li>Provide examples relevant to your domain</li>
-    </ul>
-    <p>
-      Your preferences apply to <strong>all conversations</strong> automatically. You don't need to
-      re-explain your background in each new chat.
-    </p>
-
-    <h2>Best Practices</h2>
-    <p>To get the most out of personalization:</p>
-    <ul>
-      <li><strong>Be specific</strong> &mdash; "I'm a 3rd-year CS student writing my thesis on NLP" is more useful than "I'm a student".</li>
-      <li><strong>State your tools</strong> &mdash; Mentioning your programming languages, frameworks, or tools helps Cortex give relevant code examples.</li>
-      <li><strong>Set communication style</strong> &mdash; If you prefer concise answers, say so. If you want step-by-step explanations, mention that.</li>
-      <li><strong>Update regularly</strong> &mdash; As your needs change, update your preferences to keep responses relevant.</li>
-    </ul>
-
-    <h2>Privacy</h2>
-    <p>
-      Your profile information is stored securely in your account and is only used to personalize
-      your own conversations. It is never shared with other users or used for purposes other than
-      improving your Cortex experience.
-    </p>
-    <p>
-      You can update or clear your preferences at any time from your profile settings.
-    </p>
-
-    <div class="article-divider"></div>
-    <p>Have questions? Start a new conversation with Cortex and ask for help.</p>
-  </div>
-
-  <!-- Footer -->
-  <footer class="footer">
-    <div class="footer-inner">
-      <a href="index.html" class="footer-brand">
-        <img src="assets/logo.svg" alt="">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Personalization — Cortex</title>
+    <meta
+      name="description"
+      content="Learn how Cortex uses your profile to personalize AI responses."
+    />
+    <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- Navigation -->
+    <nav class="nav">
+      <a href="index.html" class="nav-brand">
+        <img src="assets/logo.svg" alt="" />
         Cortex
       </a>
-      <div class="footer-links">
+      <div class="nav-links">
         <a href="about.html">About</a>
         <a href="personalization.html">Help</a>
         <a href="usage-policy.html">Usage Policy</a>
-        <a href="https://github.com/samueldervishii/cortex" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a href="https://cortex-al-app.vercel.app/login" class="nav-cta">
+          Try Cortex
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+          >
+            <path d="M5 12h14M12 5l7 7-7 7" />
+          </svg>
+        </a>
       </div>
-      <span class="footer-copy">&copy; 2026 Cortex. Built by Samuel Dervishi.</span>
-    </div>
-  </footer>
+      <button class="nav-toggle" aria-label="Menu">
+        <svg
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+        >
+          <line x1="3" y1="6" x2="21" y2="6" />
+          <line x1="3" y1="12" x2="21" y2="12" />
+          <line x1="3" y1="18" x2="21" y2="18" />
+        </svg>
+      </button>
+    </nav>
 
-</body>
+    <!-- Hero -->
+    <div class="article-hero">
+      <h1>Understanding Cortex's<br />Personalization Features</h1>
+    </div>
+
+    <!-- Content -->
+    <div class="article-content">
+      <p>
+        Cortex offers several ways to personalize your experience through your
+        profile settings. These help Cortex better understand and meet your
+        needs in every conversation.
+      </p>
+
+      <h2>Profile Preferences</h2>
+      <p>
+        Profile preferences are account-wide settings that help Cortex
+        understand your general preferences. These are set in your profile
+        settings and include:
+      </p>
+      <ul>
+        <li>
+          <strong>Display name &amp; username</strong> &mdash; How Cortex
+          addresses you in conversations and how you appear in shared sessions.
+        </li>
+        <li>
+          <strong>Field of work</strong> &mdash; Helps Cortex tailor responses
+          to your professional context. An engineer will get different
+          explanations than a student or marketer.
+        </li>
+        <li>
+          <strong>Personal preferences</strong> &mdash; Free-form instructions
+          that apply to all your conversations. For example: "I primarily code
+          in Python", "Keep explanations concise", or "I'm a beginner in machine
+          learning".
+        </li>
+      </ul>
+
+      <h2>How It Works</h2>
+      <p>
+        When you start a conversation, Cortex includes your profile context
+        alongside your message. This means the AI can:
+      </p>
+      <ul>
+        <li>
+          Adjust the technical depth of explanations based on your field of work
+        </li>
+        <li>
+          Follow your communication preferences (brief vs. detailed, formal vs.
+          casual)
+        </li>
+        <li>
+          Remember your tools and technologies without you having to repeat them
+        </li>
+        <li>Provide examples relevant to your domain</li>
+      </ul>
+      <p>
+        Your preferences apply to
+        <strong>all conversations</strong> automatically. You don't need to
+        re-explain your background in each new chat.
+      </p>
+
+      <h2>Best Practices</h2>
+      <p>To get the most out of personalization:</p>
+      <ul>
+        <li>
+          <strong>Be specific</strong> &mdash; "I'm a 3rd-year CS student
+          writing my thesis on NLP" is more useful than "I'm a student".
+        </li>
+        <li>
+          <strong>State your tools</strong> &mdash; Mentioning your programming
+          languages, frameworks, or tools helps Cortex give relevant code
+          examples.
+        </li>
+        <li>
+          <strong>Set communication style</strong> &mdash; If you prefer concise
+          answers, say so. If you want step-by-step explanations, mention that.
+        </li>
+        <li>
+          <strong>Update regularly</strong> &mdash; As your needs change, update
+          your preferences to keep responses relevant.
+        </li>
+      </ul>
+
+      <h2>Privacy</h2>
+      <p>
+        Your profile information is stored securely in your account and is only
+        used to personalize your own conversations. It is never shared with
+        other users or used for purposes other than improving your Cortex
+        experience.
+      </p>
+      <p>
+        You can update or clear your preferences at any time from your profile
+        settings.
+      </p>
+
+      <div class="article-divider"></div>
+      <p>
+        Have questions? Start a new conversation with Cortex and ask for help.
+      </p>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <div class="footer-inner">
+        <a href="index.html" class="footer-brand">
+          <img src="assets/logo.svg" alt="" />
+          Cortex
+        </a>
+        <div class="footer-links">
+          <a href="about.html">About</a>
+          <a href="personalization.html">Help</a>
+          <a href="usage-policy.html">Usage Policy</a>
+          <a
+            href="https://github.com/samueldervishii/cortex"
+            target="_blank"
+            rel="noopener noreferrer"
+            >GitHub</a
+          >
+        </div>
+        <span class="footer-copy">&copy; 2026 Cortex. </span>
+      </div>
+    </footer>
+  </body>
 </html>
