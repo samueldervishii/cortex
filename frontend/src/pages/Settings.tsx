@@ -326,14 +326,14 @@ function Settings() {
                 <div className="settings-field">
                   <label>
                     What{' '}
-                    <a href="/personalization" target="_blank" className="settings-label-link">
+                    <a href="https://cortex-al.vercel.app/personalization.html" target="_blank" rel="noopener noreferrer" className="settings-label-link">
                       personal preferences
                     </a>{' '}
                     should Cortex consider in responses?
                   </label>
                   <p className="settings-field-hint">
                     Your preferences will apply to all conversations, within{' '}
-                    <a href="/usage-policy" target="_blank" className="settings-label-link">
+                    <a href="https://cortex-al.vercel.app/usage-policy.html" target="_blank" rel="noopener noreferrer" className="settings-label-link">
                       Cortex's guidelines
                     </a>
                     .
