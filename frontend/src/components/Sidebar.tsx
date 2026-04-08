@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, memo } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   Pin,
   Edit2,
@@ -10,9 +10,13 @@ import {
   MoreVertical,
   MessageSquare,
   SquarePen,
+  User,
+  LogOut,
+  ChevronUp,
 } from 'lucide-react'
 import { FRONTEND_URL } from '../config/api'
 import { useToast } from '../contexts/ToastContext'
+import { useAuth } from '../contexts/AuthContext'
 
 interface Session {
   id: string
@@ -47,6 +51,8 @@ function Sidebar({
   onNewChat,
 }: SidebarProps) {
   const { showToast } = useToast()
+  const { user, logout } = useAuth() as any
+  const navigate = useNavigate()
   const [shareModal, setShareModal] = useState({ open: false, url: '', loading: false })
   const [deleteConfirm, setDeleteConfirm] = useState({
     open: false,
@@ -59,10 +65,12 @@ function Sidebar({
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [visibleCount, setVisibleCount] = useState(10)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [accountOpen, setAccountOpen] = useState(false)
 
   const searchInputRef = useRef<HTMLInputElement>(null)
   const editInputRef = useRef<HTMLInputElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  const accountRef = useRef<HTMLDivElement>(null)
   const location = useLocation()
 
   useEffect(() => {
@@ -84,6 +92,9 @@ function Sidebar({
     const handleClickOutside = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setOpenMenuId(null)
+      }
+      if (accountRef.current && !accountRef.current.contains(e.target as Node)) {
+        setAccountOpen(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -210,6 +221,9 @@ function Sidebar({
     setDeleteConfirm({ open: false, sessionId: null, title: '' })
   }
 
+  const displayName = user?.display_name || user?.username || user?.email || ''
+  const displayInitial = (displayName || '?')[0].toUpperCase()
+
   const renderSessionItem = (session: Session) => (
     <Link
       key={session.id}
@@ -305,7 +319,10 @@ function Sidebar({
       <div className="sidebar-brand">
         <div className="sidebar-logo">
           <img src="/logo.svg" alt="Cortex" className="sidebar-logo-icon" />
-          {/* <span>Cortex</span> */}
+          <div className="sidebar-logo-copy">
+            <span className="sidebar-logo-title">Cortex</span>
+            <span className="sidebar-logo-subtitle">Research workspace</span>
+          </div>
         </div>
         <button className="sidebar-toggle-btn" onClick={onClose} title="Close sidebar">
           <svg
@@ -417,14 +434,61 @@ function Sidebar({
         )}
       </div>
 
-      <Link
-        to="/settings"
-        className={`sidebar-settings ${location.pathname === '/settings' ? 'active' : ''}`}
-        onClick={() => onCloseMobile?.()}
-      >
-        <SettingsIcon size={16} />
-        Settings
-      </Link>
+      {user && (
+        <div className="sidebar-account" ref={accountRef}>
+          {accountOpen && (
+            <div className="sidebar-account-dropdown">
+              <button
+                className="sidebar-account-item"
+                onClick={() => {
+                  setAccountOpen(false)
+                  navigate('/settings?tab=general')
+                  onCloseMobile?.()
+                }}
+              >
+                <User size={14} />
+                Profile
+              </button>
+              <button
+                className="sidebar-account-item"
+                onClick={() => {
+                  setAccountOpen(false)
+                  navigate('/settings')
+                  onCloseMobile?.()
+                }}
+              >
+                <SettingsIcon size={14} />
+                Settings
+              </button>
+              <div className="sidebar-account-divider" />
+              <button
+                className="sidebar-account-item danger"
+                onClick={() => {
+                  setAccountOpen(false)
+                  logout()
+                }}
+              >
+                <LogOut size={14} />
+                Log out
+              </button>
+            </div>
+          )}
+          <button
+            className={`sidebar-account-trigger ${accountOpen ? 'open' : ''}`}
+            onClick={() => setAccountOpen((prev) => !prev)}
+          >
+            <div className="sidebar-account-avatar">
+              {user.avatar ? (
+                <img src={user.avatar} alt="" />
+              ) : (
+                displayInitial
+              )}
+            </div>
+            <span className="sidebar-account-name">{displayName}</span>
+            <ChevronUp size={14} className={`sidebar-account-chevron ${accountOpen ? 'open' : ''}`} />
+          </button>
+        </div>
+      )}
 
       {deleteConfirm.open && (
         <div className="delete-modal-overlay" onClick={cancelDelete}>

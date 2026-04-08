@@ -294,6 +294,37 @@ async def upload_file_to_session(
             raise HTTPException(status_code=404, detail="Session not found or was deleted")
         session.messages.append(user_message)
 
+    # Auto-register uploaded file as a session source (dedup by filename)
+    try:
+        db = repo.collection.database
+        existing = await db["sources"].find_one(
+            {"session_id": session_id, "kind": "file", "filename": file.filename},
+            {"_id": 1},
+        )
+        if not existing:
+            source_doc = {
+                "id": str(uuid.uuid4()),
+                "session_id": session_id,
+                "kind": "file",
+                "title": file.filename,
+                "url": None,
+                "normalized_url": None,
+                "domain": None,
+                "filename": file.filename,
+                "content_type": file.content_type,
+                "size": len(content),
+                "extracted_text": extracted_text,
+                "chunks": [c.model_dump() for c in chunks],
+                "chunk_count": len(chunks),
+                "author": None,
+                "publisher": None,
+                "published_at": None,
+                "created_at": datetime.now(timezone.utc).isoformat() + "Z",
+            }
+            await db["sources"].insert_one(source_doc)
+    except Exception:
+        logger.debug(f"Failed to register source for {file.filename}")
+
     return SessionResponse(
         session=_strip_file_data(session),
         message=f"File '{file.filename}' uploaded.",

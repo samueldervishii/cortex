@@ -115,6 +115,16 @@ async def ensure_indexes(database: AsyncIOMotorDatabase) -> None:
             name="idx_artifact_session",
         )
 
+        # Sources collection indexes
+        sources_collection = database["sources"]
+        await sources_collection.create_index(
+            [("session_id", ASCENDING), ("created_at", ASCENDING)],
+            name="idx_source_session",
+        )
+        await sources_collection.create_index(
+            [("id", ASCENDING)], unique=True, name="idx_source_id",
+        )
+
         _indexes_created = True
         logger.info("MongoDB indexes created successfully")
 

@@ -29,6 +29,18 @@ from .user import (
     RefreshRequest,
 )
 from .feedback import FeedbackCreate, FeedbackResponse
+from .source import (
+    Source,
+    SourceSummary,
+    SourceListResponse,
+    ImportUrlRequest,
+    ImportUrlResponse,
+    QuoteSearchRequest,
+    QuoteResult,
+    QuoteSearchResponse,
+    CitationRequest,
+    CitationResponse,
+)
 
 __all__ = [
     "Message",

@@ -1,45 +1,51 @@
 ::selection {
-  background: rgba(184, 134, 74, 0.25);
+  background: rgba(15, 118, 110, 0.18);
   color: inherit;
 }
 
-/* Theme Variables — light only */
 :root {
-  --bg-primary: #ffffff;
-  --bg-secondary: #f9f9f9;
-  --bg-tertiary: #e8e8e8;
-  --bg-hover: #e0e0e0;
-  --border-color: #ddd;
-  --border-hover: #ccc;
-  --text-primary: #1a1a1a;
-  --text-secondary: #555;
-  --text-muted: #888;
-  --accent-color: #b8864a;
-  --accent-hover: #a07540;
-  --heading-color: #4040a0;
-  --council-bg: #f8f8f8;
-  --chairman-bg: linear-gradient(135deg, #e8f0f8 0%, #f0f4fa 100%);
-  --chairman-border: #a0c0e0;
-  --error-bg: #fff0f0;
-  --error-border: #ffcccc;
-}
+  /* ─── Color system ─── */
+  --bg-primary: #f3ede2;
+  --bg-secondary: #fbf7ef;
+  --bg-tertiary: #eadfcd;
+  --bg-hover: #e0d4c0;
+  --border-color: rgba(88, 67, 39, 0.16);
+  --border-hover: rgba(88, 67, 39, 0.28);
+  --border-soft: rgba(88, 67, 39, 0.08);
+  --text-primary: #171411;
+  --text-secondary: #504a42;
+  --text-muted: #7d7467;
+  --accent-color: #0f766e;
+  --accent-hover: #0b5e58;
+  --heading-color: #113533;
+  --council-bg: #f7f1e6;
+  --chairman-bg: linear-gradient(135deg, #eef4ef 0%, #f6f2e8 100%);
+  --chairman-border: rgba(15, 118, 110, 0.22);
+  --error-bg: #fff2ef;
+  --error-border: #f1c8bf;
+  --panel-bg: rgba(255, 250, 242, 0.84);
+  --panel-strong: #fffaf2;
+  --panel-warm: rgba(255, 250, 242, 0.5);
+  --shadow-soft: 0 20px 60px rgba(50, 37, 17, 0.1);
+  --shadow-subtle: 0 1px 3px rgba(50, 37, 17, 0.06);
 
-/* Global reset */
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-:root {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  /* ─── Typography ─── */
+  font-family:
+    'Avenir Next', 'Segoe UI Variable', 'SF Pro Display', 'IBM Plex Sans', 'Segoe UI',
+    sans-serif;
   line-height: 1.5;
   font-weight: 400;
-  color-scheme: light dark;
+  color-scheme: light;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
 html,
@@ -59,7 +65,9 @@ body {
   -webkit-text-size-adjust: 100%;
   background: var(--bg-primary);
   color: var(--text-primary);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family:
+    'Avenir Next', 'Segoe UI Variable', 'SF Pro Display', 'IBM Plex Sans', 'Segoe UI',
+    sans-serif;
   transition:
     background 0.3s,
     color 0.3s;

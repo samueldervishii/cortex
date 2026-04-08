@@ -7,11 +7,22 @@ interface TopBarProps {
   onToggleSidebar: () => void
   onOpenCommandPalette: () => void
   sidebarOpen?: boolean
-  onOpenArtifacts?: () => void
+  onToggleRightPanel?: () => void
+  rightPanelOpen?: boolean
   hasSession?: boolean
+  sessionTitle?: string
 }
 
-function TopBar({ onNewChat, onToggleSidebar, onOpenCommandPalette, sidebarOpen, onOpenArtifacts, hasSession }: TopBarProps) {
+function TopBar({
+  onNewChat,
+  onToggleSidebar,
+  onOpenCommandPalette,
+  sidebarOpen,
+  onToggleRightPanel,
+  rightPanelOpen,
+  hasSession,
+  sessionTitle,
+}: TopBarProps) {
   const { user, logout } = useAuth() as any
   const navigate = useNavigate()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
@@ -48,6 +59,16 @@ function TopBar({ onNewChat, onToggleSidebar, onOpenCommandPalette, sidebarOpen,
             </svg>
           </button>
         )}
+
+        {/* Show brand only when sidebar is hidden */}
+        {!sidebarOpen && (
+          <span className="top-bar-brand">Cortex</span>
+        )}
+
+        {/* Show session title when in a session */}
+        {hasSession && sessionTitle && (
+          <span className="top-bar-session-title">{sessionTitle}</span>
+        )}
       </div>
 
       <div className="top-bar-right">
@@ -65,27 +86,7 @@ function TopBar({ onNewChat, onToggleSidebar, onOpenCommandPalette, sidebarOpen,
           </svg>
         </button>
 
-        {hasSession && onOpenArtifacts && (
-          <button className="top-bar-icon-btn" onClick={onOpenArtifacts} title="Artifacts">
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-              <polyline points="14 2 14 8 20 8" />
-              <line x1="16" y1="13" x2="8" y2="13" />
-              <line x1="16" y1="17" x2="8" y2="17" />
-            </svg>
-          </button>
-        )}
-
-        <button className="top-bar-icon-btn" onClick={onNewChat} title="New chat">
+        <button className="top-bar-icon-btn" onClick={onNewChat} title="New chat (Alt+N)">
           <svg
             width="16"
             height="16"
@@ -99,8 +100,31 @@ function TopBar({ onNewChat, onToggleSidebar, onOpenCommandPalette, sidebarOpen,
           </svg>
         </button>
 
+        {onToggleRightPanel && (
+          <button
+            className={`top-bar-icon-btn ${rightPanelOpen ? 'active' : ''}`}
+            onClick={onToggleRightPanel}
+            title="Context panel"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <line x1="15" y1="3" x2="15" y2="21" />
+            </svg>
+          </button>
+        )}
+
+        {/* Mobile-only profile button (desktop profile is in sidebar) */}
         {user && (
-          <div className="user-menu-wrapper" ref={userMenuRef}>
+          <div className="user-menu-wrapper top-bar-mobile-only" ref={userMenuRef}>
             <button
               className="top-bar-avatar"
               onClick={() => setUserMenuOpen((prev) => !prev)}

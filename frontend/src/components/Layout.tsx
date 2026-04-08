@@ -7,6 +7,7 @@ function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     return localStorage.getItem('cortex-sidebar') === 'open'
   })
+  const [rightPanelOpen, setRightPanelOpen] = useState(false)
 
   useEffect(() => {
     localStorage.setItem('cortex-sidebar', sidebarOpen ? 'open' : 'closed')
@@ -28,7 +29,22 @@ function Layout() {
     }
   }, [])
 
-  return <Outlet context={{ sidebarOpen, toggleSidebar, closeSidebarOnMobile }} />
+  const toggleRightPanel = useCallback(() => {
+    setRightPanelOpen((prev) => !prev)
+  }, [])
+
+  return (
+    <Outlet
+      context={{
+        sidebarOpen,
+        toggleSidebar,
+        closeSidebarOnMobile,
+        rightPanelOpen,
+        setRightPanelOpen,
+        toggleRightPanel,
+      }}
+    />
+  )
 }
 
 export default Layout

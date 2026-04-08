@@ -1,4 +1,5 @@
 import { useRef } from 'react'
+import { Paperclip, FileText, Download } from 'lucide-react'
 import ChatInput, { type ChatInputHandle } from './ChatInput'
 
 interface WelcomeScreenProps {
@@ -9,18 +10,34 @@ interface WelcomeScreenProps {
   loading: boolean
 }
 
-const QUICK_PROMPTS = [
+const SUGGESTIONS = [
   {
+    eyebrow: 'Draft',
     title: 'Write a thesis introduction',
-    subtitle: 'about AI in modern education',
+    description: 'Frame your argument with strong structure and a clear research tone.',
     prompt:
       'Write me a thesis introduction about the impact of artificial intelligence on modern education',
   },
   {
-    title: 'Help me structure',
-    subtitle: 'a literature review chapter',
-    prompt: 'Help me structure a literature review chapter for my thesis',
+    eyebrow: 'Research',
+    title: 'Overview of a complex topic',
+    description: 'Break a subject into themes, key findings, and critical comparisons.',
+    prompt:
+      'Give me a comprehensive overview of renewable energy technologies, covering key themes, recent developments, and critical analysis',
   },
+  {
+    eyebrow: 'Refine',
+    title: 'Improve and restructure',
+    description: 'Tighten clarity, flow, and academic tone across your existing writing.',
+    prompt:
+      'Help me improve the clarity, structure, and academic tone of my draft. I will paste it next.',
+  },
+]
+
+const CAPABILITIES = [
+  { label: 'File Upload', icon: Paperclip },
+  { label: 'Artifacts', icon: FileText },
+  { label: 'DOCX Export', icon: Download },
 ]
 
 function WelcomeScreen({
@@ -39,38 +56,49 @@ function WelcomeScreen({
 
   return (
     <div className="welcome-screen">
-      <div className="welcome-content">
-        <h1 className="welcome-greeting">Hello there!</h1>
-        <p className="welcome-subtitle">How can I help you today?</p>
+      <div className="welcome-center">
+        <img src="/logo.svg" alt="Cortex" className="welcome-mascot" />
+        <h1 className="welcome-heading">Where research begins</h1>
+        <p className="welcome-subheading">
+          Draft, analyze, and organize your research with AI — all in one focused place.
+        </p>
       </div>
 
-      <div className="welcome-prompts">
-        {QUICK_PROMPTS.map((item, index) => (
+      <div className="welcome-suggestions">
+        {SUGGESTIONS.map((item) => (
           <button
-            key={index}
-            className="welcome-prompt-card"
+            key={item.eyebrow}
+            className="welcome-suggestion-card"
             onClick={() => handlePromptClick(item.prompt)}
           >
-            <span className="welcome-prompt-title">{item.title}</span>
-            <span className="welcome-prompt-subtitle">{item.subtitle}</span>
+            <span className="welcome-suggestion-eyebrow">{item.eyebrow}</span>
+            <span className="welcome-suggestion-title">{item.title}</span>
+            <span className="welcome-suggestion-desc">{item.description}</span>
           </button>
         ))}
       </div>
 
-      <ChatInput
-        ref={inputRef}
-        value={question}
-        onChange={onQuestionChange}
-        onSubmit={onSubmit}
-        onFileUpload={onFileUpload}
-        disabled={loading}
-        placeholder="Send a message..."
-        centered
-      />
+      <div className="welcome-pills">
+        {CAPABILITIES.map((cap) => (
+          <span key={cap.label} className="welcome-pill">
+            <cap.icon size={14} />
+            {cap.label}
+          </span>
+        ))}
+      </div>
 
-      <span className="welcome-shortcut-hint">
-        Press <kbd>?</kbd> for keyboard shortcuts
-      </span>
+      <div className="welcome-input-area">
+        <ChatInput
+          ref={inputRef}
+          value={question}
+          onChange={onQuestionChange}
+          onSubmit={onSubmit}
+          onFileUpload={onFileUpload}
+          disabled={loading}
+          placeholder="Ask for a draft, upload a source, or describe what you need..."
+          centered
+        />
+      </div>
     </div>
   )
 }

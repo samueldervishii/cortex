@@ -18,7 +18,14 @@ function App() {
   const { sessionId: urlSessionId } = useParams()
   const navigate = useNavigate()
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
-  const { sidebarOpen, toggleSidebar, closeSidebarOnMobile } = useOutletContext<any>()
+  const {
+    sidebarOpen,
+    toggleSidebar,
+    closeSidebarOnMobile,
+    rightPanelOpen,
+    setRightPanelOpen,
+    toggleRightPanel,
+  } = useOutletContext<any>()
   const {
     question,
     setQuestion,
@@ -43,7 +50,10 @@ function App() {
   } = useCouncil() as any
 
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
-  const [artifactPanelOpen, setArtifactPanelOpen] = useState(false)
+
+  // Get current session title for top bar
+  const currentSession = sessions.find((s: any) => s.id === sessionId)
+  const sessionTitle = currentSession?.title || currentSession?.question?.substring(0, 50) || ''
 
   useEffect(() => {
     const runAutoDeleteCleanup = async () => {
@@ -124,7 +134,7 @@ function App() {
   }, [handleNewChat, toggleSidebar])
 
   return (
-    <div className="chat-app">
+    <div className={`chat-app ${sidebarOpen ? 'sidebar-visible' : ''} ${rightPanelOpen ? 'right-panel-visible' : ''}`}>
       <div className="chat-body">
         {sidebarOpen && (
           <>
@@ -149,8 +159,10 @@ function App() {
             onToggleSidebar={toggleSidebar}
             onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
             sidebarOpen={sidebarOpen}
-            onOpenArtifacts={() => setArtifactPanelOpen(true)}
+            onToggleRightPanel={toggleRightPanel}
+            rightPanelOpen={rightPanelOpen}
             hasSession={!!sessionId}
+            sessionTitle={sessionTitle}
           />
           {isLoadingSession ? (
             <ChatSkeleton />
@@ -182,6 +194,12 @@ function App() {
             />
           )}
         </div>
+
+        <ArtifactPanel
+          sessionId={sessionId}
+          isOpen={rightPanelOpen}
+          onClose={() => setRightPanelOpen(false)}
+        />
       </div>
 
       <CommandPalette
@@ -194,12 +212,6 @@ function App() {
       />
 
       <KeyboardShortcutsModal isOpen={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
-
-      <ArtifactPanel
-        sessionId={sessionId}
-        isOpen={artifactPanelOpen}
-        onClose={() => setArtifactPanelOpen(false)}
-      />
 
       <PWAInstallPrompt />
     </div>
