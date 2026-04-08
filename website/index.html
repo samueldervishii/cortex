@@ -6,13 +6,12 @@
     <title>Cortex — AI Chat for Students & Researchers</title>
     <meta
       name="description"
-      content="A clean, fast AI chat platform powered by Claude. Designed to help students write, research, and build their thesis."
+      content="A clean, fast AI chat platform built for students and researchers. Draft, analyze, upload sources, and export polished work in one focused workspace."
     />
     <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
     <link rel="stylesheet" href="styles.css" />
   </head>
-  <body>
-    <!-- Navigation -->
+  <body class="landing-page">
     <nav class="nav">
       <a href="index.html" class="nav-brand">
         <img src="assets/logo.svg" alt="" />
@@ -52,226 +51,358 @@
       </button>
     </nav>
 
-    <!-- Hero -->
-    <section class="hero">
-      <div class="hero-left">
-        <h1 class="anim-hero">
-          <span class="anim-word">AI</span>
-          <span class="anim-word"><span class="underline">research</span></span>
-          <span class="anim-word">and</span><br />
-          <span class="anim-word"><span class="underline">writing</span></span>
-          <span class="anim-word">that</span>
-          <span class="anim-word">puts</span><br />
-          <span class="anim-word">students</span>
-          <span class="anim-word">first</span>
-        </h1>
-      </div>
-      <div class="hero-right anim-fade-in" style="--delay: 0.6s">
-        <p>
-          Cortex is a clean, fast AI chat platform powered by Anthropic's
-          Claude. Designed to help students write, research, and build their
-          thesis &mdash; simply, securely, and affordably.
-        </p>
-      </div>
-    </section>
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <div class="hero-badge anim-fade-in">
+            Focused AI workspace for students and researchers
+          </div>
+          <h1 class="hero-title anim-hero">
+            <span class="anim-word">Research</span>
+            <span class="anim-word">and</span>
+            <span class="anim-word">writing</span><br />
+            <span class="anim-word">with</span>
+            <span class="anim-word">a</span>
+            <span class="anim-word">calmer</span><br />
+            <span class="anim-word">academic</span>
+            <span class="anim-word hero-emphasis">interface</span>
+          </h1>
+          <p class="hero-summary anim-fade-in" style="--delay: 0.18s">
+            Cortex brings drafting, source analysis, personalization, and DOCX
+            export into one warm, distraction-light workspace. The website now
+            reflects the product instead of looking like a separate brand.
+          </p>
 
-    <!-- Features -->
-    <section class="features">
-      <p class="features-label anim-scroll">Features</p>
-      <h2 class="anim-scroll">Everything you need, nothing you don't</h2>
-      <div class="features-grid">
-        <div class="feature-card anim-scroll">
-          <div class="feature-icon">
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
+          <div class="hero-actions anim-fade-in" style="--delay: 0.3s">
+            <a href="https://cortex-al-app.vercel.app/register" class="button-primary">
+              Start Free
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              >
+                <path d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
+            </a>
+            <a
+              href="https://github.com/samueldervishii/cortex"
+              class="button-secondary"
+              target="_blank"
+              rel="noopener noreferrer"
             >
-              <path
-                d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
-              />
-            </svg>
+              View GitHub
+            </a>
           </div>
-          <h3>Real-time Streaming</h3>
-          <p>
-            Responses stream token-by-token as they're generated. No waiting for
-            the full answer &mdash; start reading immediately.
-          </p>
-        </div>
-        <div class="feature-card anim-scroll">
-          <div class="feature-icon">
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path
-                d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
-              />
-              <polyline points="14 2 14 8 20 8" />
-            </svg>
-          </div>
-          <h3>File Uploads</h3>
-          <p>
-            Upload PDFs, DOCX, and text files directly into your conversation.
-            Cortex extracts and understands the content.
-          </p>
-        </div>
-        <div class="feature-card anim-scroll">
-          <div class="feature-icon">
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <rect x="3" y="3" width="18" height="18" rx="2" />
-              <path d="M3 9h18" />
-            </svg>
-          </div>
-          <h3>Artifact Generation</h3>
-          <p>
-            Cortex detects when you need a document &mdash; thesis
-            introductions, essays, reports &mdash; and renders them in styled
-            cards with export to DOCX.
-          </p>
-        </div>
-        <div class="feature-card anim-scroll">
-          <div class="feature-icon">
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <rect x="3" y="11" width="18" height="11" rx="2" />
-              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-            </svg>
-          </div>
-          <h3>Secure by Design</h3>
-          <p>
-            JWT authentication, bcrypt passwords, account lockout, rate
-            limiting, and encrypted file storage. Your data stays yours.
-          </p>
-        </div>
-        <div class="feature-card anim-scroll">
-          <div class="feature-icon">
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <circle cx="12" cy="12" r="3" />
-              <path
-                d="M12 1v6M12 17v6M4.22 4.22l4.24 4.24M15.54 15.54l4.24 4.24M1 12h6M17 12h6M4.22 19.78l4.24-4.24M15.54 8.46l4.24-4.24"
-              />
-            </svg>
-          </div>
-          <h3>Personalized</h3>
-          <p>
-            Set your field of work, communication style, and preferences once.
-            Cortex adapts to you across every conversation.
-          </p>
-        </div>
-        <div class="feature-card anim-scroll">
-          <div class="feature-icon">
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
-              <polyline points="16 6 12 2 8 6" />
-              <line x1="12" y1="2" x2="12" y2="15" />
-            </svg>
-          </div>
-          <h3>Export Anything</h3>
-          <p>
-            Export individual messages or entire sessions to DOCX. Download all
-            your data as JSON or Markdown anytime.
-          </p>
-        </div>
-      </div>
-    </section>
 
-    <!-- Highlights -->
-    <section class="highlights">
-      <div class="highlights-grid">
-        <div class="highlight-item anim-scroll">
-          <div class="highlight-value">Claude 4.6</div>
-          <div class="highlight-label">Powered by Anthropic</div>
-        </div>
-        <div class="highlight-item anim-scroll">
-          <div class="highlight-value">SSE</div>
-          <div class="highlight-label">Real-time streaming</div>
-        </div>
-        <div class="highlight-item anim-scroll">
-          <div class="highlight-value">PDF, DOCX</div>
-          <div class="highlight-label">File upload support</div>
-        </div>
-        <div class="highlight-item anim-scroll">
-          <div class="highlight-value">Free</div>
-          <div class="highlight-label">Open source</div>
-        </div>
-      </div>
-    </section>
+          <div class="hero-pills anim-fade-in" style="--delay: 0.38s">
+            <span class="hero-pill">Claude 4.6</span>
+            <span class="hero-pill">PDF, DOCX, TXT uploads</span>
+            <span class="hero-pill">Streaming responses</span>
+            <span class="hero-pill">DOCX export</span>
+          </div>
 
-    <!-- CTA -->
-    <section class="cta-banner">
-      <div class="cta-banner-inner anim-scroll">
-        <div>
-          <h2>Ready to get started?</h2>
-          <p>Create your free account and start chatting in seconds.</p>
+          <div class="hero-metrics">
+            <article class="metric-card anim-scroll">
+              <span class="metric-label">Built for</span>
+              <strong>Research workflows</strong>
+              <p>Outline arguments, compare sources, and turn chats into polished drafts.</p>
+            </article>
+            <article class="metric-card anim-scroll">
+              <span class="metric-label">Feels like</span>
+              <strong>The actual product</strong>
+              <p>Warm panels, teal accents, and softer surfaces now match the app experience.</p>
+            </article>
+            <article class="metric-card anim-scroll">
+              <span class="metric-label">Shipping with</span>
+              <strong>Better hierarchy</strong>
+              <p>Clearer sections, stronger CTAs, and a more premium first impression.</p>
+            </article>
+          </div>
         </div>
-        <a
-          href="https://cortex-al-app.vercel.app/register"
-          class="cta-banner-btn"
-        >
-          Try Cortex
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
+
+        <div class="hero-product anim-fade-in" style="--delay: 0.45s">
+          <div class="product-shell">
+            <div class="product-toolbar">
+              <span class="product-toolbar-chip">Live product preview</span>
+              <div class="product-toolbar-dots">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+            </div>
+
+            <div class="product-panel">
+              <img src="assets/logo.svg" alt="Cortex" class="product-logo" />
+              <h2>Where research begins</h2>
+              <p>
+                Draft, analyze, and organize your work with AI in one focused
+                place.
+              </p>
+
+              <div class="product-suggestions">
+                <article class="product-card">
+                  <span>Draft</span>
+                  <strong>Write a thesis introduction</strong>
+                  <p>Frame your argument with a clear structure and confident academic tone.</p>
+                </article>
+                <article class="product-card">
+                  <span>Research</span>
+                  <strong>Break down a complex topic</strong>
+                  <p>Break sources into themes, findings, comparisons, and key debates.</p>
+                </article>
+                <article class="product-card">
+                  <span>Refine</span>
+                  <strong>Improve and restructure</strong>
+                  <p>Tighten clarity, flow, and tone across your existing writing.</p>
+                </article>
+              </div>
+
+              <div class="product-tools">
+                <span>File Upload</span>
+                <span>Artifacts</span>
+                <span>DOCX Export</span>
+              </div>
+
+              <div class="product-input">
+                <p>Ask for a draft, upload a source, or describe what you need...</p>
+                <div class="product-input-row">
+                  <span class="product-model">Sonnet 4.6</span>
+                  <span class="product-send">↑</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="features">
+        <div class="section-header anim-scroll">
+          <div>
+            <p class="section-label">Website Refresh</p>
+            <h2>Same product language, stronger first impression</h2>
+          </div>
+          <p class="section-copy">
+            The website should feel like an extension of Cortex itself: warm,
+            precise, modern, and built for academic work rather than generic AI
+            marketing.
+          </p>
+        </div>
+
+        <div class="features-grid">
+          <article class="feature-card anim-scroll">
+            <div class="feature-icon">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path
+                  d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
+                />
+              </svg>
+            </div>
+            <span class="feature-kicker">Conversation</span>
+            <h3>Streaming responses</h3>
+            <p>
+              Read answers as they arrive and keep the pace of a real research
+              session instead of waiting on full-page refreshes.
+            </p>
+          </article>
+
+          <article class="feature-card anim-scroll">
+            <div class="feature-icon">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path
+                  d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                />
+                <polyline points="14 2 14 8 20 8" />
+              </svg>
+            </div>
+            <span class="feature-kicker">Source work</span>
+            <h3>Upload real documents</h3>
+            <p>
+              Drop in PDFs, DOCX files, and notes directly so Cortex can reason
+              over the material you are actually using.
+            </p>
+          </article>
+
+          <article class="feature-card anim-scroll">
+            <div class="feature-icon">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <path d="M3 9h18" />
+              </svg>
+            </div>
+            <span class="feature-kicker">Output</span>
+            <h3>Artifacts that stay usable</h3>
+            <p>
+              Turn chats into structured documents, reports, and thesis-ready
+              drafts that are easy to export and keep working on.
+            </p>
+          </article>
+
+          <article class="feature-card anim-scroll">
+            <div class="feature-icon">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <circle cx="12" cy="12" r="3" />
+                <path
+                  d="M12 1v6M12 17v6M4.22 4.22l4.24 4.24M15.54 15.54l4.24 4.24M1 12h6M17 12h6M4.22 19.78l4.24-4.24M15.54 8.46l4.24-4.24"
+                />
+              </svg>
+            </div>
+            <span class="feature-kicker">Personalization</span>
+            <h3>Profile-aware help</h3>
+            <p>
+              Save your field, tools, and preferred tone once so every session
+              starts closer to the way you actually work.
+            </p>
+          </article>
+
+          <article class="feature-card anim-scroll">
+            <div class="feature-icon">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <rect x="3" y="11" width="18" height="11" rx="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+            </div>
+            <span class="feature-kicker">Trust</span>
+            <h3>Security built in</h3>
+            <p>
+              Authentication, rate limiting, and secure storage stay visible as
+              product strengths instead of hidden implementation details.
+            </p>
+          </article>
+
+          <article class="feature-card anim-scroll">
+            <div class="feature-icon">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+                <polyline points="16 6 12 2 8 6" />
+                <line x1="12" y1="2" x2="12" y2="15" />
+              </svg>
+            </div>
+            <span class="feature-kicker">Portability</span>
+            <h3>Export without friction</h3>
+            <p>
+              Download work as DOCX, JSON, or Markdown so nothing important gets
+              trapped inside the product.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="highlights">
+        <div class="section-header anim-scroll">
+          <div>
+            <p class="section-label">Core Stack</p>
+            <h2>What the website should surface immediately</h2>
+          </div>
+        </div>
+
+        <div class="highlights-grid">
+          <article class="highlight-item anim-scroll">
+            <div class="highlight-value">Claude 4.6</div>
+            <div class="highlight-label">Powered by Anthropic</div>
+          </article>
+          <article class="highlight-item anim-scroll">
+            <div class="highlight-value">SSE</div>
+            <div class="highlight-label">Streaming chat responses</div>
+          </article>
+          <article class="highlight-item anim-scroll">
+            <div class="highlight-value">PDF, DOCX, TXT</div>
+            <div class="highlight-label">Source upload support</div>
+          </article>
+          <article class="highlight-item anim-scroll">
+            <div class="highlight-value">Open source</div>
+            <div class="highlight-label">Inspect, self-host, contribute</div>
+          </article>
+        </div>
+      </section>
+
+      <section class="cta-banner">
+        <div class="cta-banner-inner anim-scroll">
+          <div>
+            <p class="section-label">Start Writing</p>
+            <h2>Bring the product feel to the first visit</h2>
+            <p>
+              This direction keeps the academic warmth of Cortex, aligns the
+              website with the app UI, and gives the landing page a much more
+              intentional visual identity.
+            </p>
+          </div>
+          <a
+            href="https://cortex-al-app.vercel.app/register"
+            class="cta-banner-btn"
           >
-            <path d="M5 12h14M12 5l7 7-7 7" />
-          </svg>
-        </a>
-      </div>
-    </section>
+            Create Your Account
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <path d="M5 12h14M12 5l7 7-7 7" />
+            </svg>
+          </a>
+        </div>
+      </section>
+    </main>
 
-    <!-- Footer -->
     <footer class="footer">
       <div class="footer-inner">
         <a href="index.html" class="footer-brand">
@@ -289,12 +420,11 @@
             >GitHub</a
           >
         </div>
-        <span class="footer-copy">&copy; 2026 Cortex. </span>
+        <span class="footer-copy">&copy; 2026 Cortex.</span>
       </div>
     </footer>
 
     <script>
-      // Scroll-triggered animations
       const observer = new IntersectionObserver(
         (entries) => {
           entries.forEach((entry) => {
