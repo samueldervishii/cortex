@@ -111,6 +111,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     }, [value])
 
     const hasContent = value.trim() || attachedFile
+    const remainingCharacters = Math.max(0, 1000 - value.length)
 
     const getFileExt = (name: string) => {
       const ext = name.split('.').pop()?.toUpperCase()
@@ -133,7 +134,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       >
         {fileError && <div className="file-error">{fileError}</div>}
 
-        <div className={`input-wrapper ${attachedFile ? 'has-file' : ''}`}>
+        <div className={`input-wrapper ${attachedFile ? 'has-file' : ''} ${centered ? 'input-wrapper-centered' : ''}`}>
           {attachedFile && (
             <div className="file-card">
               <button className="file-card-remove" onClick={removeFile}>
@@ -170,7 +171,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
 
           <div className="input-actions-row">
             <button
-              className="attach-btn"
+              className={`attach-btn ${centered ? 'attach-btn-centered' : ''}`}
               onClick={() => fileInputRef.current?.click()}
               disabled={disabled}
               title="Attach file (PDF, DOCX, TXT)"
@@ -188,6 +189,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
                 <line x1="12" y1="5" x2="12" y2="19" />
                 <line x1="5" y1="12" x2="19" y2="12" />
               </svg>
+              {centered && <span>Attach file</span>}
             </button>
             <input
               ref={fileInputRef}
@@ -197,6 +199,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
               hidden
             />
             <div className="input-actions-right">
+              {centered && <span className="input-char-count">{remainingCharacters}/1000</span>}
               <ModelSelector />
               <button
                 className="send-btn"

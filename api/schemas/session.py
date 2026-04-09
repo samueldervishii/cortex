@@ -28,7 +28,8 @@ class FileAttachment(BaseModel):
     content_type: str = Field(..., description="MIME type")
     size: int = Field(..., description="File size in bytes")
     extracted_text: str = Field("", description="Text extracted from the file")
-    data_base64: str = Field("", description="Base64-encoded file content for download")
+    data_base64: str = Field("", description="Base64-encoded file content (legacy, prefer file_storage_id)")
+    file_storage_id: Optional[str] = Field(None, description="Reference to file_storage collection")
     chunks: List[SourceChunk] = Field(default=[], description="Chunked text with identifiers")
 
 

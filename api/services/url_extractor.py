@@ -35,11 +35,119 @@ def normalize_url(url: str) -> str:
     return urlunparse((parsed.scheme, parsed.netloc.lower(), path, "", query, ""))
 
 
+def _is_blocked_host(hostname: str) -> bool:
+    """Return True if hostname resolves to a private/loopback/link-local/metadata address."""
+    import ipaddress
+    if hostname.lower() in BLOCKED_DOMAINS:
+        return True
+    try:
+        ip = ipaddress.ip_address(hostname)
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+            return True
+        # AWS/GCP/Azure metadata endpoints
+        if str(ip) in ("169.254.169.254", "fd00::c2b6:a9ff:fe15:b55b"):
+            return True
+    except ValueError:
+        # Not a literal IP — it's a hostname, which is fine
+        pass
+    return False
+
+
+import concurrent.futures
+
+# Dedicated thread pool for DNS resolution — avoids contention with the
+# default asyncio executor and prevents stalls.
+_dns_executor = concurrent.futures.ThreadPoolExecutor(
+    max_workers=2, thread_name_prefix="dns-ssrf",
+)
+
+_DNS_TIMEOUT = 5.0  # seconds
+
+
+def _resolve_ips(hostname: str) -> list[str]:
+    """Resolve hostname synchronously. Returns raw IP strings.
+
+    Runs in a worker thread — no async, no event-loop dependency.
+    """
+    import socket
+    results = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+    seen: set[str] = set()
+    ips: list[str] = []
+    for _family, _type, _proto, _canonname, sockaddr in results:
+        addr = sockaddr[0]
+        if addr not in seen:
+            seen.add(addr)
+            ips.append(addr)
+    return ips
+
+
+def _check_ips(ips: list[str]) -> list[str]:
+    """Validate resolved IPs against the SSRF blocklist.
+
+    Returns the safe subset.  Raises ValueError if any IP is private.
+    """
+    import ipaddress
+    safe: list[str] = []
+    for raw in ips:
+        ip = ipaddress.ip_address(raw)
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+            raise ValueError("This URL is not allowed")
+        safe.append(raw)
+    return safe
+
+
+async def _async_resolve_and_check(hostname: str) -> list[str]:
+    """Resolve hostname in a dedicated thread pool, validate IPs.
+
+    Returns a list of validated public IP strings for connection pinning.
+    Raises ValueError if any resolved IP is private/reserved, or if
+    resolution times out.
+    """
+    import asyncio
+    import socket
+
+    loop = asyncio.get_running_loop()
+    try:
+        ips = await asyncio.wait_for(
+            loop.run_in_executor(_dns_executor, _resolve_ips, hostname),
+            timeout=_DNS_TIMEOUT,
+        )
+    except asyncio.TimeoutError:
+        raise ValueError("DNS resolution timed out")
+    except socket.gaierror:
+        raise ValueError(f"Could not resolve hostname: {hostname}")
+
+    if not ips:
+        raise ValueError(f"Could not resolve hostname: {hostname}")
+
+    return _check_ips(ips)
+
+
+def _sync_resolve_and_check(hostname: str) -> None:
+    """Synchronous resolve + check for non-async callers (tests, CLI)."""
+    import socket
+    try:
+        ips = _resolve_ips(hostname)
+        _check_ips(ips)
+    except socket.gaierror:
+        pass  # DNS failure will surface as a connection error
+
+
 def validate_url(url: str) -> str:
-    """Validate and normalise a URL. Returns the cleaned URL or raises ValueError."""
+    """Validate and normalise a URL (sync — no DNS check).
+
+    Returns the cleaned URL or raises ValueError.
+    Use validate_url_async for full validation including DNS resolution.
+    """
     url = url.strip()
     if not url:
         raise ValueError("URL is required")
+
+    # Check for blocked schemes before adding a default scheme
+    pre_parsed = urlparse(url)
+    if pre_parsed.scheme and pre_parsed.scheme.lower() in BLOCKED_SCHEMES:
+        raise ValueError("This URL scheme is not supported")
+
     if not url.startswith(("http://", "https://")):
         url = "https://" + url
 
@@ -49,44 +157,153 @@ def validate_url(url: str) -> str:
     if parsed.scheme.lower() in BLOCKED_SCHEMES:
         raise ValueError("This URL scheme is not supported")
     hostname = parsed.hostname or ""
-    if hostname.lower() in BLOCKED_DOMAINS:
+    if _is_blocked_host(hostname):
         raise ValueError("This URL is not allowed")
-    try:
-        import ipaddress
-        ip = ipaddress.ip_address(hostname)
-        if ip.is_private or ip.is_loopback or ip.is_link_local:
-            raise ValueError("This URL is not allowed")
-    except ValueError:
-        pass
+
+    # Sync DNS check for non-async callers (tests, CLI)
+    _sync_resolve_and_check(hostname)
 
     return normalize_url(url)
 
 
+async def validate_url_async(url: str) -> tuple[str, list[str]]:
+    """Validate and normalise a URL with async DNS resolution.
+
+    Returns (normalised_url, resolved_ips).  The caller should pin
+    HTTP connections to one of the returned IPs to prevent DNS rebinding.
+    """
+    url = url.strip()
+    if not url:
+        raise ValueError("URL is required")
+
+    pre_parsed = urlparse(url)
+    if pre_parsed.scheme and pre_parsed.scheme.lower() in BLOCKED_SCHEMES:
+        raise ValueError("This URL scheme is not supported")
+
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
+
+    parsed = urlparse(url)
+    if not parsed.scheme or not parsed.netloc:
+        raise ValueError("Invalid URL format")
+    if parsed.scheme.lower() in BLOCKED_SCHEMES:
+        raise ValueError("This URL scheme is not supported")
+    hostname = parsed.hostname or ""
+    if _is_blocked_host(hostname):
+        raise ValueError("This URL is not allowed")
+
+    safe_ips = await _async_resolve_and_check(hostname)
+
+    return normalize_url(url), safe_ips
+
+
+def _pin_url_to_ip(original_url: str, ip: str) -> tuple[str, dict[str, str]]:
+    """Rewrite a URL to connect to a specific IP, returning (pinned_url, extra_headers).
+
+    The Host header is set to the original hostname so the server and
+    TLS SNI work correctly even though we connect to the IP directly.
+    """
+    parsed = urlparse(original_url)
+    hostname = parsed.hostname or ""
+    port = parsed.port
+
+    # For IPv6 IPs, wrap in brackets
+    ip_host = f"[{ip}]" if ":" in ip else ip
+    if port:
+        netloc = f"{ip_host}:{port}"
+        host_header = f"{hostname}:{port}"
+    else:
+        netloc = ip_host
+        host_header = hostname
+
+    pinned = urlunparse((parsed.scheme, netloc, parsed.path, parsed.params, parsed.query, ""))
+    return pinned, {"Host": host_header}
+
+
+async def _resolve_for_fetch(hostname: str) -> str:
+    """Resolve hostname, validate all IPs, return the first safe one.
+
+    Raises ValueError if resolution fails or any IP is private.
+    """
+    safe_ips = await _async_resolve_and_check(hostname)
+    return safe_ips[0]
+
+
 async def fetch_url(url: str) -> tuple[str, str]:
-    """Fetch a URL and return (html_content, final_url after redirects)."""
-    headers = {
+    """Fetch a URL and return (html_content, final_url after redirects).
+
+    DNS rebinding is prevented by resolving each hostname ourselves,
+    validating the IPs, then connecting httpx to the resolved IP
+    directly (with a Host header for correct TLS/vhost behaviour).
+    """
+    from urllib.parse import urljoin
+    import ssl
+
+    base_headers = {
         "User-Agent": "Mozilla/5.0 (compatible; CortexBot/1.0; +https://cortex-al.vercel.app)",
         "Accept": "text/html,application/xhtml+xml,*/*",
         "Accept-Language": "en-US,en;q=0.9",
     }
+    max_redirects = 5
+    current_url = url
+
     try:
+        # Create an SSL context that verifies certs but allows connecting
+        # to IPs while checking the original hostname via SNI.
+        ssl_ctx = httpx.create_ssl_context(verify=True)
+
         async with httpx.AsyncClient(
-            follow_redirects=True,
-            max_redirects=5,
+            follow_redirects=False,
             timeout=httpx.Timeout(FETCH_TIMEOUT),
-            verify=True,
+            verify=ssl_ctx,
         ) as client:
-            resp = await client.get(url, headers=headers)
-            resp.raise_for_status()
+            for _ in range(max_redirects + 1):
+                parsed_cur = urlparse(current_url)
+                cur_host = parsed_cur.hostname or ""
 
-            content_type = resp.headers.get("content-type", "")
-            if "text/html" not in content_type and "application/xhtml" not in content_type:
-                raise ValueError(f"Unsupported content type: {content_type.split(';')[0]}")
+                # Resolve and validate before connecting
+                pinned_ip = await _resolve_for_fetch(cur_host)
+                pinned_url, host_headers = _pin_url_to_ip(current_url, pinned_ip)
 
-            if len(resp.content) > MAX_FETCH_SIZE:
-                raise ValueError("Page is too large to process")
+                # Merge Host header with base headers
+                req_headers = {**base_headers, **host_headers}
 
-            return resp.text, str(resp.url)
+                # For HTTPS, set server_hostname for correct TLS SNI
+                # httpx handles this via the Host header automatically
+                resp = await client.get(
+                    pinned_url,
+                    headers=req_headers,
+                    extensions={"sni_hostname": cur_host} if parsed_cur.scheme == "https" else {},
+                )
+
+                if resp.is_redirect:
+                    location = resp.headers.get("location", "")
+                    if not location:
+                        raise ValueError("Redirect with no Location header")
+                    redirect_url = urljoin(current_url, location)
+                    parsed_redirect = urlparse(redirect_url)
+                    redirect_host = parsed_redirect.hostname or ""
+                    if _is_blocked_host(redirect_host):
+                        raise ValueError("This URL is not allowed")
+                    if parsed_redirect.scheme.lower() in BLOCKED_SCHEMES:
+                        raise ValueError("This URL scheme is not supported")
+                    # DNS resolve + validate happens at the top of the next iteration
+                    current_url = redirect_url
+                    continue
+
+                resp.raise_for_status()
+
+                content_type = resp.headers.get("content-type", "")
+                if "text/html" not in content_type and "application/xhtml" not in content_type:
+                    raise ValueError(f"Unsupported content type: {content_type.split(';')[0]}")
+
+                if len(resp.content) > MAX_FETCH_SIZE:
+                    raise ValueError("Page is too large to process")
+
+                # Return the original (non-pinned) URL for display purposes
+                return resp.text, current_url
+
+            raise ValueError("Too many redirects")
 
     except httpx.TimeoutException:
         raise ValueError("Request timed out. The page took too long to respond.")

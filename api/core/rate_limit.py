@@ -6,6 +6,11 @@ from fastapi import Request, HTTPException, status
 
 from config import settings
 
+# Number of trusted reverse proxies between the client and this server.
+# With 1 proxy (Render, Vercel), the real client IP is the rightmost
+# X-Forwarded-For entry.  With 2 (e.g. Cloudflare → Render), use 2.
+_TRUSTED_PROXY_DEPTH = 1
+
 
 class RateLimiter:
     """
@@ -29,26 +34,28 @@ class RateLimiter:
         self._cleanup_interval = 300
 
     def _get_client_id(self, request: Request) -> str:
-        """Get unique identifier for the client.
+        """Extract the real client IP from the request.
 
-        Uses a combination of X-Forwarded-For (if present) AND the direct
-        client IP to prevent header spoofing. An attacker can forge
-        X-Forwarded-For but cannot forge the TCP connection source IP.
+        Trust model (single trusted reverse proxy — Render, Vercel, etc.):
+        The trusted proxy appends the connecting client's IP to
+        X-Forwarded-For, so the rightmost entry is the one the proxy saw
+        and cannot be forged by the client.  Any entries to the left of it
+        were supplied by the client and are untrusted.
+
+        For deployments with >1 trusted proxy (e.g. Cloudflare → Render),
+        change TRUSTED_PROXY_DEPTH to 2 and use [-2].
         """
         client_ip = request.client.host if request.client else "unknown"
 
-        # In production behind a trusted proxy (Render, Vercel, etc.),
-        # X-Forwarded-For is set by the proxy and is trustworthy.
-        # We combine both to prevent spoofing: even if the header is forged,
-        # the real client IP is included.
         forwarded = request.headers.get("X-Forwarded-For")
         if forwarded and settings.environment == "production":
-            # Behind trusted proxy: use the rightmost IP added by the proxy
-            # (last IP before the direct client is the one the proxy saw)
-            forwarded_ip = forwarded.split(",")[-1].strip()
-            return forwarded_ip
+            parts = [p.strip() for p in forwarded.split(",") if p.strip()]
+            if parts:
+                # With N trusted proxies, the real client IP is at index -N.
+                # Default: 1 trusted proxy → rightmost entry.
+                depth = min(_TRUSTED_PROXY_DEPTH, len(parts))
+                return parts[-depth]
 
-        # In development or no proxy: use direct connection IP
         return client_ip
 
     def _cleanup_old_requests(self, client_id: str, current_time: float) -> None:
@@ -132,6 +139,27 @@ registration_limiter = RateLimiter(
     requests_per_window=3,
     window_seconds=3600,
 )
+
+
+def check_rate_limiter_deployment() -> None:
+    """Log a warning if per-process rate limiting may be ineffective.
+
+    Called at startup. With multiple uvicorn workers each worker gets its
+    own in-memory state, effectively multiplying the allowed rate.
+    """
+    import os
+    workers = os.environ.get("WEB_CONCURRENCY", "1")
+    try:
+        n = int(workers)
+    except ValueError:
+        n = 1
+    if n > 1:
+        import logging
+        logging.getLogger("cortex.rate_limit").warning(
+            f"Running {n} workers with in-memory rate limiting. "
+            f"Effective rate limit is {n}x configured value. "
+            "For accurate limits, switch to Redis-backed rate limiting."
+        )
 
 
 class UserUsageTracker:

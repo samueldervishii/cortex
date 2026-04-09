@@ -5,10 +5,10 @@
 
 :root {
   /* ─── Color system ─── */
-  --bg-primary: #f3ede2;
-  --bg-secondary: #fbf7ef;
-  --bg-tertiary: #eadfcd;
-  --bg-hover: #e0d4c0;
+  --bg-primary: #f5f3ef;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #ece7df;
+  --bg-hover: #e7e1d8;
   --border-color: rgba(88, 67, 39, 0.16);
   --border-hover: rgba(88, 67, 39, 0.28);
   --border-soft: rgba(88, 67, 39, 0.08);
@@ -18,14 +18,14 @@
   --accent-color: #0f766e;
   --accent-hover: #0b5e58;
   --heading-color: #113533;
-  --council-bg: #f7f1e6;
-  --chairman-bg: linear-gradient(135deg, #eef4ef 0%, #f6f2e8 100%);
+  --council-bg: #f8f6f2;
+  --chairman-bg: linear-gradient(135deg, #eef4ef 0%, #f8f6f2 100%);
   --chairman-border: rgba(15, 118, 110, 0.22);
   --error-bg: #fff2ef;
   --error-border: #f1c8bf;
-  --panel-bg: rgba(255, 250, 242, 0.84);
-  --panel-strong: #fffaf2;
-  --panel-warm: rgba(255, 250, 242, 0.5);
+  --panel-bg: rgba(255, 255, 255, 0.86);
+  --panel-strong: #ffffff;
+  --panel-warm: rgba(255, 255, 255, 0.54);
   --shadow-soft: 0 20px 60px rgba(50, 37, 17, 0.1);
   --shadow-subtle: 0 1px 3px rgba(50, 37, 17, 0.06);
 

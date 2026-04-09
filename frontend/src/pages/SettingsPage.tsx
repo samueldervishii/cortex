@@ -34,25 +34,23 @@ function SettingsPage() {
   return (
     <div className="chat-app">
       <div className="chat-body">
-        {sidebarOpen && (
-          <>
-            <div className="sidebar-overlay" onClick={toggleSidebar} />
-            <Sidebar
-              sessions={sessions}
-              currentSessionId={sessionId}
-              onDeleteSession={deleteSession}
-              onRenameSession={renameSession}
-              onTogglePinSession={togglePinSession}
-              onShareSession={shareSession}
-              onClose={toggleSidebar}
-              onCloseMobile={closeSidebarOnMobile}
-              onNewChat={() => {
-                startNewChat()
-                navigate('/')
-              }}
-            />
-          </>
-        )}
+        {sidebarOpen && <div className="sidebar-overlay" onClick={toggleSidebar} />}
+        <Sidebar
+          isOpen={sidebarOpen}
+          sessions={sessions}
+          currentSessionId={sessionId}
+          onDeleteSession={deleteSession}
+          onRenameSession={renameSession}
+          onTogglePinSession={togglePinSession}
+          onShareSession={shareSession}
+          onClose={toggleSidebar}
+          onCloseMobile={closeSidebarOnMobile}
+          onNewChat={() => {
+            startNewChat()
+            navigate('/')
+          }}
+          onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+        />
 
         <div className="chat-content">
           <TopBar
@@ -61,7 +59,6 @@ function SettingsPage() {
               navigate('/')
             }}
             onToggleSidebar={toggleSidebar}
-            onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
             sidebarOpen={sidebarOpen}
           />
           <Settings />

@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 
 from core.dependencies import get_session_repository, get_current_user
 from core.rate_limit import check_rate_limit
+from core.timestamps import utc_iso
 from db import SessionRepository
 from schemas.source import (
     Source,
@@ -140,13 +141,13 @@ async def import_url(
     _rate_limit: None = Depends(check_rate_limit),
 ):
     """Import a web page as a research source. Deduplicates by canonical URL."""
-    from services.url_extractor import validate_url, fetch_url, extract_content, normalize_url
+    from services.url_extractor import validate_url_async, fetch_url, extract_content, normalize_url
     from services.file_extractor import chunk_text
 
     await _verify_session(session_id, user_id, repo)
 
     try:
-        clean_url = validate_url(body.url)
+        clean_url, _ = await validate_url_async(body.url)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -213,7 +214,7 @@ async def import_url(
         filename=extracted["domain"],
     )
 
-    now = datetime.now(timezone.utc).isoformat() + "Z"
+    now = utc_iso()
     source_id = str(uuid.uuid4())
 
     source_doc = {
@@ -236,7 +237,30 @@ async def import_url(
         "created_at": now,
     }
 
-    await col.insert_one(source_doc)
+    from pymongo.errors import DuplicateKeyError
+    try:
+        await col.insert_one(source_doc)
+    except DuplicateKeyError:
+        # Concurrent import of the same URL — return existing
+        existing_race = await col.find_one(
+            {"session_id": session_id, "kind": "url", "normalized_url": normalized_canonical},
+            {"_id": 0, "id": 1, "title": 1, "url": 1, "domain": 1, "size": 1,
+             "author": 1, "published_at": 1, "created_at": 1, "chunk_count": 1},
+        )
+        if existing_race:
+            race_summary = SourceSummary(
+                id=existing_race["id"],
+                kind="url",
+                title=existing_race.get("title", ""),
+                url=existing_race.get("url"),
+                domain=existing_race.get("domain"),
+                size=existing_race.get("size"),
+                author=existing_race.get("author"),
+                published_at=existing_race.get("published_at"),
+                created_at=existing_race.get("created_at"),
+                chunk_count=existing_race.get("chunk_count", 0),
+            )
+            return ImportUrlResponse(source=race_summary, message="Source already imported")
 
     summary = SourceSummary(
         id=source_id,

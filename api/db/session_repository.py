@@ -4,6 +4,7 @@ from typing import List, Optional
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
+from core.timestamps import utc_iso
 from schemas import ChatSession
 
 # Validate share tokens: alphanumeric, hyphens, underscores only
@@ -204,7 +205,7 @@ class SessionRepository:
             {
                 "$set": {
                     "is_deleted": True,
-                    "deleted_at": now.isoformat(),
+                    "deleted_at": utc_iso(now),
                     "updated_at": now,
                 }
             },
@@ -270,7 +271,7 @@ class SessionRepository:
             {
                 "$set": {
                     "is_deleted": True,
-                    "deleted_at": now.isoformat(),
+                    "deleted_at": utc_iso(now),
                     "updated_at": now,
                 }
             },
@@ -335,18 +336,26 @@ class SessionRepository:
         )
         return result.modified_count > 0
 
-    async def replace_last_message(self, session_id: str, message_doc: dict) -> bool:
+    async def replace_last_message(
+        self, session_id: str, message_doc: dict, expected_count: int
+    ) -> bool:
         """Replace the last message in a session (used for upload-with-replace).
-        Uses a targeted positional update to avoid full-document rewrite races."""
-        count_result = await self.collection.aggregate([
-            {"$match": {"id": session_id}},
-            {"$project": {"count": {"$size": "$messages"}}},
-        ]).to_list(1)
-        if not count_result or count_result[0]["count"] == 0:
+
+        Atomically verifies that the message array still has exactly
+        ``expected_count`` elements before replacing, so a concurrent
+        append cannot cause the wrong message to be overwritten.
+        """
+        if expected_count <= 0:
             return False
-        last_idx = count_result[0]["count"] - 1
+        last_idx = expected_count - 1
         result = await self.collection.update_one(
-            {"id": session_id, "is_deleted": {"$ne": True}},
+            {
+                "id": session_id,
+                "is_deleted": {"$ne": True},
+                # Ensure the array hasn't grown since the caller's snapshot
+                f"messages.{last_idx}": {"$exists": True},
+                f"messages.{expected_count}": {"$exists": False},
+            },
             {
                 "$set": {
                     f"messages.{last_idx}": message_doc,
@@ -380,18 +389,7 @@ class SessionRepository:
     async def soft_delete_older_than(
         self, days: int, include_pinned: bool = False, user_id: Optional[str] = None
     ) -> int:
-        """
-        Soft delete sessions older than the specified number of days.
-        Returns the count of deleted sessions.
-
-        Only deletes sessions where BOTH created_at AND updated_at are older
-        than the cutoff. This prevents recently-active sessions (e.g. just
-        unpinned, renamed, or interacted with) from being immediately deleted.
-
-        Args:
-            days: Number of days. Sessions inactive for longer will be deleted.
-            include_pinned: If True, also delete pinned sessions. Default False (preserve pinned).
-        """
+        """Soft delete sessions older than the specified number of days."""
         cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
         now = datetime.now(timezone.utc)
 
@@ -412,10 +410,48 @@ class SessionRepository:
             {
                 "$set": {
                     "is_deleted": True,
-                    "deleted_at": now.isoformat(),
+                    "deleted_at": utc_iso(now),
                     "updated_at": now,
-                    "auto_deleted": True,  # Mark as auto-deleted for tracking
+                    "auto_deleted": True,
                 }
             },
         )
         return result.modified_count
+
+    async def purge_older_than(
+        self, days: int, include_pinned: bool = False, user_id: Optional[str] = None
+    ) -> int:
+        """Hard-delete sessions and all associated data older than *days*.
+
+        Removes session documents, artifacts, sources, file blobs, and
+        feedback.  Used by auto-delete so user data is actually purged,
+        not just hidden.
+        """
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
+
+        query = {
+            "is_deleted": {"$ne": True},
+            "created_at": {"$lt": cutoff_date},
+            "updated_at": {"$lt": cutoff_date},
+        }
+        if user_id is not None:
+            query["user_id"] = user_id
+        if not include_pinned:
+            query["is_pinned"] = {"$ne": True}
+
+        # Collect session IDs first so we can cascade-delete related data.
+        session_ids: List[str] = []
+        async for doc in self.collection.find(query, {"id": 1}):
+            session_ids.append(doc["id"])
+
+        if not session_ids:
+            return 0
+
+        db = self.collection.database
+        id_filter = {"session_id": {"$in": session_ids}}
+        await db["artifacts"].delete_many(id_filter)
+        await db["sources"].delete_many(id_filter)
+        await db["file_storage"].delete_many(id_filter)
+        await db["feedback"].delete_many(id_filter)
+        result = await self.collection.delete_many({"id": {"$in": session_ids}})
+        return result.deleted_count

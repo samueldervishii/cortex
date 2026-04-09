@@ -6,7 +6,7 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import CHAT_MODEL, settings
@@ -49,7 +49,7 @@ async def run_auto_delete_cleanup(silent: bool = False):
             if user_settings.auto_delete_days not in valid_days:
                 continue
 
-            deleted_count = await session_repo.soft_delete_older_than(
+            deleted_count = await session_repo.purge_older_than(
                 days=user_settings.auto_delete_days,
                 include_pinned=False,
                 user_id=user_settings.user_id,
@@ -109,6 +109,10 @@ async def lifespan(_app: FastAPI):
     init_metrics()
     logger.info("Metrics initialized")
 
+    # Warn if per-process rate limiting may be ineffective
+    from core.rate_limit import check_rate_limiter_deployment
+    check_rate_limiter_deployment()
+
     # Connect to MongoDB with timeout (mask credentials in log output)
     masked_url = re.sub(
         r"://([^:]+):([^@]+)@", r"://\1:****@", settings.mongodb_url
@@ -119,20 +123,32 @@ async def lifespan(_app: FastAPI):
         # Ping to verify connection with 10 second timeout
         await asyncio.wait_for(db.command("ping"), timeout=10.0)
         logger.info(f"MongoDB connected successfully (database: {settings.mongodb_database})")
+    except asyncio.TimeoutError:
+        logger.error("MongoDB ping timeout after 10 seconds — proceeding without DB")
+        db = None
+    except Exception as e:
+        logger.error(f"MongoDB connection failed: {type(e).__name__}")
+        db = None
 
-        # Create indexes for optimal query performance
+    if db is not None:
+        # Index creation: critical failures raise RuntimeError and abort startup.
         await ensure_indexes(db)
         logger.info("MongoDB indexes ensured")
 
-        # Run auto-delete cleanup on startup
-        await run_auto_delete_cleanup()
+        # Non-critical: migrations and cleanup may fail without blocking startup.
+        try:
+            from db.migrations import run_all_migrations
+            await run_all_migrations(db)
+        except Exception as e:
+            logger.warning(f"Data migration failed (non-critical): {e}")
+
+        try:
+            await run_auto_delete_cleanup()
+        except Exception as e:
+            logger.warning(f"Auto-delete cleanup failed (non-critical): {e}")
 
         # Start background task for periodic auto-delete
         _auto_delete_task = asyncio.create_task(auto_delete_background_task())
-    except asyncio.TimeoutError:
-        logger.info("MongoDB ping timeout after 10 seconds - proceeding anyway")
-    except Exception as e:
-        logger.info(f"MongoDB connection failed: {type(e).__name__}")
 
     yield
     logger.info("Cortex API shutting down...")
@@ -231,12 +247,20 @@ MAX_UPLOAD_BODY_SIZE = 10 * 1024 * 1024        # 10MB for file upload routes
 
 @app.middleware("http")
 async def limit_request_body(request: Request, call_next):
-    """Reject requests with bodies larger than the allowed limit."""
+    """Reject requests with bodies larger than the allowed limit.
+
+    Checks Content-Length when present, and also wraps the body stream
+    to enforce the limit even when Content-Length is missing or forged.
+    """
+    limit = MAX_UPLOAD_BODY_SIZE if "/upload-file" in request.url.path else MAX_REQUEST_BODY_SIZE
+
+    # Fast-path: reject early if Content-Length exceeds limit
     content_length = request.headers.get("content-length")
     if content_length:
-        size = int(content_length)
-        # File upload routes get a higher limit
-        limit = MAX_UPLOAD_BODY_SIZE if "/upload-file" in request.url.path else MAX_REQUEST_BODY_SIZE
+        try:
+            size = int(content_length)
+        except ValueError:
+            size = 0
         if size > limit:
             from fastapi.responses import JSONResponse
             max_mb = limit // (1024 * 1024)
@@ -244,6 +268,27 @@ async def limit_request_body(request: Request, call_next):
                 status_code=413,
                 content={"detail": f"Request body too large. Maximum size is {max_mb}MB."},
             )
+
+    # Streaming enforcement: wrap body to count bytes regardless of headers
+    if request.method in ("POST", "PUT", "PATCH"):
+        original_body = request._receive
+        bytes_read = 0
+
+        async def _limited_receive():
+            nonlocal bytes_read
+            message = await original_body()
+            body = message.get("body", b"")
+            bytes_read += len(body)
+            if bytes_read > limit:
+                from fastapi.responses import JSONResponse
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"Request body too large. Maximum size is {limit // (1024 * 1024)}MB.",
+                )
+            return message
+
+        request._receive = _limited_receive
+
     return await call_next(request)
 
 
@@ -280,13 +325,15 @@ async def log_and_track_requests(request: Request, call_next):
     """Log all HTTP requests with timing and track metrics."""
     start_time = time.time()
 
-    # Get client IP (handle proxy headers)
+    # Get client IP — same trust model as rate_limit._get_client_id
+    from core.rate_limit import _TRUSTED_PROXY_DEPTH
     forwarded = request.headers.get("X-Forwarded-For")
-    client_ip = (
-        forwarded.split(",")[0].strip()
-        if forwarded
-        else (request.client.host if request.client else "unknown")
-    )
+    if forwarded and settings.environment == "production":
+        parts = [p.strip() for p in forwarded.split(",") if p.strip()]
+        depth = min(_TRUSTED_PROXY_DEPTH, len(parts)) if parts else 0
+        client_ip = parts[-depth] if depth else (request.client.host if request.client else "unknown")
+    else:
+        client_ip = (request.client.host if request.client else "unknown")
 
     # Process request
     response = await call_next(request)

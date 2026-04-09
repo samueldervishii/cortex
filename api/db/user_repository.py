@@ -76,9 +76,11 @@ class UserRepository:
         if session_ids:
             await db["artifacts"].delete_many({"session_id": {"$in": session_ids}})
             await db["sources"].delete_many({"session_id": {"$in": session_ids}})
+            await db["file_storage"].delete_many({"session_id": {"$in": session_ids}})
         # Remove all user data
         await db["sessions"].delete_many({"user_id": user_id})
         await db["user_settings"].delete_many({"user_id": user_id})
         await db["feedback"].delete_many({"user_id": user_id})
+        await db["refresh_tokens"].delete_many({"user_id": user_id})
         result = await self.collection.delete_one({"id": user_id})
         return result.deleted_count > 0

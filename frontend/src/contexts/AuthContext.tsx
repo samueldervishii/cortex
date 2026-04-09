@@ -23,6 +23,7 @@ interface AuthContextType {
   user: User | null
   isAuthenticated: boolean
   isLoading: boolean
+  networkError: boolean
   login: (email: string, password: string) => Promise<void>
   register: (email: string, password: string) => Promise<void>
   logout: () => void
@@ -52,6 +53,7 @@ function userFromResponse(data: any): User {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [networkError, setNetworkError] = useState(false)
 
   const storeTokens = (accessToken: string, refreshToken: string) => {
     localStorage.setItem(TOKEN_KEY, accessToken)
@@ -81,20 +83,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const res = await apiClient.get('/auth/me')
         setUser(userFromResponse(res.data))
-      } catch {
-        // Token expired — try refresh
-        const refreshToken = localStorage.getItem(REFRESH_KEY)
-        if (refreshToken) {
-          try {
-            const res = await apiClient.post('/auth/refresh', { refresh_token: refreshToken })
-            storeTokens(res.data.access_token, res.data.refresh_token)
-            const meRes = await apiClient.get('/auth/me')
-            setUser(userFromResponse(meRes.data))
-          } catch {
+      } catch (err: any) {
+        if (err?.isNetworkError) {
+          // Server unreachable — don't clear tokens, user may be offline
+          setNetworkError(true)
+        } else {
+          // Token expired — try refresh
+          const refreshToken = localStorage.getItem(REFRESH_KEY)
+          if (refreshToken) {
+            try {
+              const res = await apiClient.post('/auth/refresh', { refresh_token: refreshToken })
+              storeTokens(res.data.access_token, res.data.refresh_token)
+              const meRes = await apiClient.get('/auth/me')
+              setUser(userFromResponse(meRes.data))
+            } catch (refreshErr: any) {
+              if (refreshErr?.isNetworkError) {
+                setNetworkError(true)
+              } else {
+                clearTokens()
+              }
+            }
+          } else {
             clearTokens()
           }
-        } else {
-          clearTokens()
         }
       } finally {
         setIsLoading(false)
@@ -154,6 +165,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         isAuthenticated: !!user,
         isLoading,
+        networkError,
         login,
         register,
         logout,

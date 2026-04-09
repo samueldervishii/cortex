@@ -1,9 +1,9 @@
 """Service for exporting session data in various formats."""
 
 import json
-from datetime import datetime
 from typing import List
 
+from core.timestamps import utc_iso
 from schemas import ChatSession
 
 
@@ -11,7 +11,7 @@ def format_as_json(sessions: List[ChatSession]) -> str:
     """Format sessions as JSON."""
     sessions_data = [session.model_dump() for session in sessions]
     export_data = {
-        "export_date": datetime.utcnow().isoformat(),
+        "export_date": utc_iso(),
         "session_count": len(sessions),
         "sessions": sessions_data,
     }

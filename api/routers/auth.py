@@ -2,6 +2,7 @@ import logging
 import time
 import uuid
 from collections import defaultdict
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Depends, status
 
@@ -13,6 +14,7 @@ from core.auth import (
     decode_token,
 )
 from core.dependencies import get_user_repository, get_current_user
+from core.timestamps import utc_iso
 from core.rate_limit import check_rate_limit, check_registration_limit
 from db.user_repository import UserRepository
 from schemas.user import (
@@ -70,7 +72,7 @@ def _build_user_response(user: dict) -> UserResponse:
         avatar=user.get("avatar", ""),
         field_of_work=user.get("field_of_work", ""),
         personal_preferences=user.get("personal_preferences", ""),
-        created_at=user["created_at"].isoformat() + "Z",
+        created_at=utc_iso(user["created_at"]),
     )
 
 
@@ -243,6 +245,15 @@ async def change_password(
         )
 
     await user_repo.update_password(current_user_id, hash_password(request.new_password))
+
+    # Revoke all refresh token families for this user
+    from db.connection import get_database
+    db = await get_database()
+    await db["refresh_tokens"].update_many(
+        {"user_id": current_user_id, "revoked": False},
+        {"$set": {"revoked": True, "revoked_at": datetime.now(timezone.utc)}},
+    )
+
     logger.info(f"User changed password: {current_user_id}")
     return {"message": "Password changed successfully"}
 
@@ -269,17 +280,53 @@ async def delete_account(
     return {"message": "Account deleted successfully"}
 
 
+@router.get("/check-username/{username}")
+async def check_username(
+    username: str,
+    user_repo: UserRepository = Depends(get_user_repository),
+    _rate_limit: None = Depends(check_rate_limit),
+):
+    """Check if a username is available."""
+    if not username or len(username) < 3:
+        return {"available": False, "reason": "Username must be at least 3 characters"}
+    import re
+    if not re.match(r'^[a-zA-Z0-9_]+$', username):
+        return {"available": False, "reason": "Only letters, numbers, and underscores"}
+    existing = await user_repo.get_by_username(username)
+    return {"available": existing is None}
+
+
+@router.get("/check-email/{email}")
+async def check_email(
+    email: str,
+    user_repo: UserRepository = Depends(get_user_repository),
+    _rate_limit: None = Depends(check_rate_limit),
+):
+    """Check if an email is already registered."""
+    existing = await user_repo.get_by_email(email)
+    return {"available": existing is None}
+
+
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh_token(
     request: RefreshRequest,
     user_repo: UserRepository = Depends(get_user_repository),
     _rate_limit: None = Depends(check_rate_limit),
 ):
-    """Exchange a refresh token for a new access + refresh token pair."""
+    """Exchange a refresh token for a new access + refresh token pair.
+
+    Implements token rotation: each refresh token can only be used once.
+    Reusing an already-rotated token revokes the entire token family
+    (indicates the token was stolen and replayed).
+    """
+    import uuid as _uuid
     from datetime import datetime, timezone
+    from db.connection import get_database
 
     payload = decode_token(request.refresh_token, expected_type="refresh")
     user_id = payload["sub"]
+    token_jti = payload.get("jti")
+    token_family = payload.get("family")
 
     # Verify user still exists
     user = await user_repo.get_by_id(user_id)
@@ -301,7 +348,84 @@ async def refresh_token(
                     detail="Token invalidated by password change. Please log in again.",
                 )
 
+    db = await get_database()
+    rt_col = db["refresh_tokens"]
+
+    # Legacy tokens without family/jti: issue rotated tokens going forward
+    if not token_family or not token_jti:
+        new_family = str(_uuid.uuid4())
+        new_jti = str(_uuid.uuid4())
+        await rt_col.insert_one({
+            "family_id": new_family,
+            "user_id": user_id,
+            "current_jti": new_jti,
+            "created_at": datetime.now(timezone.utc),
+            "revoked": False,
+        })
+        return TokenResponse(
+            access_token=create_access_token(user_id),
+            refresh_token=create_refresh_token(user_id, family_id=new_family, jti=new_jti),
+        )
+
+    # Look up the token family
+    family_doc = await rt_col.find_one({"family_id": token_family, "user_id": user_id})
+
+    if not family_doc:
+        # First use of this family — register it
+        new_jti = str(_uuid.uuid4())
+        try:
+            await rt_col.insert_one({
+                "family_id": token_family,
+                "user_id": user_id,
+                "current_jti": new_jti,
+                "created_at": datetime.now(timezone.utc),
+                "revoked": False,
+            })
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token family conflict. Please log in again.",
+            )
+        return TokenResponse(
+            access_token=create_access_token(user_id),
+            refresh_token=create_refresh_token(user_id, family_id=token_family, jti=new_jti),
+        )
+
+    # Family is revoked — reject
+    if family_doc.get("revoked"):
+        logger.warning(f"Revoked token family reuse attempt: family={token_family} user={user_id}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has been revoked. Please log in again.",
+        )
+
+    # Replay detection: if jti doesn't match current, this is a reused token
+    if family_doc.get("current_jti") != token_jti:
+        # Revoke the entire family — possible token theft
+        await rt_col.update_one(
+            {"family_id": token_family},
+            {"$set": {"revoked": True, "revoked_at": datetime.now(timezone.utc)}},
+        )
+        logger.warning(f"Refresh token replay detected, family revoked: family={token_family} user={user_id}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token reuse detected. All sessions for this login have been revoked. Please log in again.",
+        )
+
+    # Valid rotation: atomically update current_jti
+    new_jti = str(_uuid.uuid4())
+    result = await rt_col.update_one(
+        {"family_id": token_family, "current_jti": token_jti, "revoked": False},
+        {"$set": {"current_jti": new_jti}},
+    )
+    if result.modified_count == 0:
+        # Concurrent rotation race — reject
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token already used. Please log in again.",
+        )
+
     return TokenResponse(
         access_token=create_access_token(user_id),
-        refresh_token=create_refresh_token(user_id),
+        refresh_token=create_refresh_token(user_id, family_id=token_family, jti=new_jti),
     )

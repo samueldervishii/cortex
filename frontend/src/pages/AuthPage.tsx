@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import { apiClient } from '../config/api'
 import './AuthPage.css'
 
 function AuthPage() {
@@ -18,6 +19,8 @@ function AuthPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [emailStatus, setEmailStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle')
+  const emailTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Sync tab with URL
   useEffect(() => {
@@ -36,8 +39,21 @@ function AuthPage() {
     return <Navigate to="/" replace />
   }
 
+  const checkEmail = (value: string) => {
+    if (emailTimerRef.current) clearTimeout(emailTimerRef.current)
+    if (!value || !value.includes('@') || value.length < 5) { setEmailStatus('idle'); return }
+    setEmailStatus('checking')
+    emailTimerRef.current = setTimeout(async () => {
+      try {
+        const res = await apiClient.get(`/auth/check-email/${encodeURIComponent(value.toLowerCase())}`)
+        setEmailStatus(res.data.available ? 'available' : 'taken')
+      } catch { setEmailStatus('idle') }
+    }, 500)
+  }
+
   const switchMode = () => {
     setError('')
+    setEmailStatus('idle')
     const next = isRegister ? '/login' : '/register'
     navigate(next, { replace: true })
   }
@@ -70,13 +86,14 @@ function AuthPage() {
         await login(email.trim().toLowerCase(), password)
       }
       navigate('/', { replace: true })
-    } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { detail?: string }; status?: number } }
-      if (axiosErr.response?.data?.detail) {
-        setError(axiosErr.response.data.detail)
-      } else if (axiosErr.response?.status === 401) {
+    } catch (err: any) {
+      if (err?.isNetworkError) {
+        setError('Please check your internet connection.')
+      } else if (err?.response?.data?.detail) {
+        setError(err.response.data.detail)
+      } else if (err?.response?.status === 401) {
         setError('Invalid email or password.')
-      } else if (axiosErr.response?.status === 409) {
+      } else if (err?.response?.status === 409) {
         setError('An account with this email already exists.')
       } else {
         setError('Something went wrong. Please try again.')
@@ -138,12 +155,15 @@ function AuthPage() {
                   id="email"
                   type="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => { setEmail(e.target.value); if (isRegister) checkEmail(e.target.value) }}
                   placeholder="you@example.com"
                   autoComplete="email"
                   autoFocus
                   disabled={submitting}
                 />
+                {isRegister && emailStatus === 'checking' && <span className="auth-field-status checking">Checking...</span>}
+                {isRegister && emailStatus === 'available' && <span className="auth-field-status available">Email available</span>}
+                {isRegister && emailStatus === 'taken' && <span className="auth-field-status taken">Email already registered</span>}
               </div>
 
               <div className="auth-field">
@@ -196,7 +216,7 @@ function AuthPage() {
 
               {error && <div className="auth-error">{error}</div>}
 
-              <button type="submit" className="auth-submit" disabled={submitting}>
+              <button type="submit" className="auth-submit" disabled={submitting || (isRegister && emailStatus === 'taken')}>
                 {submitting ? (
                   <span className="auth-submit-loading" />
                 ) : isRegister ? (

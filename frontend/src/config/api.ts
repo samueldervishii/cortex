@@ -70,6 +70,14 @@ apiClient.interceptors.response.use(
       }
     }
 
+    // Network error (server unreachable, no internet)
+    if (!error.response && error.code === 'ERR_NETWORK') {
+      const networkError = new Error('Please check your internet connection.') as any
+      networkError.isNetworkError = true
+      networkError.originalError = error
+      return Promise.reject(networkError)
+    }
+
     return Promise.reject(error)
   }
 )

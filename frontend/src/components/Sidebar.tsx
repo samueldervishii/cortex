@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, memo } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   Pin,
   Edit2,
@@ -8,11 +8,11 @@ import {
   Search as SearchIcon,
   Settings as SettingsIcon,
   MoreVertical,
-  MessageSquare,
   SquarePen,
   User,
   LogOut,
   ChevronUp,
+  ChevronLeft,
 } from 'lucide-react'
 import { FRONTEND_URL } from '../config/api'
 import { useToast } from '../contexts/ToastContext'
@@ -28,6 +28,7 @@ interface Session {
 }
 
 interface SidebarProps {
+  isOpen: boolean
   sessions: Session[]
   currentSessionId: string | null
   onDeleteSession: (id: string) => Promise<void>
@@ -37,9 +38,11 @@ interface SidebarProps {
   onClose: () => void
   onCloseMobile?: () => void
   onNewChat: () => void
+  onOpenCommandPalette?: () => void
 }
 
 function Sidebar({
+  isOpen,
   sessions,
   currentSessionId,
   onDeleteSession,
@@ -49,6 +52,7 @@ function Sidebar({
   onClose,
   onCloseMobile,
   onNewChat,
+  onOpenCommandPalette,
 }: SidebarProps) {
   const { showToast } = useToast()
   const { user, logout } = useAuth() as any
@@ -64,14 +68,13 @@ function Sidebar({
   const [editTitle, setEditTitle] = useState('')
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [visibleCount, setVisibleCount] = useState(10)
-  const [searchOpen, setSearchOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
 
   const searchInputRef = useRef<HTMLInputElement>(null)
   const editInputRef = useRef<HTMLInputElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const accountRef = useRef<HTMLDivElement>(null)
-  const location = useLocation()
+  const pendingSearchFocusRef = useRef(false)
 
   useEffect(() => {
     setVisibleCount(10)
@@ -106,6 +109,11 @@ function Sidebar({
       if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
         e.preventDefault()
         e.stopPropagation()
+        if (!isOpen) {
+          pendingSearchFocusRef.current = true
+          onClose()
+          return
+        }
         searchInputRef.current?.focus()
       }
       if (e.key === 'Escape' && searchQuery) {
@@ -114,7 +122,23 @@ function Sidebar({
     }
     window.addEventListener('keydown', handleKeyDown, { capture: true })
     return () => window.removeEventListener('keydown', handleKeyDown, { capture: true })
-  }, [searchQuery])
+  }, [isOpen, onClose, searchQuery])
+
+  useEffect(() => {
+    if (isOpen && pendingSearchFocusRef.current) {
+      pendingSearchFocusRef.current = false
+      const timeoutId = window.setTimeout(() => searchInputRef.current?.focus(), 220)
+      return () => window.clearTimeout(timeoutId)
+    }
+  }, [isOpen])
+
+  useEffect(() => {
+    if (!isOpen) {
+      setAccountOpen(false)
+      setOpenMenuId(null)
+      setEditingId(null)
+    }
+  }, [isOpen])
 
   const toggleMenu = (e: React.MouseEvent, sessionId: string) => {
     e.preventDefault()
@@ -224,6 +248,53 @@ function Sidebar({
   const displayName = user?.display_name || user?.username || user?.email || ''
   const displayInitial = (displayName || '?')[0].toUpperCase()
 
+  const openSearch = () => {
+    if (!isOpen) {
+      pendingSearchFocusRef.current = true
+      onClose()
+      return
+    }
+    searchInputRef.current?.focus()
+  }
+
+  const renderAccountDropdown = () => (
+    <div className="sidebar-account-dropdown">
+      <button
+        className="sidebar-account-item"
+        onClick={() => {
+          setAccountOpen(false)
+          navigate('/settings?tab=general')
+          onCloseMobile?.()
+        }}
+      >
+        <User size={14} />
+        Profile
+      </button>
+      <button
+        className="sidebar-account-item"
+        onClick={() => {
+          setAccountOpen(false)
+          navigate('/settings')
+          onCloseMobile?.()
+        }}
+      >
+        <SettingsIcon size={14} />
+        Settings
+      </button>
+      <div className="sidebar-account-divider" />
+      <button
+        className="sidebar-account-item danger"
+        onClick={() => {
+          setAccountOpen(false)
+          logout()
+        }}
+      >
+        <LogOut size={14} />
+        Log out
+      </button>
+    </div>
+  )
+
   const renderSessionItem = (session: Session) => (
     <Link
       key={session.id}
@@ -252,7 +323,6 @@ function Sidebar({
         ) : (
           <>
             <div className="session-name">
-              <MessageSquare size={14} />
               <span>{truncateQuestion(session.title || session.question)}</span>
             </div>
             <div className="session-date">{formatDate(session.created_at)}</div>
@@ -315,180 +385,177 @@ function Sidebar({
   )
 
   return (
-    <div className="sidebar">
-      <div className="sidebar-brand">
-        <div className="sidebar-logo">
-          <img src="/logo.svg" alt="Cortex" className="sidebar-logo-icon" />
-          <div className="sidebar-logo-copy">
-            <span className="sidebar-logo-title">Cortex</span>
-            <span className="sidebar-logo-subtitle">Research workspace</span>
+    <div className={`sidebar ${isOpen ? 'expanded' : 'collapsed'}`}>
+      <div className="sidebar-shell">
+        <div className="sidebar-brand">
+          <div className="sidebar-brand-main">
+            <div className="sidebar-logo">
+              <img src="/logo.svg" alt="Cortex" className="sidebar-logo-icon" />
+              {isOpen && (
+                <div className="sidebar-logo-copy">
+                  <span className="sidebar-logo-title">
+                    Cortex -{' '}
+                    {isOpen && <span className="sidebar-logo-subtitle">Research workspace</span>}
+                  </span>
+                  {/* <span className="sidebar-logo-subtitle">Research workspace</span> */}
+                </div>
+              )}
+            </div>
+            {/* {isOpen && <span className="sidebar-meta-badge">Desk</span>} */}
+            {/* {isOpen && <span className="sidebar-logo-subtitle">Research workspace</span>} */}
           </div>
+          <button className="sidebar-toggle-btn" onClick={onClose}>
+            <ChevronLeft size={16} />
+          </button>
         </div>
-        <button className="sidebar-toggle-btn" onClick={onClose} title="Close sidebar">
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-          >
-            <rect x="3" y="3" width="18" height="18" rx="2" />
-            <line x1="9" y1="3" x2="9" y2="21" />
-          </svg>
-        </button>
-      </div>
 
-      <div className="sidebar-nav">
-        <button
-          className="sidebar-nav-item"
-          onClick={() => {
-            onNewChat()
-            onCloseMobile?.()
-          }}
-        >
-          <SquarePen size={16} />
-          <span>New chat</span>
-          <kbd className="sidebar-nav-shortcut">Alt+N</kbd>
-        </button>
-        <button
-          className="sidebar-nav-item"
-          onClick={() => {
-            setSearchOpen(true)
-            setTimeout(() => searchInputRef.current?.focus(), 50)
-          }}
-        >
-          <SearchIcon size={16} />
-          <span>Search chats</span>
-        </button>
-      </div>
+        {isOpen ? (
+          <>
+            <div className="sidebar-nav">
+              <button
+                className="sidebar-nav-item sidebar-nav-item-primary"
+                onClick={() => {
+                  onNewChat()
+                  onCloseMobile?.()
+                }}
+              >
+                <SquarePen size={16} />
+                <span>New chat</span>
+                <kbd className="sidebar-nav-shortcut">Alt+N</kbd>
+              </button>
+            </div>
 
-      {searchOpen && (
-        <div className="sidebar-search visible">
-          <SearchIcon size={14} />
-          <input
-            ref={searchInputRef}
-            type="text"
-            placeholder="Search..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onBlur={() => {
-              if (!searchQuery) {
-                setTimeout(() => setSearchOpen(false), 150)
-              }
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') {
-                setSearchQuery('')
-                setSearchOpen(false)
-              }
-            }}
-          />
-          {searchQuery && (
-            <button className="search-clear" onClick={() => setSearchQuery('')}>
-              <X size={14} />
-            </button>
-          )}
-        </div>
-      )}
+            <div className="sidebar-search-card">
+              <div className="sidebar-search visible">
+                <SearchIcon size={14} />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  placeholder="Search chats"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      setSearchQuery('')
+                      e.currentTarget.blur()
+                    }
+                  }}
+                />
+                {searchQuery ? (
+                  <button className="search-clear" onClick={() => setSearchQuery('')}>
+                    <X size={14} />
+                  </button>
+                ) : (
+                  <span className="sidebar-search-hint">Ctrl+F</span>
+                )}
+              </div>
+              <button className="sidebar-search-quick" onClick={openSearch} title="Search chats">
+                <SearchIcon size={15} />
+              </button>
+            </div>
 
-      <div className="sidebar-divider" />
+            <div className="sidebar-divider" />
 
-      <div className="sidebar-sessions">
-        {filteredSessions.length === 0 ? (
-          <p className="sidebar-empty">
-            {searchQuery ? `No results for "${searchQuery}"` : 'No conversations yet'}
-          </p>
+            <div className="sidebar-sessions">
+              {filteredSessions.length === 0 ? (
+                <p className="sidebar-empty">
+                  {searchQuery ? `No results for "${searchQuery}"` : 'No conversations yet'}
+                </p>
+              ) : (
+                <>
+                  {pinnedSessions.length > 0 && (
+                    <>
+                      <div className="sidebar-section-header">
+                        <Pin size={11} fill="currentColor" />
+                        <span>Pinned</span>
+                      </div>
+                      {pinnedSessions.map((session) => renderSessionItem(session))}
+                    </>
+                  )}
+
+                  {recentSessions.length > 0 && (
+                    <>
+                      <div className="sidebar-section-header">
+                        <span>{pinnedSessions.length > 0 ? 'Recent' : 'Chats'}</span>
+                      </div>
+                      {recentSessions
+                        .slice(0, visibleCount)
+                        .map((session) => renderSessionItem(session))}
+                      {recentSessions.length > visibleCount && (
+                        <button
+                          className="load-more-btn"
+                          onClick={() => setVisibleCount((prev) => prev + 10)}
+                        >
+                          Load more ({recentSessions.length - visibleCount} remaining)
+                        </button>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+
+            {user && (
+              <div className="sidebar-account" ref={accountRef}>
+                {accountOpen && renderAccountDropdown()}
+                <button
+                  className={`sidebar-account-trigger ${accountOpen ? 'open' : ''}`}
+                  onClick={() => setAccountOpen((prev) => !prev)}
+                >
+                  <div className="sidebar-account-avatar">
+                    {user.avatar ? <img src={user.avatar} alt="" /> : displayInitial}
+                  </div>
+                  <div className="sidebar-account-copy">
+                    <span className="sidebar-account-name">{displayName}</span>
+                    <span className="sidebar-account-role">Workspace</span>
+                  </div>
+                  <ChevronUp
+                    size={14}
+                    className={`sidebar-account-chevron ${accountOpen ? 'open' : ''}`}
+                  />
+                </button>
+              </div>
+            )}
+          </>
         ) : (
           <>
-            {pinnedSessions.length > 0 && (
-              <>
-                <div className="sidebar-section-header">
-                  <Pin size={11} fill="currentColor" />
-                  <span>Pinned</span>
-                </div>
-                {pinnedSessions.map((session) => renderSessionItem(session))}
-              </>
-            )}
+            <div className="sidebar-collapsed-actions">
+              <button
+                className="sidebar-rail-btn sidebar-rail-btn-primary"
+                onClick={() => {
+                  onNewChat()
+                  onCloseMobile?.()
+                }}
+                title="New chat"
+              >
+                <SquarePen size={17} />
+              </button>
+              <button
+                className="sidebar-rail-btn"
+                onClick={onOpenCommandPalette}
+                title="Search (Ctrl+K)"
+              >
+                <SearchIcon size={17} />
+              </button>
+            </div>
 
-            {recentSessions.length > 0 && (
-              <>
-                {pinnedSessions.length > 0 && (
-                  <div className="sidebar-section-header">
-                    <span>Recent</span>
+            {user && (
+              <div className="sidebar-collapsed-footer" ref={accountRef}>
+                {accountOpen && renderAccountDropdown()}
+                <button
+                  className={`sidebar-rail-profile ${accountOpen ? 'open' : ''}`}
+                  onClick={() => setAccountOpen((prev) => !prev)}
+                  title={displayName || 'Account'}
+                >
+                  <div className="sidebar-account-avatar">
+                    {user.avatar ? <img src={user.avatar} alt="" /> : displayInitial}
                   </div>
-                )}
-                {recentSessions.slice(0, visibleCount).map((session) => renderSessionItem(session))}
-                {recentSessions.length > visibleCount && (
-                  <button
-                    className="load-more-btn"
-                    onClick={() => setVisibleCount((prev) => prev + 10)}
-                  >
-                    Load more ({recentSessions.length - visibleCount} remaining)
-                  </button>
-                )}
-              </>
+                </button>
+              </div>
             )}
           </>
         )}
       </div>
-
-      {user && (
-        <div className="sidebar-account" ref={accountRef}>
-          {accountOpen && (
-            <div className="sidebar-account-dropdown">
-              <button
-                className="sidebar-account-item"
-                onClick={() => {
-                  setAccountOpen(false)
-                  navigate('/settings?tab=general')
-                  onCloseMobile?.()
-                }}
-              >
-                <User size={14} />
-                Profile
-              </button>
-              <button
-                className="sidebar-account-item"
-                onClick={() => {
-                  setAccountOpen(false)
-                  navigate('/settings')
-                  onCloseMobile?.()
-                }}
-              >
-                <SettingsIcon size={14} />
-                Settings
-              </button>
-              <div className="sidebar-account-divider" />
-              <button
-                className="sidebar-account-item danger"
-                onClick={() => {
-                  setAccountOpen(false)
-                  logout()
-                }}
-              >
-                <LogOut size={14} />
-                Log out
-              </button>
-            </div>
-          )}
-          <button
-            className={`sidebar-account-trigger ${accountOpen ? 'open' : ''}`}
-            onClick={() => setAccountOpen((prev) => !prev)}
-          >
-            <div className="sidebar-account-avatar">
-              {user.avatar ? (
-                <img src={user.avatar} alt="" />
-              ) : (
-                displayInitial
-              )}
-            </div>
-            <span className="sidebar-account-name">{displayName}</span>
-            <ChevronUp size={14} className={`sidebar-account-chevron ${accountOpen ? 'open' : ''}`} />
-          </button>
-        </div>
-      )}
 
       {deleteConfirm.open && (
         <div className="delete-modal-overlay" onClick={cancelDelete}>

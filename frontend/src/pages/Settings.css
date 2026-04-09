@@ -1,9 +1,12 @@
 /* ─── Settings Page ─── */
 .settings-page {
-  max-width: 840px;
   padding: 2rem 2.5rem;
   overflow-y: auto;
   flex: 1;
+}
+
+.settings-header {
+  margin-bottom: 1.75rem;
 }
 
 .settings-title {
@@ -11,13 +14,39 @@
   font-weight: 700;
   color: var(--heading-color);
   letter-spacing: -0.02em;
-  margin: 0 0 1.75rem 0;
+  margin: 0 0 0.25rem 0;
+}
+
+.settings-subtitle {
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.settings-section-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--heading-color);
+  margin: 0 0 1.25rem 0;
 }
 
 /* Layout — vertical tabs + content */
 .settings-layout {
   display: flex;
   gap: 2.5rem;
+}
+
+.auth-learn-more {
+  color: var(--accent-color);
+  text-decoration: none;
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+
+.auth-learn-more:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 /* ─── Vertical Nav (segmented pill style) ─── */
@@ -88,21 +117,309 @@
   margin: 1.5rem 0;
 }
 
-/* ── Profile Section ── */
+/* ── Profile Table (row-based layout like reference design) ── */
 
-.settings-field-row {
-  display: flex;
-  gap: 1rem;
+.profile-table {
+  border-top: 1px solid rgba(88, 67, 39, 0.08);
 }
 
-.settings-avatar-input-row {
+.profile-row {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  padding: 1.1rem 0;
+  border-bottom: 1px solid rgba(88, 67, 39, 0.08);
+}
+
+/* Rows with hints need top alignment so the hint sits under the label */
+.profile-row:has(.profile-label-hint) {
+  align-items: flex-start;
+}
+
+.profile-row-label {
+  min-width: 180px;
+  flex-shrink: 0;
+}
+
+.profile-label-text {
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.profile-label-hint {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: 0.15rem;
+  line-height: 1.4;
+}
+
+.profile-row-value {
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  min-height: 40px;
 }
 
-.settings-avatar-input-row input {
+.profile-value-text {
+  font-size: 0.88rem;
+  color: var(--text-primary);
+}
+
+.profile-value-muted {
+  color: var(--text-muted);
+}
+
+.profile-action-link {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition: color 0.12s;
+}
+
+.profile-action-link:hover:not(:disabled) {
+  color: var(--accent-color);
+}
+
+.profile-action-link:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Inline edit within a profile row */
+.profile-inline-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
   flex: 1;
+}
+
+.profile-inline-edit input,
+.profile-inline-edit select {
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  background: rgba(255, 250, 242, 0.5);
+  border: 1px solid rgba(88, 67, 39, 0.12);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 0.88rem;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.profile-inline-edit input:focus,
+.profile-inline-edit select:focus {
+  outline: none;
+  border-color: rgba(15, 118, 110, 0.3);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.06);
+}
+
+.profile-inline-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.profile-inline-cancel {
+  padding: 0.35rem 0.85rem;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid rgba(88, 67, 39, 0.12);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.profile-inline-cancel:hover {
+  background: rgba(255, 250, 242, 0.8);
+}
+
+.profile-inline-save {
+  padding: 0.35rem 0.85rem;
+  background: var(--heading-color);
+  color: var(--bg-primary);
+  border: none;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.profile-inline-save:hover:not(:disabled) {
+  opacity: 0.88;
+}
+
+.profile-inline-save:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Styled select for inline profile editing */
+.profile-inline-edit .settings-select {
+  width: 100%;
+  padding: 0.5rem 2.2rem 0.5rem 0.65rem;
+  background-color: rgba(255, 250, 242, 0.5);
+  border: 1px solid rgba(88, 67, 39, 0.12);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 0.88rem;
+  font-family: inherit;
+  cursor: pointer;
+  appearance: none;
+  background-image: url('data:image/svg+xml;charset=UTF-8,<svg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1.5L6 6.5L11 1.5" stroke="%23888" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>');
+  background-repeat: no-repeat;
+  background-position: right 0.65rem center;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.profile-inline-edit .settings-select:focus {
+  outline: none;
+  border-color: rgba(15, 118, 110, 0.3);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.06);
+}
+
+/* ── Field status indicators (username/email availability) ── */
+.profile-input-with-status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  flex: 1;
+}
+
+.profile-input-with-status input {
+  width: 100%;
+}
+
+.field-status {
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.field-status.checking {
+  color: var(--text-muted);
+}
+
+.field-status.available {
+  color: var(--accent-color);
+}
+
+.field-status.taken {
+  color: #c0392b;
+}
+
+/* ── Custom select dropdown ── */
+.custom-select {
+  position: relative;
+  width: 100%;
+}
+
+.custom-select-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.7rem;
+  background: rgba(255, 250, 242, 0.5);
+  border: 1px solid rgba(88, 67, 39, 0.12);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 0.88rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  text-align: left;
+}
+
+.custom-select-trigger:hover {
+  border-color: rgba(88, 67, 39, 0.2);
+}
+
+.custom-select-trigger:focus {
+  outline: none;
+  border-color: rgba(15, 118, 110, 0.3);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.06);
+}
+
+.custom-select-trigger svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.custom-select-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--bg-secondary);
+  border: 1px solid rgba(88, 67, 39, 0.1);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(50, 37, 17, 0.1);
+  z-index: 50;
+  padding: 4px;
+  max-height: 240px;
+  overflow-y: auto;
+  animation: customSelectIn 0.12s ease;
+}
+
+@keyframes customSelectIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.custom-select-option {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 0.7rem;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  text-align: left;
+  font-size: 0.86rem;
+  font-family: inherit;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.custom-select-option:hover {
+  background: rgba(88, 67, 39, 0.05);
+}
+
+.custom-select-option.selected {
+  background: rgba(15, 118, 110, 0.08);
+  color: var(--accent-color);
+  font-weight: 600;
+}
+
+/* Pill-style value for field of work */
+.profile-value-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.65rem;
+  background: rgba(88, 67, 39, 0.06);
+  border-radius: 999px;
+  font-size: 0.84rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+/* Legacy — keep for backward compat */
+.settings-field-row {
+  display: flex;
+  gap: 1rem;
 }
 
 .settings-avatar-btn {
@@ -180,7 +497,9 @@
   color: var(--text-primary);
   font-size: 0.88rem;
   font-family: inherit;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
   box-sizing: border-box;
 }
 
@@ -233,7 +552,9 @@
   line-height: 1.5;
   resize: vertical;
   min-height: 60px;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
   box-sizing: border-box;
 }
 
@@ -676,8 +997,12 @@
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .modal {
@@ -693,8 +1018,14 @@
 }
 
 @keyframes modalIn {
-  from { opacity: 0; transform: scale(0.96) translateY(8px); }
-  to { opacity: 1; transform: scale(1) translateY(0); }
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
 .modal h3 {
@@ -881,6 +1212,20 @@
   .settings-field-row {
     flex-direction: column;
     gap: 0;
+  }
+
+  .profile-row {
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 0.85rem 0;
+  }
+
+  .profile-row-label {
+    min-width: 0;
+  }
+
+  .profile-row-value {
+    min-height: 0;
   }
 
   .settings-save-btn,

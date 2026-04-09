@@ -1,6 +1,7 @@
-import { useRef } from 'react'
-import { Paperclip, FileText, Download } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
+import { RefreshCcw, Sparkles, FileText, Mail, SearchCheck, PenSquare } from 'lucide-react'
 import ChatInput, { type ChatInputHandle } from './ChatInput'
+import { useAuth } from '../contexts/AuthContext'
 
 interface WelcomeScreenProps {
   question: string
@@ -13,6 +14,7 @@ interface WelcomeScreenProps {
 const SUGGESTIONS = [
   {
     eyebrow: 'Draft',
+    icon: PenSquare,
     title: 'Write a thesis introduction',
     description: 'Frame your argument with strong structure and a clear research tone.',
     prompt:
@@ -20,6 +22,7 @@ const SUGGESTIONS = [
   },
   {
     eyebrow: 'Research',
+    icon: SearchCheck,
     title: 'Overview of a complex topic',
     description: 'Break a subject into themes, key findings, and critical comparisons.',
     prompt:
@@ -27,17 +30,20 @@ const SUGGESTIONS = [
   },
   {
     eyebrow: 'Refine',
+    icon: FileText,
     title: 'Improve and restructure',
     description: 'Tighten clarity, flow, and academic tone across your existing writing.',
     prompt:
       'Help me improve the clarity, structure, and academic tone of my draft. I will paste it next.',
   },
-]
-
-const CAPABILITIES = [
-  { label: 'File Upload', icon: Paperclip },
-  { label: 'Artifacts', icon: FileText },
-  { label: 'DOCX Export', icon: Download },
+  {
+    eyebrow: 'Reply',
+    icon: Mail,
+    title: 'Generate a polished response',
+    description: 'Turn rough notes into a clear, well-structured email or formal reply.',
+    prompt:
+      'Help me write a polished email reply to a professor asking for a deadline extension on my research paper.',
+  },
 ]
 
 function WelcomeScreen({
@@ -48,43 +54,68 @@ function WelcomeScreen({
   loading,
 }: WelcomeScreenProps) {
   const inputRef = useRef<ChatInputHandle | null>(null)
+  const [suggestions, setSuggestions] = useState(SUGGESTIONS)
+  const { user } = useAuth() as any
+  const firstName = useMemo(() => {
+    const raw = user?.display_name || user?.username || user?.email || ''
+    const cleaned = String(raw).trim()
+    if (!cleaned) return 'Researcher'
+    return cleaned.split(/[\s@._-]+/)[0]
+  }, [user])
 
   const handlePromptClick = (prompt: string) => {
     onQuestionChange(prompt)
     setTimeout(() => onSubmit(), 100)
   }
 
+  const shuffleSuggestions = () => {
+    const copy = [...SUGGESTIONS]
+    for (let i = copy.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[copy[i], copy[j]] = [copy[j], copy[i]]
+    }
+    setSuggestions(copy)
+  }
+
   return (
     <div className="welcome-screen">
       <div className="welcome-center">
-        <img src="/logo.svg" alt="Cortex" className="welcome-mascot" />
-        <h1 className="welcome-heading">Where research begins</h1>
+        <div className="welcome-badge">
+          <Sparkles size={14} />
+          Cortex workspace
+        </div>
+        <h1 className="welcome-heading">
+          <span className="welcome-heading-static">Hi there, {firstName}</span>
+          <span className="welcome-heading-gradient">What should we research today?</span>
+        </h1>
         <p className="welcome-subheading">
-          Draft, analyze, and organize your research with AI — all in one focused place.
+          Use one of the starter prompts below or describe your question in your own words to
+          begin.
         </p>
       </div>
 
       <div className="welcome-suggestions">
-        {SUGGESTIONS.map((item) => (
+        {suggestions.map((item) => (
           <button
             key={item.eyebrow}
             className="welcome-suggestion-card"
             onClick={() => handlePromptClick(item.prompt)}
           >
-            <span className="welcome-suggestion-eyebrow">{item.eyebrow}</span>
+            <span className="welcome-suggestion-eyebrow">
+              <item.icon size={14} />
+              {item.eyebrow}
+            </span>
             <span className="welcome-suggestion-title">{item.title}</span>
             <span className="welcome-suggestion-desc">{item.description}</span>
           </button>
         ))}
       </div>
 
-      <div className="welcome-pills">
-        {CAPABILITIES.map((cap) => (
-          <span key={cap.label} className="welcome-pill">
-            <cap.icon size={14} />
-            {cap.label}
-          </span>
-        ))}
+      <div className="welcome-toolbar">
+        <button className="welcome-toolbar-btn" type="button" onClick={shuffleSuggestions}>
+          <RefreshCcw size={14} />
+          Refresh prompts
+        </button>
       </div>
 
       <div className="welcome-input-area">

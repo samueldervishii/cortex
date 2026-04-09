@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 logger = logging.getLogger("cortex.sessions")
 
 from clients import AIClient
+from core.timestamps import utc_iso
 from core.dependencies import (
     get_session_repository,
     get_settings_repository,
@@ -70,7 +71,7 @@ async def list_sessions(
                 question=s.get("question", ""),
                 status=s.get("status", "completed"),
                 message_count=s.get("message_count", 0),
-                created_at=(created_at.isoformat() + "Z") if created_at else None,
+                created_at=utc_iso(created_at) if created_at else None,
                 is_pinned=s.get("is_pinned", False),
             )
         )
@@ -95,7 +96,7 @@ async def search_sessions(
                 question=s.get("question", ""),
                 status="completed",
                 message_count=s.get("message_count", 0),
-                created_at=(created_at.isoformat() + "Z") if created_at else None,
+                created_at=utc_iso(created_at) if created_at else None,
                 is_pinned=s.get("is_pinned", False),
             )
         )
@@ -169,7 +170,7 @@ async def update_session(
         raise HTTPException(status_code=404, detail="Session not found")
 
     if request.is_pinned is not None and request.title is None:
-        pinned_at = datetime.now(timezone.utc).isoformat() if request.is_pinned else None
+        pinned_at = utc_iso() if request.is_pinned else None
         success = await repo.update_pin(session_id, request.is_pinned, pinned_at, user_id=user_id)
         if not success:
             raise HTTPException(status_code=500, detail="Failed to update pin status")
@@ -181,7 +182,7 @@ async def update_session(
         session.title = sanitize_title(request.title, max_length=200)
     if request.is_pinned is not None:
         session.is_pinned = request.is_pinned
-        session.pinned_at = datetime.now(timezone.utc).isoformat() if request.is_pinned else None
+        session.pinned_at = utc_iso() if request.is_pinned else None
 
     try:
         await repo.update(session)
@@ -239,7 +240,19 @@ async def upload_file_to_session(
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    content = await file.read()
+    # Read file in chunks to enforce size limit without trusting Content-Length
+    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+    chunks_buf = []
+    bytes_read = 0
+    while True:
+        chunk = await file.read(64 * 1024)  # 64KB chunks
+        if not chunk:
+            break
+        bytes_read += len(chunk)
+        if bytes_read > MAX_FILE_SIZE:
+            raise HTTPException(status_code=413, detail="File too large. Maximum size is 10MB.")
+        chunks_buf.append(chunk)
+    content = b"".join(chunks_buf)
 
     try:
         validate_file(file.filename, file.content_type, len(content), content)
@@ -262,12 +275,27 @@ async def upload_file_to_session(
         logger.debug(f"Chunking failed for {file.filename}, proceeding without chunks")
         chunks = []
 
+    # Store binary file data in a separate collection to keep session documents small.
+    # This prevents session docs from exceeding MongoDB's 16MB document limit.
+    db = repo.collection.database
+    storage_id = str(uuid.uuid4())
+    await db["file_storage"].insert_one({
+        "id": storage_id,
+        "session_id": session_id,
+        "data_base64": base64.b64encode(content).decode("ascii"),
+        "filename": file.filename,
+        "content_type": file.content_type,
+        "size": len(content),
+        "created_at": utc_iso(),
+    })
+
     attachment = FileAttachment(
         filename=file.filename,
         content_type=file.content_type,
         size=len(content),
         extracted_text=extracted_text,
-        data_base64=base64.b64encode(content).decode("ascii"),
+        data_base64="",
+        file_storage_id=storage_id,
         chunks=chunks,
     )
 
@@ -279,9 +307,11 @@ async def upload_file_to_session(
     if replace_last == "true" and session.messages:
         last_msg = session.messages[-1]
         if last_msg.role == "user" and not last_msg.file:
-            saved = await repo.replace_last_message(session_id, user_message.model_dump())
+            saved = await repo.replace_last_message(
+                session_id, user_message.model_dump(), expected_count=len(session.messages)
+            )
             if not saved:
-                raise HTTPException(status_code=404, detail="Session not found or was deleted")
+                raise HTTPException(status_code=409, detail="Session was modified concurrently. Please retry.")
             session.messages[-1] = user_message
         else:
             saved = await repo.append_message(session_id, user_message.model_dump())
@@ -294,34 +324,32 @@ async def upload_file_to_session(
             raise HTTPException(status_code=404, detail="Session not found or was deleted")
         session.messages.append(user_message)
 
-    # Auto-register uploaded file as a session source (dedup by filename)
+    # Auto-register uploaded file as a session source (dedup enforced by unique index)
     try:
+        from pymongo.errors import DuplicateKeyError
         db = repo.collection.database
-        existing = await db["sources"].find_one(
-            {"session_id": session_id, "kind": "file", "filename": file.filename},
-            {"_id": 1},
-        )
-        if not existing:
-            source_doc = {
-                "id": str(uuid.uuid4()),
-                "session_id": session_id,
-                "kind": "file",
-                "title": file.filename,
-                "url": None,
-                "normalized_url": None,
-                "domain": None,
-                "filename": file.filename,
-                "content_type": file.content_type,
-                "size": len(content),
-                "extracted_text": extracted_text,
-                "chunks": [c.model_dump() for c in chunks],
-                "chunk_count": len(chunks),
-                "author": None,
-                "publisher": None,
-                "published_at": None,
-                "created_at": datetime.now(timezone.utc).isoformat() + "Z",
-            }
-            await db["sources"].insert_one(source_doc)
+        source_doc = {
+            "id": str(uuid.uuid4()),
+            "session_id": session_id,
+            "kind": "file",
+            "title": file.filename,
+            "url": None,
+            "normalized_url": None,
+            "domain": None,
+            "filename": file.filename,
+            "content_type": file.content_type,
+            "size": len(content),
+            "extracted_text": extracted_text,
+            "chunks": [c.model_dump() for c in chunks],
+            "chunk_count": len(chunks),
+            "author": None,
+            "publisher": None,
+            "published_at": None,
+            "created_at": utc_iso(),
+        }
+        await db["sources"].insert_one(source_doc)
+    except DuplicateKeyError:
+        logger.debug(f"Source already registered for {file.filename}")
     except Exception:
         logger.debug(f"Failed to register source for {file.filename}")
 
@@ -536,7 +564,7 @@ async def stream_response(
                         "message_index": reply_position,
                         "title": artifact_title,
                         "content": full_response,
-                        "created_at": datetime.now(timezone.utc).isoformat() + "Z",
+                        "created_at": utc_iso(),
                     }
                     try:
                         db = repo.collection.database
@@ -602,11 +630,27 @@ async def download_file(
         raise HTTPException(status_code=404, detail="Message not found")
 
     msg = session.messages[message_index]
-    if not msg.file or not msg.file.data_base64:
+    if not msg.file:
         raise HTTPException(status_code=404, detail="No file attached to this message")
 
+    # Try external file_storage first, fall back to legacy inline data_base64
+    data_b64 = None
+    if msg.file.file_storage_id:
+        db = repo.collection.database
+        storage_doc = await db["file_storage"].find_one(
+            {"id": msg.file.file_storage_id}, {"data_base64": 1}
+        )
+        if storage_doc:
+            data_b64 = storage_doc.get("data_base64")
+
+    if not data_b64 and msg.file.data_base64:
+        data_b64 = msg.file.data_base64
+
+    if not data_b64:
+        raise HTTPException(status_code=404, detail="File data not found")
+
     from core.sanitization import sanitize_filename
-    file_bytes = base64.b64decode(msg.file.data_base64)
+    file_bytes = base64.b64decode(data_b64)
     safe_filename = sanitize_filename(msg.file.filename)
     return Response(
         content=file_bytes,
@@ -684,7 +728,7 @@ async def share_session(
     if not session.is_shared or not session.share_token:
         session.share_token = secrets.token_urlsafe(32)
         session.is_shared = True
-        session.shared_at = datetime.now(timezone.utc).isoformat()
+        session.shared_at = utc_iso()
         await repo.update(session)
 
     base_url = str(request.base_url).rstrip("/")
@@ -791,7 +835,7 @@ async def cleanup_old_sessions(
     if user_settings.auto_delete_days not in valid_days:
         return {"message": "Invalid auto_delete_days", "deleted_count": 0, "skipped": True}
 
-    deleted_count = await session_repo.soft_delete_older_than(
+    deleted_count = await session_repo.purge_older_than(
         days=user_settings.auto_delete_days, include_pinned=False, user_id=user_id
     )
     return {
@@ -873,13 +917,13 @@ async def submit_feedback(
                 "rating": body.rating,
                 "comment": clean_comment,
                 "issue_type": body.issue_type,
-                "updated_at": datetime.now(timezone.utc).isoformat() + "Z",
+                "updated_at": utc_iso(),
             },
             "$setOnInsert": {
                 "session_id": session_id,
                 "user_id": user_id,
                 "message_index": body.message_index,
-                "created_at": datetime.now(timezone.utc).isoformat() + "Z",
+                "created_at": utc_iso(),
             },
         },
         upsert=True,

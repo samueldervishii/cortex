@@ -1,4 +1,5 @@
 import logging
+import uuid
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
@@ -35,11 +36,25 @@ def create_access_token(user_id: str) -> str:
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 
-def create_refresh_token(user_id: str) -> str:
+def create_refresh_token(user_id: str, family_id: str | None = None, jti: str | None = None) -> str:
+    """Create a refresh JWT.
+
+    Args:
+        family_id: Token family identifier for rotation tracking.
+                   A new family is created per login; all rotated tokens share it.
+        jti: Unique token ID. Generated if not provided.
+    """
     _check_jwt_secret()
     now = datetime.now(timezone.utc)
     expire = now + timedelta(days=settings.jwt_refresh_token_expire_days)
-    payload = {"sub": user_id, "exp": expire, "iat": now, "type": "refresh"}
+    payload = {
+        "sub": user_id,
+        "exp": expire,
+        "iat": now,
+        "type": "refresh",
+        "jti": jti or str(uuid.uuid4()),
+        "family": family_id or str(uuid.uuid4()),
+    }
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 

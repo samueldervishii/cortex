@@ -136,28 +136,25 @@ function App() {
   return (
     <div className={`chat-app ${sidebarOpen ? 'sidebar-visible' : ''} ${rightPanelOpen ? 'right-panel-visible' : ''}`}>
       <div className="chat-body">
-        {sidebarOpen && (
-          <>
-            <div className="sidebar-overlay" onClick={toggleSidebar} />
-            <Sidebar
-              sessions={sessions}
-              currentSessionId={sessionId}
-              onDeleteSession={deleteSession}
-              onRenameSession={renameSession}
-              onTogglePinSession={togglePinSession}
-              onShareSession={shareSession}
-              onClose={toggleSidebar}
-              onCloseMobile={closeSidebarOnMobile}
-              onNewChat={handleNewChat}
-            />
-          </>
-        )}
+        {sidebarOpen && <div className="sidebar-overlay" onClick={toggleSidebar} />}
+        <Sidebar
+          isOpen={sidebarOpen}
+          sessions={sessions}
+          currentSessionId={sessionId}
+          onDeleteSession={deleteSession}
+          onRenameSession={renameSession}
+          onTogglePinSession={togglePinSession}
+          onShareSession={shareSession}
+          onClose={toggleSidebar}
+          onCloseMobile={closeSidebarOnMobile}
+          onNewChat={handleNewChat}
+          onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+        />
 
         <div className="chat-content">
           <TopBar
             onNewChat={handleNewChat}
             onToggleSidebar={toggleSidebar}
-            onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
             sidebarOpen={sidebarOpen}
             onToggleRightPanel={toggleRightPanel}
             rightPanelOpen={rightPanelOpen}

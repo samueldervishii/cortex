@@ -144,6 +144,24 @@
   gap: 0.35rem;
 }
 
+.auth-field-status {
+  font-size: 0.76rem;
+  font-weight: 600;
+  margin-top: -0.1rem;
+}
+
+.auth-field-status.checking {
+  color: var(--text-muted, #7d7467);
+}
+
+.auth-field-status.available {
+  color: var(--accent-color, #0f766e);
+}
+
+.auth-field-status.taken {
+  color: #c0392b;
+}
+
 .auth-field label {
   font-size: 0.8rem;
   font-weight: 500;
