@@ -19,7 +19,9 @@ function AuthPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [emailStatus, setEmailStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle')
+  const [emailStatus, setEmailStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>(
+    'idle'
+  )
   const emailTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Sync tab with URL
@@ -41,13 +43,20 @@ function AuthPage() {
 
   const checkEmail = (value: string) => {
     if (emailTimerRef.current) clearTimeout(emailTimerRef.current)
-    if (!value || !value.includes('@') || value.length < 5) { setEmailStatus('idle'); return }
+    if (!value || !value.includes('@') || value.length < 5) {
+      setEmailStatus('idle')
+      return
+    }
     setEmailStatus('checking')
     emailTimerRef.current = setTimeout(async () => {
       try {
-        const res = await apiClient.get(`/auth/check-email/${encodeURIComponent(value.toLowerCase())}`)
+        const res = await apiClient.get(
+          `/auth/check-email/${encodeURIComponent(value.toLowerCase())}`
+        )
         setEmailStatus(res.data.available ? 'available' : 'taken')
-      } catch { setEmailStatus('idle') }
+      } catch {
+        setEmailStatus('idle')
+      }
     }, 500)
   }
 
@@ -155,15 +164,24 @@ function AuthPage() {
                   id="email"
                   type="email"
                   value={email}
-                  onChange={(e) => { setEmail(e.target.value); if (isRegister) checkEmail(e.target.value) }}
+                  onChange={(e) => {
+                    setEmail(e.target.value)
+                    if (isRegister) checkEmail(e.target.value)
+                  }}
                   placeholder="you@example.com"
                   autoComplete="email"
                   autoFocus
                   disabled={submitting}
                 />
-                {isRegister && emailStatus === 'checking' && <span className="auth-field-status checking">Checking...</span>}
-                {isRegister && emailStatus === 'available' && <span className="auth-field-status available">Email available</span>}
-                {isRegister && emailStatus === 'taken' && <span className="auth-field-status taken">Email already registered</span>}
+                {isRegister && emailStatus === 'checking' && (
+                  <span className="auth-field-status checking">Checking...</span>
+                )}
+                {isRegister && emailStatus === 'available' && (
+                  <span className="auth-field-status available">Email available</span>
+                )}
+                {isRegister && emailStatus === 'taken' && (
+                  <span className="auth-field-status taken">Email already registered</span>
+                )}
               </div>
 
               <div className="auth-field">
@@ -216,7 +234,11 @@ function AuthPage() {
 
               {error && <div className="auth-error">{error}</div>}
 
-              <button type="submit" className="auth-submit" disabled={submitting || (isRegister && emailStatus === 'taken')}>
+              <button
+                type="submit"
+                className="auth-submit"
+                disabled={submitting || (isRegister && emailStatus === 'taken')}
+              >
                 {submitting ? (
                   <span className="auth-submit-loading" />
                 ) : isRegister ? (

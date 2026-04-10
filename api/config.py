@@ -50,9 +50,43 @@ if settings.environment == "production":
     if not settings.anthropic_api_key:
         raise RuntimeError("CRITICAL: ANTHROPIC_API_KEY is required in production.")
 
-# The single AI model used for all conversations
-CHAT_MODEL = {
-    "id": "claude-sonnet-4-6",
-    "name": "Claude Sonnet 4.6",
-    "provider": "anthropic",
+# Available chat models. Clients may pass a `model_id` with each stream
+# request to pick one; anything outside this registry is rejected.
+MODELS = {
+    "claude-sonnet-4-6": {
+        "id": "claude-sonnet-4-6",
+        "name": "Claude Sonnet 4.6",
+        "short_name": "Sonnet 4.6",
+        "description": "Most efficient for everyday tasks",
+        "provider": "anthropic",
+    },
+    "claude-opus-4-6": {
+        "id": "claude-opus-4-6",
+        "name": "Claude Opus 4.6",
+        "short_name": "Opus 4.6",
+        "description": "Most powerful for complex reasoning",
+        "provider": "anthropic",
+    },
+    "claude-haiku-4-5": {
+        "id": "claude-haiku-4-5-20251001",
+        "name": "Claude Haiku 4.5",
+        "short_name": "Haiku 4.5",
+        "description": "Fastest, lowest cost",
+        "provider": "anthropic",
+    },
 }
+
+# Default model used when the client doesn't specify one.
+DEFAULT_MODEL_KEY = "claude-sonnet-4-6"
+CHAT_MODEL = MODELS[DEFAULT_MODEL_KEY]
+
+
+def resolve_model(model_key: str | None) -> dict:
+    """Return the model registry entry for a client-supplied key.
+
+    Falls back to the default model when the key is missing or unknown.
+    Never raises — invalid input should degrade gracefully to the default.
+    """
+    if not model_key:
+        return CHAT_MODEL
+    return MODELS.get(model_key, CHAT_MODEL)

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { apiClient } from '../config/api'
 import Message from './Message'
 import ChatInput from './ChatInput'
@@ -30,6 +30,8 @@ interface ChatMessagesProps {
   sessionId?: string
   onBranch?: (messageIndex: number) => void
   onOpenArtifact?: (messageIndex: number) => void
+  quotedText?: string
+  onClearQuote?: () => void
 }
 
 function ChatMessages({
@@ -44,6 +46,8 @@ function ChatMessages({
   sessionId,
   onBranch,
   onOpenArtifact,
+  quotedText,
+  onClearQuote,
 }: ChatMessagesProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const chatContainerRef = useRef<HTMLDivElement>(null)
@@ -53,6 +57,12 @@ function ChatMessages({
   useEffect(() => {
     chatInputRef.current?.focus()
   }, [])
+
+  // Focus the input when a quote gets attached (user clicked Reply on a
+  // selection) so they can immediately start typing their response.
+  useEffect(() => {
+    if (quotedText) chatInputRef.current?.focus()
+  }, [quotedText])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -89,25 +99,47 @@ function ChatMessages({
     }
   }
 
+  // Stable onBranch ref — the prop from App changes identity on every
+  // keystroke (because its dependencies inside useCouncil aren't memoized),
+  // which would invalidate the useMemo below and re-parse every message's
+  // markdown on every character typed. This pattern keeps the identity
+  // pinned while still calling the latest callback when invoked.
+  const onBranchRef = useRef(onBranch)
+  onBranchRef.current = onBranch
+  const stableOnBranch = useMemo<typeof onBranch>(
+    () => (readOnly ? undefined : (messageIndex: number) => onBranchRef.current?.(messageIndex)),
+    [readOnly]
+  )
+
+  // Memoize the rendered message list so it doesn't re-parse markdown on
+  // every keystroke in the input. Without this, typing one character
+  // re-renders every Message → ReactMarkdown parse, which is slow for
+  // long conversations.
+  const renderedMessages = useMemo(
+    () =>
+      messages.map((msg, idx) => (
+        <Message
+          key={idx}
+          role={msg.role}
+          content={msg.content}
+          modelName={msg.modelName}
+          responseTime={msg.responseTime}
+          streaming={msg.streaming}
+          file={msg.file}
+          isArtifact={msg.isArtifact}
+          messageIndex={idx}
+          sessionId={sessionId}
+          onBranch={stableOnBranch}
+          citations={(msg as any).citations}
+        />
+      )),
+    [messages, sessionId, stableOnBranch]
+  )
+
   return (
     <>
       <div className="chat-messages" ref={chatContainerRef} onScroll={handleScroll}>
-        {messages.map((msg, idx) => (
-          <Message
-            key={idx}
-            role={msg.role}
-            content={msg.content}
-            modelName={msg.modelName}
-            responseTime={msg.responseTime}
-            streaming={msg.streaming}
-            file={msg.file}
-            isArtifact={msg.isArtifact}
-            messageIndex={idx}
-            sessionId={sessionId}
-            onBranch={!readOnly ? onBranch : undefined}
-            citations={(msg as any).citations}
-          />
-        ))}
+        {renderedMessages}
 
         {loading && currentStep && (
           <div className="thinking-indicator">
@@ -120,7 +152,7 @@ function ChatMessages({
           </div>
         )}
 
-        {!loading && sessionId && (
+        {!loading && sessionId && messages.some((m) => m.isArtifact) && (
           <div className="session-actions">
             <button
               className="session-action-btn"
@@ -174,6 +206,8 @@ function ChatMessages({
           onFileUpload={onFileUpload}
           disabled={loading}
           placeholder="Send a message..."
+          quotedText={quotedText}
+          onClearQuote={onClearQuote}
         />
       )}
     </>

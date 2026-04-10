@@ -7,6 +7,7 @@ import Layout from './components/Layout'
 import ProtectedRoute from './components/ProtectedRoute'
 import { AuthProvider } from './contexts/AuthContext'
 import { ToastProvider } from './contexts/ToastContext'
+import { UsageProvider } from './contexts/UsageContext'
 
 // Lazy load pages - only load when needed
 const App = lazy(() => import('./App'))
@@ -20,34 +21,36 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
       <AuthProvider>
-        <ToastProvider>
-          <BrowserRouter>
-            <Suspense fallback={null}>
-              <Routes>
-                {/* Public routes */}
-                <Route path="/login" element={<AuthPage />} />
-                <Route path="/register" element={<AuthPage />} />
-                <Route path="/shared/:shareToken" element={<SharedSession />} />
-
-                {/* Protected routes */}
-                <Route
-                  element={
-                    <ProtectedRoute>
-                      <Layout />
-                    </ProtectedRoute>
-                  }
-                >
-                  <Route path="/" element={<App />} />
-                  <Route path="/sessions/:sessionId" element={<App />} />
-                  <Route path="/settings" element={<SettingsPage />} />
+        <UsageProvider>
+          <ToastProvider>
+            <BrowserRouter>
+              <Suspense fallback={null}>
+                <Routes>
+                  {/* Public routes */}
+                  <Route path="/login" element={<AuthPage />} />
+                  <Route path="/register" element={<AuthPage />} />
+                  <Route path="/shared/:shareToken" element={<SharedSession />} />
                   <Route path="/status" element={<StatusPage />} />
-                </Route>
-                {/* 404 */}
-                <Route path="*" element={<NotFoundPage />} />
-              </Routes>
-            </Suspense>
-          </BrowserRouter>
-        </ToastProvider>
+
+                  {/* Protected routes */}
+                  <Route
+                    element={
+                      <ProtectedRoute>
+                        <Layout />
+                      </ProtectedRoute>
+                    }
+                  >
+                    <Route path="/" element={<App />} />
+                    <Route path="/sessions/:sessionId" element={<App />} />
+                    <Route path="/settings" element={<SettingsPage />} />
+                  </Route>
+                  {/* 404 */}
+                  <Route path="*" element={<NotFoundPage />} />
+                </Routes>
+              </Suspense>
+            </BrowserRouter>
+          </ToastProvider>
+        </UsageProvider>
       </AuthProvider>
     </ErrorBoundary>
   </StrictMode>

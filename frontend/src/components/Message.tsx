@@ -316,23 +316,30 @@ function CitationList({ citations }: { citations: Citation[] }) {
             onClick={() => setExpandedId(expandedId === c.id ? null : c.id)}
           >
             <FileText size={12} />
-            <span>{c.source}{c.page ? ` · p.${c.page}` : ''}</span>
+            <span>
+              {c.source}
+              {c.page ? ` · p.${c.page}` : ''}
+            </span>
           </button>
         ))}
       </div>
-      {expandedId && (() => {
-        const c = citations.find((x) => x.id === expandedId)
-        if (!c) return null
-        return (
-          <div className="citation-excerpt">
-            <div className="citation-excerpt-header">
-              <span>{c.source}{c.page ? ` — Page ${c.page}` : ''}</span>
-              <button onClick={() => setExpandedId(null)}>&times;</button>
+      {expandedId &&
+        (() => {
+          const c = citations.find((x) => x.id === expandedId)
+          if (!c) return null
+          return (
+            <div className="citation-excerpt">
+              <div className="citation-excerpt-header">
+                <span>
+                  {c.source}
+                  {c.page ? ` — Page ${c.page}` : ''}
+                </span>
+                <button onClick={() => setExpandedId(null)}>&times;</button>
+              </div>
+              <p>{c.text}</p>
             </div>
-            <p>{c.text}</p>
-          </div>
-        )
-      })()}
+          )
+        })()}
     </div>
   )
 }

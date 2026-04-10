@@ -281,7 +281,9 @@
   background-image: url('data:image/svg+xml;charset=UTF-8,<svg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1.5L6 6.5L11 1.5" stroke="%23888" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>');
   background-repeat: no-repeat;
   background-position: right 0.65rem center;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
 
 .profile-inline-edit .settings-select:focus {
@@ -339,7 +341,9 @@
   font-size: 0.88rem;
   font-family: inherit;
   cursor: pointer;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
   text-align: left;
 }
 
@@ -375,8 +379,14 @@
 }
 
 @keyframes customSelectIn {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .custom-select-option {
@@ -806,6 +816,142 @@
 
 .settings-action-btn.danger:hover {
   background: #a93226;
+}
+
+/* ─── Usage Tab ─── */
+.usage-meter {
+  margin-top: 1rem;
+  padding: 1rem 1.15rem 1.1rem;
+  background: rgba(255, 250, 242, 0.5);
+  border: 1px solid rgba(88, 67, 39, 0.08);
+  border-radius: 12px;
+}
+
+.usage-meter-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  margin-bottom: 0.6rem;
+}
+
+.usage-meter-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.usage-meter-label strong {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--heading-color);
+  letter-spacing: -0.01em;
+}
+
+.usage-meter-reset {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-meter-percent {
+  font-size: 0.82rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--heading-color);
+  white-space: nowrap;
+}
+
+.usage-meter-percent.state-warn {
+  color: #b45309;
+}
+
+.usage-meter-percent.state-danger {
+  color: #b91c1c;
+}
+
+.usage-bar {
+  position: relative;
+  height: 8px;
+  background: rgba(88, 67, 39, 0.1);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.usage-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent-color);
+  transition:
+    width 0.4s ease-out,
+    background-color 0.2s;
+}
+
+.usage-bar-fill.state-warn {
+  background: #f59e0b;
+}
+
+.usage-bar-fill.state-danger {
+  background: #dc2626;
+}
+
+.usage-meter-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-top: 0.55rem;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  gap: 0.75rem;
+}
+
+.usage-meter-note {
+  font-style: italic;
+  opacity: 0.85;
+}
+
+.usage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.usage-card {
+  padding: 1rem 1.1rem;
+  background: rgba(255, 250, 242, 0.5);
+  border: 1px solid rgba(88, 67, 39, 0.08);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-height: 82px;
+}
+
+.usage-card-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.usage-card-value {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--heading-color);
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-card-sub {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ─── About Tab ─── */

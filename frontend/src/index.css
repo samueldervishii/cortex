@@ -31,8 +31,7 @@
 
   /* ─── Typography ─── */
   font-family:
-    'Avenir Next', 'Segoe UI Variable', 'SF Pro Display', 'IBM Plex Sans', 'Segoe UI',
-    sans-serif;
+    'Avenir Next', 'Segoe UI Variable', 'SF Pro Display', 'IBM Plex Sans', 'Segoe UI', sans-serif;
   line-height: 1.5;
   font-weight: 400;
   color-scheme: light;
@@ -66,8 +65,7 @@ body {
   background: var(--bg-primary);
   color: var(--text-primary);
   font-family:
-    'Avenir Next', 'Segoe UI Variable', 'SF Pro Display', 'IBM Plex Sans', 'Segoe UI',
-    sans-serif;
+    'Avenir Next', 'Segoe UI Variable', 'SF Pro Display', 'IBM Plex Sans', 'Segoe UI', sans-serif;
   transition:
     background 0.3s,
     color 0.3s;

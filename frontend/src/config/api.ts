@@ -70,9 +70,19 @@ apiClient.interceptors.response.use(
       }
     }
 
-    // Network error (server unreachable, no internet)
-    if (!error.response && error.code === 'ERR_NETWORK') {
-      const networkError = new Error('Please check your internet connection.') as any
+    // Network / unreachable server. Covers both:
+    // - ERR_NETWORK: the request could not reach the server at all
+    // - ECONNABORTED: the request timed out (happens on Render free tier
+    //   cold starts where the backend takes longer than our client timeout
+    //   to spin back up). Without this, timeouts look like successful
+    //   errors to AuthContext and it logs the user out instead of showing
+    //   a connection-failed screen.
+    if (!error.response && (error.code === 'ERR_NETWORK' || error.code === 'ECONNABORTED')) {
+      const networkError = new Error(
+        error.code === 'ECONNABORTED'
+          ? 'The server is taking too long to respond. Please try again.'
+          : 'Please check your internet connection.'
+      ) as any
       networkError.isNetworkError = true
       networkError.originalError = error
       return Promise.reject(networkError)

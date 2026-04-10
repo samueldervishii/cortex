@@ -90,6 +90,20 @@ class ContinueRequest(BaseModel):
     )
 
 
+class StreamRequest(BaseModel):
+    """Optional body for the /stream endpoint.
+
+    All fields are optional so existing clients that POST an empty object
+    continue to work unchanged.
+    """
+
+    model_id: Optional[str] = Field(
+        default=None,
+        max_length=100,
+        description="Override the chat model for this request",
+    )
+
+
 class SessionResponse(BaseModel):
     """Response containing session data."""
 

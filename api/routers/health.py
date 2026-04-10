@@ -13,6 +13,7 @@ from db import get_database
 from config import CHAT_MODEL, settings
 from core.circuit_breaker import get_circuit_breaker_status
 from core.dependencies import get_current_user
+from services import status_tracker
 
 router = APIRouter(tags=["health"])
 
@@ -118,5 +119,61 @@ async def status_check(
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
 
     return result
+
+
+@router.get("/status/uptime")
+async def status_uptime():
+    """
+    Public uptime history endpoint.
+
+    Intentionally unauthenticated — a status page that requires a login to
+    tell users the service is down is useless exactly when they need it
+    most. The response contains only service labels, current status, and
+    uptime percentages; no secrets, tokens, or user data.
+    """
+    try:
+        db = await get_database()
+        return await status_tracker.get_uptime_history(db)
+    except Exception as e:
+        # If the database itself is unreachable we still want a valid
+        # response so the frontend can show a red "down" state instead of
+        # a raw error. We ARE executing this code right now, which means
+        # the API server is responding — stamp last_checked on both cards
+        # with the current time (the DB entry got "checked" by the ping
+        # that just failed).
+        from datetime import datetime, timezone
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        return {
+            "overall_status": "down",
+            "services": [
+                {
+                    "id": "api",
+                    "label": "API Server",
+                    "description": "Cortex backend",
+                    "current_status": "operational",
+                    "last_checked": now_iso,
+                    "uptime_24h": None,
+                    "uptime_7d": None,
+                    "sample_count_24h": 0,
+                    "sample_count_7d": 0,
+                    "days": [],
+                },
+                {
+                    "id": "database",
+                    "label": "Database",
+                    "description": "MongoDB Atlas",
+                    "current_status": "down",
+                    "last_checked": now_iso,
+                    "uptime_24h": None,
+                    "uptime_7d": None,
+                    "sample_count_24h": 0,
+                    "sample_count_7d": 0,
+                    "days": [],
+                },
+            ],
+            "generated_at": now_iso,
+            "error": f"Database unreachable: {type(e).__name__}",
+        }
 
 

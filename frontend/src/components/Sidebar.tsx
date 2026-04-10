@@ -259,7 +259,7 @@ function Sidebar({
 
   const renderAccountDropdown = () => (
     <div className="sidebar-account-dropdown">
-      <button
+      {/* <button
         className="sidebar-account-item"
         onClick={() => {
           setAccountOpen(false)
@@ -269,7 +269,7 @@ function Sidebar({
       >
         <User size={14} />
         Profile
-      </button>
+      </button> */}
       <button
         className="sidebar-account-item"
         onClick={() => {

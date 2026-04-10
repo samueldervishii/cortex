@@ -18,7 +18,14 @@ from core.dependencies import (
 )
 from core.metrics import init_metrics, track_request
 from db import get_database, close_database, ensure_indexes
-from routers import sessions_router, shared_router, settings_router, auth_router, sources_router
+from routers import (
+    sessions_router,
+    shared_router,
+    settings_router,
+    auth_router,
+    sources_router,
+    usage_router,
+)
 from routers.health import router as health_router
 
 
@@ -368,6 +375,7 @@ app.include_router(sessions_router)
 app.include_router(sources_router)
 app.include_router(shared_router)
 app.include_router(settings_router)
+app.include_router(usage_router)
 
 
 

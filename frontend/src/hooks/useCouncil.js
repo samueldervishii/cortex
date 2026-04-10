@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { apiClient, API_BASE, API_KEY, getAccessToken } from '../config/api'
+import { useUsage } from '../contexts/UsageContext'
+import { getSelectedModelId } from '../components/ModelSelector'
 
 /**
  * Parse SSE events from a ReadableStream.
@@ -8,6 +10,13 @@ import { apiClient, API_BASE, API_KEY, getAccessToken } from '../config/api'
 async function* parseSSE(reader) {
   const decoder = new TextDecoder()
   let buffer = ''
+  // IMPORTANT: these must live outside the read loop. SSE events can span
+  // multiple TCP chunks (e.g. the event: and data: lines arriving in
+  // different reads). If we reset per chunk, we lose the event name and
+  // silently drop tokens — the visible response appears truncated even
+  // though the backend persisted the full text.
+  let currentEvent = null
+  let currentData = null
 
   while (true) {
     const { done, value } = await reader.read()
@@ -16,9 +25,6 @@ async function* parseSSE(reader) {
     buffer += decoder.decode(value, { stream: true })
     const lines = buffer.split('\n')
     buffer = lines.pop() || '' // Keep incomplete line in buffer
-
-    let currentEvent = null
-    let currentData = null
 
     for (const line of lines) {
       if (line.startsWith('event: ')) {
@@ -55,6 +61,8 @@ function useCouncil() {
   const [sessions, setSessions] = useState(cachedSessions || [])
   const [sessionLoadError, setSessionLoadError] = useState(null)
   const [isLoadingSession, setIsLoadingSession] = useState(false)
+  const [quotedText, setQuotedText] = useState('')
+  const { applyLiveUpdate: applyUsageUpdate, refreshCurrent: refreshUsageCurrent } = useUsage()
 
   // AbortController ref — used to cancel in-flight SSE streams on unmount
   // or when the user starts a new request before the previous one finishes.
@@ -63,11 +71,66 @@ function useCouncil() {
   // Monotonic counter to detect stale loadSession responses
   const loadRequestIdRef = useRef(0)
 
+  // Typewriter smoothing: Anthropic sends tokens in bursts; we buffer them
+  // and reveal characters at a steady rate via requestAnimationFrame so the
+  // message appears to "type" smoothly regardless of network/model jitter.
+  const typeBufferRef = useRef('')
+  const streamingIndexRef = useRef(null)
+  const drainRafRef = useRef(null)
+  const lastFrameRef = useRef(0)
+
+  const drainStep = useCallback((now) => {
+    const dt = Math.min(100, now - lastFrameRef.current)
+    lastFrameRef.current = now
+
+    const buf = typeBufferRef.current
+    if (buf.length === 0 || streamingIndexRef.current === null) {
+      drainRafRef.current = null
+      return
+    }
+
+    // Baseline ~240 cps, accelerates if the buffer is backing up so we
+    // catch up during long bursts without ever lagging the real stream.
+    const baseRate = 240
+    const overflow = Math.max(0, buf.length - 40)
+    const rate = baseRate + overflow * 12
+    const chars = Math.max(1, Math.round((rate * dt) / 1000))
+
+    const reveal = buf.slice(0, chars)
+    typeBufferRef.current = buf.slice(chars)
+
+    setMessages((prev) => {
+      const idx = streamingIndexRef.current
+      if (idx === null || idx >= prev.length) return prev
+      const updated = [...prev]
+      updated[idx] = { ...updated[idx], content: updated[idx].content + reveal }
+      return updated
+    })
+
+    drainRafRef.current = requestAnimationFrame(drainStep)
+  }, [])
+
+  const queueTypeChars = useCallback(
+    (chars) => {
+      if (!chars) return
+      typeBufferRef.current += chars
+      if (drainRafRef.current === null) {
+        lastFrameRef.current = performance.now()
+        drainRafRef.current = requestAnimationFrame(drainStep)
+      }
+    },
+    [drainStep]
+  )
+
   // Cleanup: abort any in-flight stream when the component using this hook unmounts
   useEffect(() => {
     return () => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort()
+      }
+      if (drainRafRef.current !== null) {
+        cancelAnimationFrame(drainRafRef.current)
+        drainRafRef.current = null
       }
     }
   }, [])
@@ -275,19 +338,29 @@ function useCouncil() {
     const response = await fetch(`${API_BASE}/session/${currentSessionId}/stream`, {
       method: 'POST',
       headers,
-      body: '{}',
+      body: JSON.stringify({ model_id: getSelectedModelId() }),
       signal: controller.signal,
     })
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: 'Stream failed' }))
+      // On 429 (usage limit), pull fresh usage so the Settings bar jumps to 100%
+      if (response.status === 429) {
+        refreshUsageCurrent()
+      }
       throw new Error(error.detail || `HTTP ${response.status}`)
     }
 
     const reader = response.body.getReader()
 
-    // Index of the streaming assistant message
-    let streamingIndex = null
+    // Reset typewriter state for this new stream
+    typeBufferRef.current = ''
+    streamingIndexRef.current = null
+    if (drainRafRef.current !== null) {
+      cancelAnimationFrame(drainRafRef.current)
+      drainRafRef.current = null
+    }
+
     let isArtifact = false
 
     for await (const { event, data } of parseSSE(reader)) {
@@ -306,7 +379,7 @@ function useCouncil() {
 
         case 'message_start':
           setMessages((prev) => {
-            streamingIndex = prev.length
+            streamingIndexRef.current = prev.length
             return [
               ...prev,
               {
@@ -323,31 +396,44 @@ function useCouncil() {
 
         case 'token':
           setCurrentStep('')
-          setMessages((prev) => {
-            if (streamingIndex === null) return prev
-            const updated = [...prev]
-            updated[streamingIndex] = {
-              ...updated[streamingIndex],
-              content: updated[streamingIndex].content + (data.content || data.token || ''),
-            }
-            return updated
-          })
+          queueTypeChars(data.content || data.token || '')
           break
 
-        case 'message_end':
+        case 'message_end': {
+          // Snapshot state into LOCAL consts before queueing setMessages.
+          // Functional state updates run asynchronously at render time, so
+          // if we read `streamingIndexRef.current` inside the closure, it
+          // would already be null (we clear it below) and the update would
+          // no-op, leaving the visible message truncated — while the
+          // backend has the full response saved. That's exactly the
+          // "cuts off mid-sentence but shows fully on reload" symptom.
+          const idx = streamingIndexRef.current
+          const remainingBuffer = typeBufferRef.current
+          typeBufferRef.current = ''
+          if (drainRafRef.current !== null) {
+            cancelAnimationFrame(drainRafRef.current)
+            drainRafRef.current = null
+          }
+          streamingIndexRef.current = null
+
+          const finalContent = data.content
+          const responseTimeMs = data.response_time_ms
           setMessages((prev) => {
-            if (streamingIndex === null) return prev
+            if (idx === null || idx >= prev.length) return prev
             const updated = [...prev]
-            updated[streamingIndex] = {
-              ...updated[streamingIndex],
-              content: data.content || updated[streamingIndex].content,
+            const existing = updated[idx]
+            updated[idx] = {
+              ...existing,
+              // Prefer the backend's canonical full response; otherwise
+              // append whatever was still in the typewriter buffer.
+              content: finalContent || existing.content + remainingBuffer,
               streaming: false,
-              ...(data.response_time_ms && { responseTime: data.response_time_ms }),
+              ...(responseTimeMs && { responseTime: responseTimeMs }),
             }
             return updated
           })
-          streamingIndex = null
           break
+        }
 
         case 'error':
           setMessages((prev) => [
@@ -357,6 +443,9 @@ function useCouncil() {
           break
 
         case 'done':
+          if (data && data.usage) {
+            applyUsageUpdate(data.usage)
+          }
           break
       }
     }
@@ -368,8 +457,14 @@ function useCouncil() {
   const startChat = async () => {
     if (!question.trim()) return
 
-    const userQuestion = question
+    // If the user selected text in a prior assistant message and hit Reply,
+    // prepend it as a markdown blockquote so the model sees what they're
+    // replying to. Clear the quote after use.
+    const userQuestion = quotedText
+      ? `> ${quotedText.split('\n').join('\n> ')}\n\n${question}`
+      : question
     setQuestion('')
+    setQuotedText('')
     setLoading(true)
 
     setMessages((prev) => [...prev, { role: 'user', content: userQuestion }])
@@ -546,6 +641,8 @@ function useCouncil() {
     exportSession,
     sessionLoadError,
     isLoadingSession,
+    quotedText,
+    setQuotedText,
   }
 }
 

@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 logger = logging.getLogger("cortex.sessions")
 
 from clients import AIClient
+from config import CHAT_MODEL, resolve_model
 from core.timestamps import utc_iso
 from core.dependencies import (
     get_session_repository,
@@ -23,6 +24,7 @@ from db import SessionRepository, SettingsRepository
 from schemas import (
     QueryRequest,
     ContinueRequest,
+    StreamRequest,
     ChatSession,
     Message,
     SessionResponse,
@@ -37,6 +39,7 @@ from schemas import (
     FeedbackResponse,
 )
 from services.chat import ChatService
+from services import usage_service
 
 router = APIRouter(prefix="/session", tags=["sessions"])
 
@@ -362,6 +365,7 @@ async def upload_file_to_session(
 @router.post("/{session_id}/stream")
 async def stream_response(
     session_id: str,
+    request: StreamRequest = StreamRequest(),
     repo: SessionRepository = Depends(get_session_repository),
     chat_service: ChatService = Depends(get_chat_service),
     user_id: str = Depends(get_current_user),
@@ -369,6 +373,8 @@ async def stream_response(
     _rate_limit: None = Depends(check_rate_limit),
 ):
     """Stream AI response via Server-Sent Events."""
+    # Resolve which model to use. Unknown IDs silently fall back to default.
+    selected_model = resolve_model(request.model_id)
     session = await repo.get(session_id, user_id=user_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -379,6 +385,30 @@ async def stream_response(
     # Per-user usage limits: check/record AFTER validating the session exists
     user_usage.check(user_id)
     user_usage.record(user_id)
+
+    # Token bucket enforcement: block if the user has hit their 5-hour cap,
+    # or if the next response could plausibly push them over.
+    # Must happen before the StreamingResponse is returned, or the 429 will
+    # get eaten by the already-open SSE connection.
+    db = repo.collection.database
+    current_usage = await usage_service.get_current_usage(db, user_id)
+    projected = current_usage["total_tokens"] + usage_service.RESPONSE_TOKEN_RESERVE
+    if projected > usage_service.LIMIT_TOKENS:
+        reset = usage_service.format_reset_time(current_usage["resets_in_seconds"])
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                f"You've reached your {usage_service.LIMIT_TOKENS:,} token limit "
+                f"for this 5-hour window. Resets in {reset}."
+            ),
+        )
+    remaining_tokens = usage_service.LIMIT_TOKENS - current_usage["total_tokens"]
+
+    # Snapshot "first exchange" state BEFORE streaming, so we can trigger
+    # automatic title generation once the first assistant reply is saved.
+    # (A fresh session has exactly one message: the user's opening question.)
+    is_first_exchange = len(session.messages) == 1
+    original_title = session.title or ""
 
     # Get the last user message
     last_user_msg = None
@@ -485,6 +515,8 @@ async def stream_response(
         model_id = None
         model_name = None
         response_time_ms = None
+        input_tokens = 0
+        output_tokens = 0
 
         # Tell frontend if this is an artifact response
         if is_artifact:
@@ -495,26 +527,39 @@ async def stream_response(
                 question=question_text,
                 history=history,
                 system_prompt=system_prompt,
+                remaining_tokens=remaining_tokens,
+                model=selected_model,
             ):
+                # Capture usage before forwarding the done event so we can
+                # enrich it with hydrated bucket data for the frontend.
+                if event.startswith("event: done"):
+                    try:
+                        data_start = event.index("data: ") + 6
+                        done_data = _json.loads(event[data_start:].strip())
+                        input_tokens = int(done_data.get("input_tokens", 0) or 0)
+                        output_tokens = int(done_data.get("output_tokens", 0) or 0)
+                    except (ValueError, _json.JSONDecodeError):
+                        pass
+                    # Hold the done event — we'll emit it after recording usage
+                    continue
+
                 yield event
                 # Parse the event to capture the full response for saving
                 if "message_end" in event:
-                    import json
                     try:
                         data_start = event.index("data: ") + 6
-                        data = json.loads(event[data_start:].strip())
+                        data = _json.loads(event[data_start:].strip())
                         full_response = data.get("content", "")
                         model_id = data.get("model_id")
                         response_time_ms = data.get("response_time_ms")
-                    except (ValueError, json.JSONDecodeError):
+                    except (ValueError, _json.JSONDecodeError):
                         pass
                 elif "message_start" in event:
-                    import json
                     try:
                         data_start = event.index("data: ") + 6
-                        data = json.loads(event[data_start:].strip())
+                        data = _json.loads(event[data_start:].strip())
                         model_name = data.get("model_name")
-                    except (ValueError, json.JSONDecodeError):
+                    except (ValueError, _json.JSONDecodeError):
                         pass
 
             # Save assistant message to session using targeted $push
@@ -572,9 +617,65 @@ async def stream_response(
                     except Exception:
                         logger.debug(f"Failed to save artifact for session {session_id}")
 
+                # First exchange → ask the model to name the chat. We do
+                # this inline (not as a background task) so the new title
+                # is already in the DB by the time the frontend refreshes
+                # its session list after `done`. Failure is non-fatal.
+                if msg_saved and is_first_exchange and full_response.strip():
+                    try:
+                        new_title = await chat_service.client.generate_session_title(
+                            question=last_user_msg.content,
+                            answer=full_response,
+                            model_id=selected_model["id"],
+                        )
+                        if new_title:
+                            db = repo.collection.database
+                            # Only rename if the title hasn't been manually
+                            # changed by the user in the meantime.
+                            await db["sessions"].update_one(
+                                {
+                                    "id": session_id,
+                                    "user_id": user_id,
+                                    "title": original_title,
+                                },
+                                {
+                                    "$set": {
+                                        "title": new_title,
+                                        "updated_at": datetime.now(timezone.utc),
+                                    }
+                                },
+                            )
+                    except Exception:
+                        logger.debug(
+                            f"Title generation failed for session {session_id}",
+                            exc_info=True,
+                        )
+
         except Exception:
             logger.exception(f"Stream error for session {session_id}")
             yield 'event: error\ndata: {"message": "An internal error has occurred. Please try again."}\n\n'
+
+        # Record usage and emit the final done event with hydrated bucket data.
+        # Wrapped in try/except so failures never block the terminating event.
+        usage_payload = None
+        try:
+            if input_tokens or output_tokens or full_response:
+                db = repo.collection.database
+                usage_payload = await usage_service.record_usage(
+                    db,
+                    user_id,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    is_artifact=is_artifact,
+                    has_file=bool(last_user_msg.file),
+                )
+        except Exception:
+            logger.exception("Failed to record usage")
+
+        done_data: dict = {"input_tokens": input_tokens, "output_tokens": output_tokens}
+        if usage_payload is not None:
+            done_data["usage"] = usage_payload
+        yield f"event: done\ndata: {_json.dumps(done_data)}\n\n"
 
     return StreamingResponse(
         event_stream(),

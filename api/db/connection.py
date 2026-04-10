@@ -80,6 +80,8 @@ async def ensure_indexes(database: AsyncIOMotorDatabase) -> None:
     sources = database["sources"]
     file_storage = database["file_storage"]
     refresh_tokens = database["refresh_tokens"]
+    usage_buckets = database["usage_buckets"]
+    service_checks = database["service_checks"]
 
     # ── Sessions ──
     await _create_index(sessions, [("id", ASCENDING)], unique=True, name="idx_session_id")
@@ -168,6 +170,30 @@ async def ensure_indexes(database: AsyncIOMotorDatabase) -> None:
     await _create_index(
         refresh_tokens, [("created_at", ASCENDING)],
         expireAfterSeconds=30 * 24 * 60 * 60, name="idx_rt_ttl",
+    )
+
+    # ── Usage buckets ──
+    # Compound index for looking up a user's current/recent bucket quickly
+    await _create_index(
+        usage_buckets, [("user_id", ASCENDING), ("bucket_end", DESCENDING)],
+        name="idx_usage_user_bucket",
+    )
+    # TTL: drop buckets 30 days after they end so we keep ~1 month of history
+    await _create_index(
+        usage_buckets, [("bucket_end", ASCENDING)],
+        expireAfterSeconds=30 * 24 * 60 * 60, name="idx_usage_ttl",
+    )
+
+    # ── Service checks (status tracking) ──
+    # Per-service time-series for the uptime page. Compound index powers
+    # the "latest N checks per service" query; TTL purges after 90 days.
+    await _create_index(
+        service_checks, [("service", ASCENDING), ("checked_at", DESCENDING)],
+        name="idx_service_checks_time",
+    )
+    await _create_index(
+        service_checks, [("checked_at", ASCENDING)],
+        expireAfterSeconds=90 * 24 * 60 * 60, name="idx_service_checks_ttl",
     )
 
     if critical_failures:

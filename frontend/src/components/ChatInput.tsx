@@ -18,6 +18,8 @@ interface ChatInputProps {
   disabled: boolean
   placeholder?: string
   centered?: boolean
+  quotedText?: string
+  onClearQuote?: () => void
 }
 
 export interface ChatInputHandle {
@@ -25,7 +27,20 @@ export interface ChatInputHandle {
 }
 
 const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
-  ({ value, onChange, onSubmit, onFileUpload, disabled, placeholder, centered = false }, ref) => {
+  (
+    {
+      value,
+      onChange,
+      onSubmit,
+      onFileUpload,
+      disabled,
+      placeholder,
+      centered = false,
+      quotedText,
+      onClearQuote,
+    },
+    ref
+  ) => {
     const textareaRef = useRef<HTMLTextAreaElement>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
     const [attachedFile, setAttachedFile] = useState<File | null>(null)
@@ -134,7 +149,38 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       >
         {fileError && <div className="file-error">{fileError}</div>}
 
-        <div className={`input-wrapper ${attachedFile ? 'has-file' : ''} ${centered ? 'input-wrapper-centered' : ''}`}>
+        <div
+          className={`input-wrapper ${attachedFile ? 'has-file' : ''} ${centered ? 'input-wrapper-centered' : ''}`}
+        >
+          {quotedText && (
+            <div className="quote-pill">
+              <div className="quote-pill-bar" />
+              <div className="quote-pill-text" title={quotedText}>
+                {quotedText}
+              </div>
+              <button
+                type="button"
+                className="quote-pill-close"
+                onClick={onClearQuote}
+                title="Remove quote"
+              >
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+          )}
+
           {attachedFile && (
             <div className="file-card">
               <button className="file-card-remove" onClick={removeFile}>

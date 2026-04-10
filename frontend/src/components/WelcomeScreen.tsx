@@ -89,8 +89,7 @@ function WelcomeScreen({
           <span className="welcome-heading-gradient">What should we research today?</span>
         </h1>
         <p className="welcome-subheading">
-          Use one of the starter prompts below or describe your question in your own words to
-          begin.
+          Use one of the starter prompts below or describe your question in your own words to begin.
         </p>
       </div>
 

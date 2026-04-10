@@ -1,7 +1,20 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
-  X, Copy, Check, Download, FileText, ChevronLeft, BookOpen, Search,
-  Link2, Globe, File, Quote, Loader2, Eye, ArrowLeft,
+  X,
+  Copy,
+  Check,
+  Download,
+  FileText,
+  ChevronLeft,
+  BookOpen,
+  Search,
+  Link2,
+  Globe,
+  File,
+  Quote,
+  Loader2,
+  Eye,
+  ArrowLeft,
 } from 'lucide-react'
 import { apiClient, API_BASE, getAccessToken } from '../config/api'
 import ReactMarkdown from 'react-markdown'
@@ -130,7 +143,10 @@ function ArtifactPanel({ sessionId, isOpen, onClose }: ArtifactPanelProps) {
   // ─── Fetch artifacts ───
 
   const fetchArtifacts = useCallback(async () => {
-    if (!sessionId) { setArtifacts([]); return }
+    if (!sessionId) {
+      setArtifacts([])
+      return
+    }
     setArtifactLoading(true)
     try {
       const res = await apiClient.get(`/session/${sessionId}/artifacts`)
@@ -145,7 +161,10 @@ function ArtifactPanel({ sessionId, isOpen, onClose }: ArtifactPanelProps) {
   // ─── Fetch sources ───
 
   const fetchSources = useCallback(async () => {
-    if (!sessionId) { setSources([]); return }
+    if (!sessionId) {
+      setSources([])
+      return
+    }
     setSourcesLoading(true)
     try {
       const res = await apiClient.get(`/session/${sessionId}/sources`)
@@ -174,7 +193,9 @@ function ArtifactPanel({ sessionId, isOpen, onClose }: ArtifactPanelProps) {
       await navigator.clipboard.writeText(selectedArtifact.content)
       setArtifactCopied(true)
       setTimeout(() => setArtifactCopied(false), 2000)
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   const handleExportDocx = async () => {
@@ -193,7 +214,9 @@ function ArtifactPanel({ sessionId, isOpen, onClose }: ArtifactPanelProps) {
       a.download = `${selectedArtifact.title.slice(0, 30).replace(/[^a-z0-9]/gi, '-') || 'artifact'}.docx`
       a.click()
       URL.revokeObjectURL(url)
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   const handleExportMd = () => {
@@ -215,7 +238,9 @@ function ArtifactPanel({ sessionId, isOpen, onClose }: ArtifactPanelProps) {
     setImportError('')
     setImportSuccess('')
     try {
-      const res = await apiClient.post(`/session/${sessionId}/sources/import-url`, { url: importUrl.trim() })
+      const res = await apiClient.post(`/session/${sessionId}/sources/import-url`, {
+        url: importUrl.trim(),
+      })
       setImportUrl('')
       setImportSuccess(res.data.message || 'Source imported')
       setTimeout(() => setImportSuccess(''), 3000)
@@ -280,7 +305,9 @@ function ArtifactPanel({ sessionId, isOpen, onClose }: ArtifactPanelProps) {
       await navigator.clipboard.writeText(citationText)
       setCitationCopied(true)
       setTimeout(() => setCitationCopied(false), 2000)
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   // ─── Quote search ───
@@ -307,7 +334,9 @@ function ArtifactPanel({ sessionId, isOpen, onClose }: ArtifactPanelProps) {
       await navigator.clipboard.writeText(text)
       setQuoteCopiedId(id)
       setTimeout(() => setQuoteCopiedId(null), 2000)
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   // ─── Helpers ───
@@ -379,7 +408,7 @@ function ArtifactPanel({ sessionId, isOpen, onClose }: ArtifactPanelProps) {
               <div className="rp-preview-meta-item">
                 <span className="rp-preview-meta-label">Text length</span>
                 <span>{previewData.text_length.toLocaleString()} chars</span>
-                </div>
+              </div>
             </div>
           </div>
           <div className="rp-section">
@@ -431,18 +460,26 @@ function ArtifactPanel({ sessionId, isOpen, onClose }: ArtifactPanelProps) {
             <div className="right-panel-empty">
               <FileText size={20} className="right-panel-empty-icon" />
               <p>No active session</p>
-              <p className="right-panel-hint">Start a conversation and generated artifacts will appear here.</p>
+              <p className="right-panel-hint">
+                Start a conversation and generated artifacts will appear here.
+              </p>
             </div>
           ) : artifacts.length === 0 ? (
             <div className="right-panel-empty">
               <FileText size={20} className="right-panel-empty-icon" />
               <p>No artifacts yet</p>
-              <p className="right-panel-hint">Ask Cortex to write, draft, or generate a document and it will appear here.</p>
+              <p className="right-panel-hint">
+                Ask Cortex to write, draft, or generate a document and it will appear here.
+              </p>
             </div>
           ) : !selectedArtifact ? (
             <div className="right-panel-list">
               {artifacts.map((a) => (
-                <button key={a.id} className="right-panel-item" onClick={() => setSelectedArtifactId(a.id)}>
+                <button
+                  key={a.id}
+                  className="right-panel-item"
+                  onClick={() => setSelectedArtifactId(a.id)}
+                >
                   <FileText size={14} />
                   <span>{a.title}</span>
                 </button>
@@ -492,8 +529,14 @@ function ArtifactPanel({ sessionId, isOpen, onClose }: ArtifactPanelProps) {
                     type="text"
                     placeholder="Paste a URL..."
                     value={importUrl}
-                    onChange={(e) => { setImportUrl(e.target.value); setImportError(''); setImportSuccess('') }}
-                    onKeyDown={(e) => { if (e.key === 'Enter') handleImport() }}
+                    onChange={(e) => {
+                      setImportUrl(e.target.value)
+                      setImportError('')
+                      setImportSuccess('')
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleImport()
+                    }}
                     disabled={importing}
                   />
                 </div>
@@ -513,7 +556,8 @@ function ArtifactPanel({ sessionId, isOpen, onClose }: ArtifactPanelProps) {
           {/* Source list */}
           <div className="rp-section">
             <div className="rp-section-label">
-              Source Library {sources.length > 0 && <span className="rp-count">{sources.length}</span>}
+              Source Library{' '}
+              {sources.length > 0 && <span className="rp-count">{sources.length}</span>}
             </div>
             {sourcesLoading ? (
               <div className="right-panel-empty">Loading...</div>
@@ -537,7 +581,9 @@ function ArtifactPanel({ sessionId, isOpen, onClose }: ArtifactPanelProps) {
                       <div className="rp-source-meta">
                         <span className={`rp-source-badge ${src.kind}`}>{src.kind}</span>
                         {src.domain && <span>{src.domain}</span>}
-                        {src.filename && !src.domain && <span>{src.filename.split('.').pop()?.toUpperCase()}</span>}
+                        {src.filename && !src.domain && (
+                          <span>{src.filename.split('.').pop()?.toUpperCase()}</span>
+                        )}
                         {src.size ? <span>{formatSize(src.size)}</span> : null}
                       </div>
                     </div>
@@ -579,7 +625,9 @@ function ArtifactPanel({ sessionId, isOpen, onClose }: ArtifactPanelProps) {
                 ))}
               </div>
               {generatingCitation ? (
-                <div className="rp-citation-loading"><Loader2 size={14} className="rp-spin" /> Generating...</div>
+                <div className="rp-citation-loading">
+                  <Loader2 size={14} className="rp-spin" /> Generating...
+                </div>
               ) : citationText ? (
                 <div className="rp-citation-output">
                   <p>{citationText}</p>
@@ -610,7 +658,9 @@ function ArtifactPanel({ sessionId, isOpen, onClose }: ArtifactPanelProps) {
                   placeholder="e.g. privacy concerns, evidence for..."
                   value={quoteQuery}
                   onChange={(e) => setQuoteQuery(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleQuoteSearch() }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleQuoteSearch()
+                  }}
                   disabled={searching}
                 />
               </div>
@@ -644,7 +694,11 @@ function ArtifactPanel({ sessionId, isOpen, onClose }: ArtifactPanelProps) {
                         className="rp-quote-copy"
                         onClick={() => handleQuoteCopy(q.text, `${q.chunk_id}-${idx}`)}
                       >
-                        {quoteCopiedId === `${q.chunk_id}-${idx}` ? <Check size={12} /> : <Copy size={12} />}
+                        {quoteCopiedId === `${q.chunk_id}-${idx}` ? (
+                          <Check size={12} />
+                        ) : (
+                          <Copy size={12} />
+                        )}
                       </button>
                     </div>
                   </div>
@@ -666,7 +720,8 @@ function ArtifactPanel({ sessionId, isOpen, onClose }: ArtifactPanelProps) {
               <Search size={20} className="right-panel-empty-icon" />
               <p>Search your sources</p>
               <p className="right-panel-hint">
-                Enter a topic or phrase above to find exact supporting passages from your uploaded files and imported URLs.
+                Enter a topic or phrase above to find exact supporting passages from your uploaded
+                files and imported URLs.
               </p>
             </div>
           )}
