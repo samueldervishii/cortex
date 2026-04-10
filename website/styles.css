@@ -199,10 +199,6 @@ main,
   height: 15px;
 }
 
-.nav-toggle {
-  display: none;
-}
-
 .hero {
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
@@ -1118,7 +1114,8 @@ main,
   .cta-banner-inner,
   .footer-inner {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
+    text-align: center;
   }
 
   .cta-banner-btn {
@@ -1133,9 +1130,66 @@ main,
   .article-hero,
   .article-content,
   .cta-banner,
-  .footer-inner,
+  .footer-inner {
+    width: min(calc(100% - 2rem), var(--container));
+    margin-inline: auto;
+  }
+
+  /* Nav keeps a tighter gutter so the links and CTA button fit on one
+     row before wrapping, matching the previous mobile layout. */
   .nav {
     width: min(calc(100% - 1rem), var(--container));
+    margin-inline: auto;
+  }
+
+  .footer-inner {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 1.25rem;
+    padding-top: 1.75rem;
+  }
+
+  .footer-links {
+    justify-content: center;
+    gap: 0.75rem 1.25rem;
+  }
+
+  /* Center-align the main content blocks on phones. Cards keep their
+     internal grid / flex layouts; only the text alignment flips so
+     headings, paragraphs, and inline flex groups center inside the
+     narrow viewport instead of hugging the left edge. */
+  .hero-copy,
+  .hero-actions,
+  .hero-pills,
+  .hero-metrics,
+  .feature-card,
+  .use-case-card,
+  .workflow-step,
+  .highlight-item,
+  .faq-item,
+  .product-card,
+  .product-tools,
+  .cta-banner-inner,
+  .section-copy,
+  .about-card {
+    text-align: center;
+  }
+
+  .hero-copy,
+  .hero-actions,
+  .hero-pills {
+    align-items: center;
+  }
+
+  .hero-pills,
+  .hero-actions,
+  .product-tools {
+    justify-content: center;
+  }
+
+  .section-copy {
+    margin-inline: auto;
   }
 
   .nav {

@@ -942,7 +942,15 @@ function Settings() {
               <p className="about-desc">
                 A clean, fast AI chat platform powered by Anthropic's Claude Sonnet 4.6. Designed to
                 help students write, research, and build their thesis — simply, securely, and
-                affordably.
+                affordably.{' '}
+                <a
+                  href="https://cortex-al.vercel.app"
+                  className="auth-learn-more"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Learn more &rarr;
+                </a>
               </p>
               <div className="about-links-row">
                 <a

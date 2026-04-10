@@ -36,21 +36,6 @@
           </svg>
         </a>
       </div>
-      <button class="nav-toggle" aria-label="Menu">
-        <svg
-          width="24"
-          height="24"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-        >
-          <line x1="3" y1="6" x2="21" y2="6" />
-          <line x1="3" y1="12" x2="21" y2="12" />
-          <line x1="3" y1="18" x2="21" y2="18" />
-        </svg>
-      </button>
     </nav>
 
     <main>
@@ -287,10 +272,10 @@
               </svg>
             </div>
             <span class="feature-kicker">Personalization</span>
-            <h3>Profile-aware help</h3>
+            <h3>Tuned to your field</h3>
             <p>
-              Save your field, tools, and preferred tone once so every session
-              starts closer to the way you actually work.
+              Save your discipline, tools, and preferred tone once so every
+              session starts closer to the way you actually write.
             </p>
           </article>
 
@@ -516,7 +501,17 @@
             <h3>What file types can I upload?</h3>
             <p>
               Cortex supports PDF, DOCX, TXT, Markdown, and CSV uploads for
-              source analysis and file-aware conversations.
+              source analysis and file-aware conversations. Files up to 10 MB
+              are extracted into the conversation automatically.
+            </p>
+          </article>
+          <article class="faq-item anim-scroll">
+            <h3>Is my data private?</h3>
+            <p>
+              Your chats, uploads, and profile are tied to your account and
+              never sold or shared with third parties. Read the full
+              <a href="privacy-policy.html">Privacy Policy</a> for the
+              specifics on storage, retention, and deletion.
             </p>
           </article>
           <article class="faq-item anim-scroll">
@@ -524,20 +519,50 @@
             <p>
               Yes. Sessions are stored in your account so you can return to
               them, search them, pin them, share them, or delete them later.
+              Auto-delete is available in Settings if you prefer a clean
+              history.
+            </p>
+          </article>
+          <article class="faq-item anim-scroll">
+            <h3>What are the usage limits?</h3>
+            <p>
+              Every account gets a rolling 200,000-token budget per
+              five-hour window, shown live in Settings &rarr; Usage. Responses
+              scale down automatically as you approach the limit so nothing
+              gets cut off mid-sentence.
+            </p>
+          </article>
+          <article class="faq-item anim-scroll">
+            <h3>Can Cortex cite the sources I upload?</h3>
+            <p>
+              Yes. When you upload a document and ask a question about it,
+              Cortex links its claims back to labeled source chunks so you
+              can verify every reference against the original file.
+            </p>
+          </article>
+          <article class="faq-item anim-scroll">
+            <h3>Which AI model does Cortex use?</h3>
+            <p>
+              Cortex runs on Anthropic&rsquo;s Claude family. Sonnet 4.6 is
+              the default for everyday work; Opus 4.6 and Haiku 4.5 are
+              available from the model selector for heavier reasoning or
+              faster replies.
             </p>
           </article>
           <article class="faq-item anim-scroll">
             <h3>Can I export my work?</h3>
             <p>
-              Yes. Sessions can be exported as JSON or Markdown, and document
-              outputs can be exported as DOCX.
+              Yes. Sessions can be exported as JSON or Markdown for backup,
+              and individual document outputs can be downloaded as DOCX
+              directly from the chat.
             </p>
           </article>
           <article class="faq-item anim-scroll">
             <h3>Can I control what gets shared?</h3>
             <p>
-              Yes. Shared sessions are optional and only visible through the
-              generated share link while sharing is enabled.
+              Yes. Shared sessions are opt-in and only visible through the
+              generated share link while sharing is enabled. You can revoke
+              a share link at any time from the session menu.
             </p>
           </article>
         </div>
