@@ -379,13 +379,14 @@ app.include_router(usage_router)
 
 
 
-@app.get("/", tags=["health"])
+@app.api_route("/", methods=["GET", "HEAD"], tags=["health"])
 async def root():
     """
     Health Check
 
-    Returns the current status and version of the API.
-    Use this endpoint to verify the API is running.
+    Accepts both GET and HEAD so platform health checks (Render pings
+    HEAD /) don't get stuck on 405 and fail to promote the deploy.
+    Returns the current status of the API.
     """
     return {"status": "ok"}
 
