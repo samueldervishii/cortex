@@ -15,6 +15,11 @@ on:
   # Allow manual runs from the Actions tab for debugging
   workflow_dispatch:
 
+# Principle of least privilege: this workflow only checks out the repo
+# and POSTs to MongoDB Atlas. It writes nothing back to GitHub.
+permissions:
+  contents: read
+
 # Avoid stacking runs if a previous probe is still going
 concurrency:
   group: status-probe
