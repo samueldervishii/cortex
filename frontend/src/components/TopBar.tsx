@@ -35,11 +35,16 @@ function TopBar({
             </svg>
           </button>
         )}
+      </div>
 
-        {!sidebarOpen && <span className="top-bar-brand">Cortex</span>}
-
-        {hasSession && sessionTitle && (
+      <div className="top-bar-center">
+        {hasSession && sessionTitle ? (
           <span className="top-bar-session-title">{sessionTitle}</span>
+        ) : (
+          <span className="top-bar-brand">
+            <img src="/logo.svg" alt="" width="22" height="22" />
+            Cortex
+          </span>
         )}
       </div>
 

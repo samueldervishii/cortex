@@ -40,28 +40,43 @@
   display: flex;
   gap: 0.75rem;
   align-items: center;
-  flex-shrink: 0;
+  flex: 1 1 0;
+  min-width: 0;
+  justify-content: flex-start;
 }
 
 .top-bar-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
   font-size: 1rem;
   font-weight: 600;
   color: var(--text-primary);
   letter-spacing: -0.01em;
 }
 
+.top-bar-brand img {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
 .top-bar-center {
-  flex: 1;
+  flex: 0 1 auto;
   display: flex;
   align-items: center;
   justify-content: center;
+  min-width: 0;
+  padding: 0 0.5rem;
 }
 
 .top-bar-right {
   display: flex;
   gap: 0.25rem;
   align-items: center;
-  flex-shrink: 0;
+  flex: 1 1 0;
+  min-width: 0;
+  justify-content: flex-end;
 }
 
 /* Top bar icon buttons */
@@ -568,16 +583,29 @@
 
   /* TopBar Mobile Optimization */
   .top-bar {
-    padding: 0 0.75rem;
-    height: 48px;
-    min-height: 48px;
+    padding: 0 0.6rem;
+    height: 52px;
+    min-height: 52px;
     position: sticky;
     top: 0;
     z-index: 100;
+    background: var(--bg-primary);
+    backdrop-filter: blur(8px);
   }
 
   .top-bar-brand {
-    display: none;
+    font-size: 0.95rem;
+    gap: 0.4rem;
+  }
+
+  .top-bar-brand img {
+    width: 20px;
+    height: 20px;
+  }
+
+  .top-bar-session-title {
+    font-size: 0.88rem;
+    max-width: 60vw;
   }
 
   .top-bar-left {
@@ -7616,12 +7644,6 @@ button.message-file-badge:hover {
     border-right: none;
   }
 
-  .top-bar {
-    height: 52px;
-    min-height: 52px;
-    padding: 0 0.75rem;
-  }
-
   .top-bar-mobile-only {
     display: flex;
   }
@@ -7727,25 +7749,83 @@ button.message-file-badge:hover {
 
   /* ── Welcome Screen ── */
   .welcome-screen {
-    padding: 1.2rem 1rem 1.4rem;
+    padding: 1rem 1rem 0;
+    gap: 0.85rem;
     justify-content: flex-start;
   }
 
+  .welcome-center {
+    gap: 0.3rem;
+  }
+
+  .welcome-badge {
+    font-size: 0.66rem;
+    padding: 0.25rem 0.6rem;
+  }
+
   .welcome-heading {
-    font-size: clamp(1.8rem, 8vw, 2.5rem);
+    font-size: clamp(1.55rem, 7vw, 2rem);
+    line-height: 1.02;
+    gap: 0.05em;
+  }
+
+  .welcome-subheading {
+    font-size: 0.85rem;
+    line-height: 1.45;
+    max-width: 100%;
   }
 
   .welcome-suggestions {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
     max-width: 100%;
   }
 
   .welcome-suggestion-card {
     min-height: 0;
+    padding: 0.7rem 0.75rem;
+    gap: 0.2rem;
+    border-radius: 14px;
+  }
+
+  .welcome-suggestion-eyebrow {
+    font-size: 0.58rem;
+    margin-bottom: 0.25rem;
+    gap: 0.25rem;
+  }
+
+  .welcome-suggestion-title {
+    font-size: 0.78rem;
+    line-height: 1.25;
+  }
+
+  .welcome-suggestion-desc {
+    display: none;
+  }
+
+  .welcome-toolbar {
+    justify-content: center;
+  }
+
+  .welcome-toolbar-btn {
+    font-size: 0.76rem;
   }
 
   .welcome-input-area {
     max-width: 100%;
+    position: sticky;
+    bottom: 0;
+    margin-top: auto;
+    margin-left: -1rem;
+    margin-right: -1rem;
+    padding: 0.6rem 1rem calc(env(safe-area-inset-bottom, 0.5rem) + 0.5rem);
+    background: linear-gradient(
+      to bottom,
+      rgba(255, 250, 242, 0) 0%,
+      rgba(255, 250, 242, 0.92) 35%,
+      rgba(255, 250, 242, 1) 65%
+    );
+    z-index: 5;
   }
 
   /* ── Input: hide "Attach file" text on mobile, keep icon only ── */
