@@ -9,6 +9,7 @@ interface WelcomeScreenProps {
   onSubmit: () => void
   onFileUpload?: (file: File, message: string) => void
   loading: boolean
+  ghostMode?: boolean
 }
 
 const SUGGESTIONS = [
@@ -52,6 +53,7 @@ function WelcomeScreen({
   onSubmit,
   onFileUpload,
   loading,
+  ghostMode = false,
 }: WelcomeScreenProps) {
   const inputRef = useRef<ChatInputHandle | null>(null)
   const [suggestions, setSuggestions] = useState(SUGGESTIONS)
@@ -75,6 +77,36 @@ function WelcomeScreen({
       ;[copy[i], copy[j]] = [copy[j], copy[i]]
     }
     setSuggestions(copy)
+  }
+
+  if (ghostMode) {
+    return (
+      <div className="welcome-screen welcome-screen-ghost">
+        <div className="welcome-center">
+          <h1 className="welcome-ghost-title">Temporary Chat</h1>
+          <p className="welcome-ghost-sub">
+            This chat won't appear in your chat history, and won't be used to train our models.
+          </p>
+        </div>
+
+        <div className="welcome-input-area welcome-input-area-ghost">
+          <ChatInput
+            ref={inputRef}
+            value={question}
+            onChange={onQuestionChange}
+            onSubmit={onSubmit}
+            onFileUpload={onFileUpload}
+            disabled={loading}
+            placeholder="Ask anything"
+            centered
+          />
+        </div>
+
+        <p className="welcome-ghost-footer">
+          For safety, we may keep a copy of this chat for up to 30 days.
+        </p>
+      </div>
+    )
   }
 
   return (
@@ -128,6 +160,10 @@ function WelcomeScreen({
           placeholder="Ask for a draft, upload a source, or describe what you need..."
           centered
         />
+        <p className="welcome-hint">
+          Press <kbd className="shortcut-kbd">Alt</kbd>
+          <kbd className="shortcut-kbd">?</kbd> to open the command palette
+        </p>
       </div>
     </div>
   )

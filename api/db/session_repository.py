@@ -80,54 +80,59 @@ class SessionRepository:
         session.version = new_version
         return session
 
-    async def list_all(
-        self, limit: int = 50, include_deleted: bool = False, user_id: Optional[str] = None
-    ) -> List[dict]:
-        """List all sessions with basic info, ordered by pinned first, then most recent."""
-        match_stage = {}
-        if not include_deleted:
-            match_stage["is_deleted"] = {"$ne": True}
+    # Shared $project stage used by the pinned + recent list queries so both
+    # return identical SessionSummary-shaped documents.
+    _SUMMARY_PROJECT_STAGE = {
+        "$project": {
+            "_id": 0,
+            "id": 1,
+            "title": 1,
+            "created_at": 1,
+            "is_pinned": {"$ifNull": ["$is_pinned", False]},
+            "question": {
+                "$ifNull": [
+                    {"$arrayElemAt": [
+                        {"$map": {
+                            "input": {"$filter": {
+                                "input": {"$ifNull": ["$messages", []]},
+                                "cond": {"$eq": ["$$this.role", "user"]},
+                            }},
+                            "in": "$$this.content",
+                        }},
+                        0,
+                    ]},
+                    {"$ifNull": [{"$arrayElemAt": ["$rounds.question", 0]}, ""]},
+                ]
+            },
+            "status": "completed",
+            "message_count": {
+                "$cond": {
+                    "if": {"$isArray": "$messages"},
+                    "then": {"$size": "$messages"},
+                    "else": 0,
+                }
+            },
+            "pinned_at": {"$ifNull": ["$pinned_at", None]},
+        }
+    }
+
+    async def list_pinned(self, user_id: Optional[str] = None) -> List[dict]:
+        """Return all pinned sessions for a user, newest-pinned first.
+
+        Ghost sessions are excluded — they're persisted but hidden from history.
+        """
+        match_stage = {
+            "is_deleted": {"$ne": True},
+            "is_ghost": {"$ne": True},
+            "is_pinned": True,
+        }
         if user_id is not None:
             match_stage["user_id"] = user_id
 
         pipeline = [
             {"$match": match_stage},
-            {
-                "$project": {
-                    "_id": 0,
-                    "id": 1,
-                    "title": 1,
-                    "created_at": 1,
-                    "is_pinned": {"$ifNull": ["$is_pinned", False]},
-                    # First user message as question (support both old rounds and new messages format)
-                    "question": {
-                        "$ifNull": [
-                            {"$arrayElemAt": [
-                                {"$map": {
-                                    "input": {"$filter": {
-                                        "input": {"$ifNull": ["$messages", []]},
-                                        "cond": {"$eq": ["$$this.role", "user"]},
-                                    }},
-                                    "in": "$$this.content",
-                                }},
-                                0,
-                            ]},
-                            {"$ifNull": [{"$arrayElemAt": ["$rounds.question", 0]}, ""]},
-                        ]
-                    },
-                    "status": "completed",
-                    "message_count": {
-                        "$cond": {
-                            "if": {"$isArray": "$messages"},
-                            "then": {"$size": "$messages"},
-                            "else": 0,
-                        }
-                    },
-                    "pinned_at": {"$ifNull": ["$pinned_at", None]},
-                }
-            },
-            {"$sort": {"is_pinned": -1, "pinned_at": -1, "created_at": -1}},
-            {"$limit": limit},
+            self._SUMMARY_PROJECT_STAGE,
+            {"$sort": {"pinned_at": -1, "created_at": -1}},
             {"$project": {"pinned_at": 0}},
         ]
 
@@ -135,6 +140,46 @@ class SessionRepository:
         async for doc in self.collection.aggregate(pipeline):
             sessions.append(doc)
         return sessions
+
+    async def list_recent_page(
+        self, user_id: Optional[str] = None, limit: int = 5, offset: int = 0
+    ) -> tuple[List[dict], int]:
+        """Return a page of non-pinned sessions plus the total non-pinned count.
+
+        Uses $facet so the page and the total are fetched in a single roundtrip.
+        """
+        match_stage = {
+            "is_deleted": {"$ne": True},
+            "is_ghost": {"$ne": True},
+            "is_pinned": {"$ne": True},
+        }
+        if user_id is not None:
+            match_stage["user_id"] = user_id
+
+        pipeline = [
+            {"$match": match_stage},
+            {
+                "$facet": {
+                    "page": [
+                        self._SUMMARY_PROJECT_STAGE,
+                        {"$sort": {"created_at": -1}},
+                        {"$skip": offset},
+                        {"$limit": limit},
+                        {"$project": {"pinned_at": 0}},
+                    ],
+                    "total": [{"$count": "count"}],
+                }
+            },
+        ]
+
+        cursor = self.collection.aggregate(pipeline)
+        result = await cursor.to_list(length=1)
+        if not result:
+            return [], 0
+        page = result[0].get("page", [])
+        total_arr = result[0].get("total", [])
+        total = total_arr[0]["count"] if total_arr else 0
+        return page, total
 
     async def search(self, query: str, user_id: Optional[str] = None, limit: int = 20) -> List[dict]:
         """Search sessions by content (title, messages)."""
@@ -144,6 +189,7 @@ class SessionRepository:
         regex = {"$regex": escaped_query, "$options": "i"}
         match_stage = {
             "is_deleted": {"$ne": True},
+            "is_ghost": {"$ne": True},
             "$or": [
                 {"title": regex},
                 {"messages.content": regex},

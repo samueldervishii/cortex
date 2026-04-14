@@ -44,13 +44,16 @@ async function* parseSSE(reader) {
   }
 }
 
-// Module-level cache: avoid re-fetching on page navigation (component remounts)
-let cachedSessions = null
+// Module-level cache: avoid re-fetching on page navigation (component remounts).
+// Caches the merged list of pinned + loaded recent pages, plus pagination state.
+let cachedSessionState = null
 
 /** Clear the module-level session cache (call on logout). */
 export function clearSessionCache() {
-  cachedSessions = null
+  cachedSessionState = null
 }
+
+const RECENT_PAGE_SIZE = 5
 
 function useCouncil() {
   const [question, setQuestion] = useState('')
@@ -58,7 +61,14 @@ function useCouncil() {
   const [loading, setLoading] = useState(false)
   const [currentStep, setCurrentStep] = useState('')
   const [sessionId, setSessionId] = useState(null)
-  const [sessions, setSessions] = useState(cachedSessions || [])
+  const [ghostMode, setGhostMode] = useState(false)
+  const [sessions, setSessions] = useState(cachedSessionState?.sessions || [])
+  const [recentOffset, setRecentOffset] = useState(cachedSessionState?.recentOffset || 0)
+  const [recentTotal, setRecentTotal] = useState(cachedSessionState?.recentTotal || 0)
+  const [hasMoreSessions, setHasMoreSessions] = useState(
+    cachedSessionState?.hasMoreSessions || false
+  )
+  const [loadingMoreSessions, setLoadingMoreSessions] = useState(false)
   const [sessionLoadError, setSessionLoadError] = useState(null)
   const [isLoadingSession, setIsLoadingSession] = useState(false)
   const [quotedText, setQuotedText] = useState('')
@@ -137,17 +147,59 @@ function useCouncil() {
 
   const fetchSessions = useCallback(async () => {
     try {
-      const res = await apiClient.get('/sessions')
-      cachedSessions = res.data.sessions
-      setSessions(res.data.sessions)
+      const res = await apiClient.get(`/sessions?limit=${RECENT_PAGE_SIZE}&offset=0`)
+      const { sessions: recent, pinned, total, has_more } = res.data
+      const merged = [...(pinned || []), ...(recent || [])]
+      const nextOffset = (recent || []).length
+      setSessions(merged)
+      setRecentOffset(nextOffset)
+      setRecentTotal(total || 0)
+      setHasMoreSessions(!!has_more)
+      cachedSessionState = {
+        sessions: merged,
+        recentOffset: nextOffset,
+        recentTotal: total || 0,
+        hasMoreSessions: !!has_more,
+      }
     } catch (error) {
       console.error('Error fetching sessions:', error)
     }
   }, [])
 
+  const loadMoreSessions = useCallback(async () => {
+    if (loadingMoreSessions || !hasMoreSessions) return
+    setLoadingMoreSessions(true)
+    try {
+      const res = await apiClient.get(`/sessions?limit=${RECENT_PAGE_SIZE}&offset=${recentOffset}`)
+      const { sessions: recent, total, has_more } = res.data
+      setSessions((prev) => {
+        // Dedupe in case a session was pinned/unpinned between pages
+        const seen = new Set(prev.map((s) => s.id))
+        const appended = [...prev]
+        for (const s of recent || []) {
+          if (!seen.has(s.id)) appended.push(s)
+        }
+        cachedSessionState = {
+          sessions: appended,
+          recentOffset: recentOffset + (recent || []).length,
+          recentTotal: total || 0,
+          hasMoreSessions: !!has_more,
+        }
+        return appended
+      })
+      setRecentOffset((prev) => prev + (recent || []).length)
+      setRecentTotal(total || 0)
+      setHasMoreSessions(!!has_more)
+    } catch (error) {
+      console.error('Error loading more sessions:', error)
+    } finally {
+      setLoadingMoreSessions(false)
+    }
+  }, [recentOffset, hasMoreSessions, loadingMoreSessions])
+
   // Fetch sessions on mount — use cache if available (page navigation)
   useEffect(() => {
-    if (!cachedSessions) {
+    if (!cachedSessionState) {
       fetchSessions()
     }
   }, [fetchSessions])
@@ -482,6 +534,7 @@ function useCouncil() {
         // Create new session
         const createRes = await apiClient.post('/session', {
           question: userQuestion,
+          is_ghost: ghostMode,
         })
         currentSessionId = createRes.data.session.id
         setSessionId(currentSessionId)
@@ -489,7 +542,10 @@ function useCouncil() {
 
       await streamResponse(currentSessionId)
 
-      await fetchSessions()
+      // Ghost chats are hidden from history, so there's nothing to refresh.
+      if (!ghostMode) {
+        await fetchSessions()
+      }
     } catch (error) {
       // Don't show error messages for intentionally aborted streams
       if (error.name === 'AbortError') return
@@ -525,7 +581,10 @@ function useCouncil() {
 
       if (!currentSessionId) {
         // Create an empty session first
-        const createRes = await apiClient.post('/session', { question: userText })
+        const createRes = await apiClient.post('/session', {
+          question: userText,
+          is_ghost: ghostMode,
+        })
         currentSessionId = createRes.data.session.id
         setSessionId(currentSessionId)
 
@@ -550,7 +609,9 @@ function useCouncil() {
       }
 
       await streamResponse(currentSessionId)
-      await fetchSessions()
+      if (!ghostMode) {
+        await fetchSessions()
+      }
     } catch (error) {
       if (error.name === 'AbortError') return
       console.error('Error:', error)
@@ -577,6 +638,25 @@ function useCouncil() {
     setSessionId(null)
     setSessionLoadError(null)
     setIsLoadingSession(false)
+    setGhostMode(false)
+  }
+
+  const startGhostChat = () => {
+    // Same reset as startNewChat, but flips ghost mode on so the next
+    // session created via startChat is persisted with is_ghost=true and
+    // is therefore hidden from history listings.
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
+    }
+    setMessages([])
+    setQuestion('')
+    setLoading(false)
+    setCurrentStep('')
+    setSessionId(null)
+    setSessionLoadError(null)
+    setIsLoadingSession(false)
+    setGhostMode(true)
   }
 
   const exportSession = async () => {
@@ -626,14 +706,20 @@ function useCouncil() {
     hasMessages,
     sessionId,
     sessions,
+    hasMoreSessions,
+    loadingMoreSessions,
+    recentTotal,
+    ghostMode,
     startChat,
     sendFileMessage,
     startNewChat,
+    startGhostChat,
     loadSession,
     deleteSession,
     renameSession,
     togglePinSession,
     fetchSessions,
+    loadMoreSessions,
     branchSession,
     shareSession,
     unshareSession,

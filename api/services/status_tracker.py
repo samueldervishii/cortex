@@ -84,14 +84,24 @@ async def get_uptime_history(db: AsyncIOMotorDatabase) -> dict:
         # 7d samples (used for the daily roll-up and the 7d uptime %)
         docs_7d = await coll.find(
             {"service": svc_id, "checked_at": {"$gte": cutoff_7d}},
-            projection={"status": 1, "checked_at": 1, "_id": 0},
+            projection={
+                "status": 1,
+                "checked_at": 1,
+                "detail": 1,
+                "latency_ms": 1,
+                "_id": 0,
+            },
         ).to_list(length=20000)
         total_7d = len(docs_7d)
         ok_7d = sum(1 for d in docs_7d if d.get("status") == STATUS_OPERATIONAL)
         uptime_7d = (ok_7d / total_7d * 100.0) if total_7d else None
 
-        # Bucket checks by UTC date, taking the worst status per day.
-        day_map: dict[str, str] = {}
+        # Bucket checks by UTC date. For each day we track:
+        #   - the worst status seen (drives the bar color)
+        #   - total probes and operational probes (gives us daily uptime %)
+        #   - the "worst" probe's detail and its latency (surfaced in the
+        #     hover tooltip so users understand why a bar is red/yellow)
+        day_map: dict[str, dict] = {}
         for d in docs_7d:
             dt = d.get("checked_at")
             if not isinstance(dt, datetime):
@@ -99,9 +109,27 @@ async def get_uptime_history(db: AsyncIOMotorDatabase) -> dict:
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=timezone.utc)
             key = dt.date().isoformat()
-            prev = day_map.get(key)
             status = d.get("status", STATUS_UNKNOWN)
-            day_map[key] = _worse_status(prev, status) if prev else status
+            bucket = day_map.get(key)
+            if bucket is None:
+                bucket = {
+                    "status": status,
+                    "total": 0,
+                    "ok": 0,
+                    "worst_detail": d.get("detail") or "",
+                    "worst_latency_ms": d.get("latency_ms"),
+                    "worst_rank": _STATUS_RANK.get(status, 99),
+                }
+                day_map[key] = bucket
+            bucket["total"] += 1
+            if status == STATUS_OPERATIONAL:
+                bucket["ok"] += 1
+            rank = _STATUS_RANK.get(status, 99)
+            if rank < bucket["worst_rank"]:
+                bucket["status"] = status
+                bucket["worst_rank"] = rank
+                bucket["worst_detail"] = d.get("detail") or ""
+                bucket["worst_latency_ms"] = d.get("latency_ms")
 
         # Produce an ordered list for the last 7 days (oldest → newest).
         # Only include days we actually have data for.
@@ -109,8 +137,21 @@ async def get_uptime_history(db: AsyncIOMotorDatabase) -> dict:
         today = now.date()
         for offset in range(6, -1, -1):
             day = (today - timedelta(days=offset)).isoformat()
-            if day in day_map:
-                days.append({"date": day, "status": day_map[day]})
+            bucket = day_map.get(day)
+            if bucket is None:
+                continue
+            total = bucket["total"]
+            uptime_pct = (bucket["ok"] / total * 100.0) if total else None
+            days.append(
+                {
+                    "date": day,
+                    "status": bucket["status"],
+                    "uptime_pct": uptime_pct,
+                    "sample_count": total,
+                    "detail": bucket["worst_detail"],
+                    "latency_ms": bucket["worst_latency_ms"],
+                }
+            )
 
         services_out.append(
             {

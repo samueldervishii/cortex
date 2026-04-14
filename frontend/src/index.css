@@ -60,7 +60,9 @@ body {
   display: flex;
   min-width: 320px;
   min-height: 100vh;
+  min-height: 100dvh;
   overflow-x: hidden;
+  overscroll-behavior-y: none;
   -webkit-text-size-adjust: 100%;
   background: var(--bg-primary);
   color: var(--text-primary);

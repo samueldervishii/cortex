@@ -114,7 +114,6 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-muted);
-  margin: 0 0 1rem 0;
 }
 
 .settings-divider {
@@ -1343,6 +1342,7 @@
     overflow-x: auto;
     gap: 2px;
     align-self: stretch;
+    justify-content: space-between;
   }
 
   .settings-nav-item {

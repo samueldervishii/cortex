@@ -1,4 +1,16 @@
+import json
+from pathlib import Path
+
 from pydantic_settings import BaseSettings
+
+# Application version, read once at import time from the root version.json
+# so both /health and the app metadata stay in lockstep with the release.
+_VERSION_FILE = Path(__file__).parent.parent / "version.json"
+try:
+    with open(_VERSION_FILE) as _vf:
+        VERSION: str = json.load(_vf).get("version", "unknown")
+except FileNotFoundError:
+    VERSION = "unknown"
 
 
 class Settings(BaseSettings):

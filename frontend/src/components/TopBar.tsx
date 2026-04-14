@@ -1,3 +1,5 @@
+import { Ghost } from 'lucide-react'
+
 interface TopBarProps {
   onNewChat: () => void
   onToggleSidebar: () => void
@@ -6,6 +8,8 @@ interface TopBarProps {
   rightPanelOpen?: boolean
   hasSession?: boolean
   sessionTitle?: string
+  ghostMode?: boolean
+  onToggleGhost?: () => void
 }
 
 function TopBar({
@@ -15,9 +19,11 @@ function TopBar({
   rightPanelOpen,
   hasSession,
   sessionTitle,
+  ghostMode,
+  onToggleGhost,
 }: TopBarProps) {
   return (
-    <div className="top-bar">
+    <div className={`top-bar ${ghostMode ? 'ghost-mode' : ''}`}>
       <div className="top-bar-left">
         {!sidebarOpen && (
           <button className="menu-btn" onClick={onToggleSidebar} title="Open sidebar">
@@ -38,7 +44,11 @@ function TopBar({
       </div>
 
       <div className="top-bar-center">
-        {hasSession && sessionTitle ? (
+        {ghostMode ? (
+          <span className="top-bar-ghost-label">
+            <Ghost size={14} /> Temporary Chat
+          </span>
+        ) : hasSession && sessionTitle ? (
           <span className="top-bar-session-title">{sessionTitle}</span>
         ) : (
           <span className="top-bar-brand">
@@ -49,6 +59,16 @@ function TopBar({
       </div>
 
       <div className="top-bar-right">
+        {onToggleGhost && (
+          <button
+            className={`top-bar-icon-btn ${ghostMode ? 'active' : ''}`}
+            onClick={onToggleGhost}
+            title={ghostMode ? 'Exit temporary chat' : 'Start temporary chat'}
+            aria-pressed={ghostMode}
+          >
+            <Ghost size={16} />
+          </button>
+        )}
         {onToggleRightPanel && (
           <button
             className={`top-bar-icon-btn ${rightPanelOpen ? 'active' : ''}`}
