@@ -36,9 +36,14 @@ function App() {
     hasMessages,
     sessionId,
     sessions,
+    hasMoreSessions,
+    loadingMoreSessions,
+    loadMoreSessions,
+    ghostMode,
     startChat,
     sendFileMessage,
     startNewChat,
+    startGhostChat,
     loadSession,
     deleteSession,
     renameSession,
@@ -150,6 +155,17 @@ function App() {
     navigate('/')
   }, [startNewChat, navigate])
 
+  const handleToggleGhost = useCallback(() => {
+    if (ghostMode) {
+      // Exit ghost mode → back to a normal blank chat screen
+      startNewChat()
+      navigate('/')
+    } else {
+      startGhostChat()
+      navigate('/')
+    }
+  }, [ghostMode, startNewChat, startGhostChat, navigate])
+
   const handleBranch = useCallback(
     async (messageIndex: number) => {
       if (!sessionId) return
@@ -219,6 +235,9 @@ function App() {
           isOpen={sidebarOpen}
           sessions={sessions}
           currentSessionId={sessionId}
+          hasMoreSessions={hasMoreSessions}
+          loadingMoreSessions={loadingMoreSessions}
+          onLoadMoreSessions={loadMoreSessions}
           onDeleteSession={deleteSession}
           onRenameSession={renameSession}
           onTogglePinSession={togglePinSession}
@@ -238,6 +257,8 @@ function App() {
             rightPanelOpen={rightPanelOpen}
             hasSession={!!sessionId}
             sessionTitle={sessionTitle}
+            ghostMode={ghostMode}
+            onToggleGhost={handleToggleGhost}
           />
           {isLoadingSession ? (
             <ChatSkeleton />
@@ -254,6 +275,7 @@ function App() {
               onSubmit={startChat}
               onFileUpload={sendFileMessage}
               loading={loading}
+              ghostMode={ghostMode}
             />
           ) : (
             <ChatMessages

@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Response, status
 
 from db import get_database
-from config import CHAT_MODEL, settings
+from config import CHAT_MODEL, VERSION, settings
 from core.circuit_breaker import get_circuit_breaker_status
 from core.dependencies import get_current_user
 from services import status_tracker
@@ -25,7 +25,7 @@ async def health_check():
 
     Returns 200 if the application is running.
     """
-    return {"status": "healthy", "service": "cortex-api"}
+    return {"status": "healthy", "service": "cortex-api", "version": VERSION}
 
 
 @router.get("/ready")

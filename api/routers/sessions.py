@@ -29,6 +29,7 @@ from schemas import (
     Message,
     SessionResponse,
     SessionListResponse,
+    PaginatedSessionsResponse,
     SessionSummary,
     SessionUpdateRequest,
     Artifact,
@@ -56,29 +57,49 @@ def _strip_file_data(session):
     return session
 
 
-@router.get("s", response_model=SessionListResponse)
+def _doc_to_summary(s: dict) -> SessionSummary:
+    created_at = s.get("created_at")
+    return SessionSummary(
+        id=s["id"],
+        title=s.get("title"),
+        question=s.get("question", ""),
+        status=s.get("status", "completed"),
+        message_count=s.get("message_count", 0),
+        created_at=utc_iso(created_at) if created_at else None,
+        is_pinned=s.get("is_pinned", False),
+    )
+
+
+@router.get("s", response_model=PaginatedSessionsResponse)
 async def list_sessions(
-    limit: int = Query(default=50, ge=1, le=500),
+    limit: int = Query(default=5, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     repo: SessionRepository = Depends(get_session_repository),
     user_id: str = Depends(get_current_user),
 ):
-    """List all sessions, ordered by pinned first, then most recent."""
-    sessions = await repo.list_all(limit=limit, user_id=user_id)
-    summaries = []
-    for s in sessions:
-        created_at = s.get("created_at")
-        summaries.append(
-            SessionSummary(
-                id=s["id"],
-                title=s.get("title"),
-                question=s.get("question", ""),
-                status=s.get("status", "completed"),
-                message_count=s.get("message_count", 0),
-                created_at=utc_iso(created_at) if created_at else None,
-                is_pinned=s.get("is_pinned", False),
-            )
-        )
-    return SessionListResponse(sessions=summaries, count=len(summaries))
+    """List sessions with pagination.
+
+    Returns all pinned sessions (on offset=0 only) plus a page of non-pinned
+    sessions. The frontend paginates only the non-pinned list.
+    """
+    recent_docs, total = await repo.list_recent_page(
+        user_id=user_id, limit=limit, offset=offset
+    )
+    recent = [_doc_to_summary(s) for s in recent_docs]
+
+    pinned: list[SessionSummary] = []
+    if offset == 0:
+        pinned_docs = await repo.list_pinned(user_id=user_id)
+        pinned = [_doc_to_summary(s) for s in pinned_docs]
+
+    return PaginatedSessionsResponse(
+        sessions=recent,
+        pinned=pinned,
+        total=total,
+        limit=limit,
+        offset=offset,
+        has_more=(offset + len(recent)) < total,
+    )
 
 
 @router.get("s/search", response_model=SessionListResponse)
@@ -124,6 +145,7 @@ async def create_session(
         user_id=user_id,
         title=sanitize_title(clean_question, max_length=100),
         messages=[user_message],
+        is_ghost=request.is_ghost,
     )
 
     await repo.create(session)

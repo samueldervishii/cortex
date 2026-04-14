@@ -8,6 +8,10 @@ type ServiceStatus = 'operational' | 'degraded' | 'down' | 'unknown'
 interface ServiceDay {
   date: string
   status: ServiceStatus
+  uptime_pct: number | null
+  sample_count: number
+  detail: string
+  latency_ms: number | null
 }
 
 interface UptimeService {
@@ -36,11 +40,7 @@ interface UptimeResponse {
 // the current client time rather than leaving it null ("Never").
 function buildDownFallback(): UptimeResponse {
   const now = new Date().toISOString()
-  const emptyService = (
-    id: string,
-    label: string,
-    description: string
-  ): UptimeService => ({
+  const emptyService = (id: string, label: string, description: string): UptimeService => ({
     id,
     label,
     description,
@@ -113,9 +113,7 @@ function StatusPage() {
       setUptime(res.data)
       setError(null)
     } catch (err: any) {
-      setError(
-        err.response?.data?.detail || err.message || 'Unable to reach API server'
-      )
+      setError(err.response?.data?.detail || err.message || 'Unable to reach API server')
       // Keep the layout stable: render the three service cards in a
       // "down" fallback state instead of collapsing to a bare error.
       setUptime(buildDownFallback())
@@ -214,12 +212,26 @@ function StatusPage() {
       <div className={`status-overall-card status-${overall}`}>
         <div className="status-overall-icon">
           {overall === 'operational' && (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+            >
               <polyline points="20 6 9 17 4 12" />
             </svg>
           )}
           {(overall === 'degraded' || overall === 'down') && (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+            >
               <circle cx="12" cy="12" r="10" />
               <line x1="12" y1="8" x2="12" y2="12" />
               <line x1="12" y1="16" x2="12.01" y2="16" />
@@ -249,15 +261,9 @@ function StatusPage() {
       ) : uptime ? (
         <section className="status-services-section">
           <h3 className="status-section-title">Services</h3>
-          <p className="status-section-sub">
-            Probed every 5 minutes. History grows as data is collected.
-          </p>
 
           {uptime.services.map((svc) => (
-            <article
-              key={svc.id}
-              className={`status-service-card status-${svc.current_status}`}
-            >
+            <article key={svc.id} className={`status-service-card status-${svc.current_status}`}>
               <div className="status-service-head">
                 <div className="status-service-title">
                   <span className={`status-service-dot status-${svc.current_status}`} />
@@ -308,16 +314,42 @@ function StatusPage() {
                       {svc.days.map((d) => (
                         <div
                           key={d.date}
-                          className={`status-day-square status-${d.status}`}
-                          title={`${dayLabel(d.date)} — ${STATUS_LABEL[d.status]}`}
-                        />
+                          className={`status-day-cell status-${d.status}`}
+                          tabIndex={0}
+                          aria-label={`${dayLabel(d.date)} — ${STATUS_LABEL[d.status]}`}
+                        >
+                          <div className={`status-day-square status-${d.status}`} />
+                          <div className="status-day-tooltip" role="tooltip">
+                            <div className="status-day-tooltip-head">
+                              <span className={`status-day-tooltip-dot status-${d.status}`} />
+                              <strong>{dayLabel(d.date)}</strong>
+                              <span className="status-day-tooltip-status">
+                                {STATUS_LABEL[d.status]}
+                              </span>
+                            </div>
+                            <dl className="status-day-tooltip-grid">
+                              <dt>Uptime</dt>
+                              <dd>{d.uptime_pct !== null ? `${d.uptime_pct.toFixed(1)}%` : '—'}</dd>
+                              <dt>Samples</dt>
+                              <dd>{d.sample_count}</dd>
+                              {d.latency_ms !== null && (
+                                <>
+                                  <dt>Latency</dt>
+                                  <dd>{d.latency_ms}ms</dd>
+                                </>
+                              )}
+                            </dl>
+                            {d.detail && <p className="status-day-tooltip-detail">{d.detail}</p>}
+                          </div>
+                        </div>
                       ))}
                     </div>
-                    <div className="status-day-labels">
-                      <span>{dayLabel(svc.days[0].date)}</span>
-                      {svc.days.length > 1 && (
-                        <span>{dayLabel(svc.days[svc.days.length - 1].date)}</span>
-                      )}
+                    <div className="status-day-labels-row">
+                      {svc.days.map((d) => (
+                        <span key={d.date} className="status-day-label">
+                          {dayLabel(d.date)}
+                        </span>
+                      ))}
                     </div>
                   </>
                 )}
@@ -326,9 +358,7 @@ function StatusPage() {
           ))}
 
           {lastFetched && (
-            <p className="status-last-updated">
-              Last refresh: {lastFetched.toLocaleTimeString()}
-            </p>
+            <p className="status-last-updated">Last refresh: {lastFetched.toLocaleTimeString()}</p>
           )}
         </section>
       ) : (

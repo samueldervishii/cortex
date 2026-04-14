@@ -1,15 +1,13 @@
 import asyncio
-import json
 import logging
 import re
 import time
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from config import CHAT_MODEL, settings
+from config import CHAT_MODEL, VERSION, settings
 from core import setup_logging
 from core.dependencies import (
     get_session_repository,
@@ -176,11 +174,6 @@ async def lifespan(_app: FastAPI):
     await close_database()
     logger.info("MongoDB connection closed")
 
-
-# Read version from root version.json
-VERSION_FILE = Path(__file__).parent.parent / "version.json"
-with open(VERSION_FILE) as f:
-    VERSION = json.load(f)["version"]
 
 DESCRIPTION = """
 # Cortex API

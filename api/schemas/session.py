@@ -61,6 +61,10 @@ class ChatSession(BaseModel):
     is_shared: bool = Field(default=False)
     share_token: Optional[str] = Field(None)
     shared_at: Optional[str] = Field(None)
+    is_ghost: bool = Field(
+        default=False,
+        description="Ghost/temporary chat: persisted but hidden from history listings",
+    )
 
 
 class QueryRequest(BaseModel):
@@ -76,6 +80,10 @@ class QueryRequest(BaseModel):
         default=None,
         max_length=2000,
         description="Custom system instructions",
+    )
+    is_ghost: bool = Field(
+        default=False,
+        description="Create this session as a ghost/temporary chat (hidden from history)",
     )
 
 
@@ -131,10 +139,21 @@ class SessionUpdateRequest(BaseModel):
 
 
 class SessionListResponse(BaseModel):
-    """List of session summaries."""
+    """List of session summaries (used by search)."""
 
     sessions: List[SessionSummary]
     count: int
+
+
+class PaginatedSessionsResponse(BaseModel):
+    """Paginated session list: pinned (always full) + recent page."""
+
+    sessions: List[SessionSummary]         # recent non-pinned, paginated
+    pinned: List[SessionSummary] = []      # all pinned, only populated on offset=0
+    total: int                             # total non-pinned count
+    limit: int
+    offset: int
+    has_more: bool
 
 
 class Artifact(BaseModel):

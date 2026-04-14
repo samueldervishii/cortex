@@ -31,6 +31,9 @@ interface SidebarProps {
   isOpen: boolean
   sessions: Session[]
   currentSessionId: string | null
+  hasMoreSessions?: boolean
+  loadingMoreSessions?: boolean
+  onLoadMoreSessions?: () => void
   onDeleteSession: (id: string) => Promise<void>
   onRenameSession: (id: string, title: string) => Promise<void>
   onTogglePinSession: (id: string) => Promise<void>
@@ -45,6 +48,9 @@ function Sidebar({
   isOpen,
   sessions,
   currentSessionId,
+  hasMoreSessions = false,
+  loadingMoreSessions = false,
+  onLoadMoreSessions,
   onDeleteSession,
   onRenameSession,
   onTogglePinSession,
@@ -67,7 +73,6 @@ function Sidebar({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
-  const [visibleCount, setVisibleCount] = useState(10)
   const [accountOpen, setAccountOpen] = useState(false)
 
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -75,10 +80,6 @@ function Sidebar({
   const menuRef = useRef<HTMLDivElement>(null)
   const accountRef = useRef<HTMLDivElement>(null)
   const pendingSearchFocusRef = useRef(false)
-
-  useEffect(() => {
-    setVisibleCount(10)
-  }, [searchQuery])
 
   const filteredSessions = sessions.filter((session) => {
     if (!searchQuery.trim()) return true
@@ -478,15 +479,14 @@ function Sidebar({
                       <div className="sidebar-section-header">
                         <span>{pinnedSessions.length > 0 ? 'Recent' : 'Chats'}</span>
                       </div>
-                      {recentSessions
-                        .slice(0, visibleCount)
-                        .map((session) => renderSessionItem(session))}
-                      {recentSessions.length > visibleCount && (
+                      {recentSessions.map((session) => renderSessionItem(session))}
+                      {!searchQuery && hasMoreSessions && (
                         <button
                           className="load-more-btn"
-                          onClick={() => setVisibleCount((prev) => prev + 10)}
+                          onClick={onLoadMoreSessions}
+                          disabled={loadingMoreSessions}
                         >
-                          Load more ({recentSessions.length - visibleCount} remaining)
+                          {loadingMoreSessions ? 'Loading…' : 'Load more'}
                         </button>
                       )}
                     </>

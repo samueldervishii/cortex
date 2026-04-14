@@ -114,7 +114,6 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-muted);
-  margin: 0 0 1rem 0;
 }
 
 .settings-divider {
@@ -1343,6 +1342,7 @@
     overflow-x: auto;
     gap: 2px;
     align-self: stretch;
+    justify-content: space-between;
   }
 
   .settings-nav-item {
@@ -1368,16 +1368,50 @@
 
   .profile-row {
     flex-direction: column;
-    gap: 0.35rem;
-    padding: 0.85rem 0;
+    align-items: flex-start;
+    gap: 0.4rem;
+    padding: 0.95rem 0;
   }
 
   .profile-row-label {
     min-width: 0;
+    width: 100%;
   }
 
   .profile-row-value {
     min-height: 0;
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 0.55rem;
+  }
+
+  .profile-row-value .profile-value-text,
+  .profile-row-value .profile-value-pill {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .profile-row-value .profile-action-link {
+    margin-left: auto;
+    flex-shrink: 0;
+    padding: 0.5rem 1rem;
+    border-radius: 999px;
+    background: rgba(15, 118, 110, 0.1);
+    color: var(--accent-color);
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .profile-row-value .profile-action-link:hover:not(:disabled) {
+    background: rgba(15, 118, 110, 0.16);
+    color: var(--accent-color);
+  }
+
+  .profile-inline-edit {
+    width: 100%;
   }
 
   .settings-save-btn,
