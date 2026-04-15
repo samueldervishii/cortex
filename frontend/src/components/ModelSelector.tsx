@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
-import { ChevronDown, Check } from 'lucide-react'
+import { CaretDownIcon as CaretDown } from '@phosphor-icons/react/CaretDown'
+import { CheckIcon as Check } from '@phosphor-icons/react/Check'
 
 export interface ModelDef {
   id: string
@@ -85,7 +86,7 @@ function ModelSelector() {
       >
         <img className="model-selector-img" src={selected.icon} alt="" />
         <span className="model-selector-name">{selected.shortName}</span>
-        <ChevronDown size={14} className={`model-selector-chevron ${isOpen ? 'open' : ''}`} />
+        <CaretDown size={14} className={`model-selector-chevron ${isOpen ? 'open' : ''}`} />
       </button>
 
       {isOpen && (

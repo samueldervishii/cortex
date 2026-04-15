@@ -1,19 +1,16 @@
 import { useState, useEffect, useRef, memo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import {
-  Pin,
-  Edit2,
-  Share2,
-  X,
-  Search as SearchIcon,
-  Settings as SettingsIcon,
-  MoreVertical,
-  SquarePen,
-  User,
-  LogOut,
-  ChevronUp,
-  ChevronLeft,
-} from 'lucide-react'
+import { PushPinIcon as Pin } from '@phosphor-icons/react/PushPin'
+import { PencilSimpleIcon as Edit2 } from '@phosphor-icons/react/PencilSimple'
+import { ShareNetworkIcon as Share2 } from '@phosphor-icons/react/ShareNetwork'
+import { TrashIcon as X } from '@phosphor-icons/react/Trash'
+import { MagnifyingGlassIcon as SearchIcon } from '@phosphor-icons/react/MagnifyingGlass'
+import { GearIcon as SettingsIcon } from '@phosphor-icons/react/Gear'
+import { DotsThreeCircleIcon as MoreVertical } from '@phosphor-icons/react/DotsThreeCircle'
+import { NotePencilIcon as SquarePen } from '@phosphor-icons/react/NotePencil'
+import { SignOutIcon as LogOut } from '@phosphor-icons/react/SignOut'
+import { CaretUpIcon as ChevronUp } from '@phosphor-icons/react/CaretUp'
+import { TextOutdentIcon as TextOutdent } from '@phosphor-icons/react/TextOutdent'
 import { FRONTEND_URL } from '../config/api'
 import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -347,7 +344,7 @@ function Sidebar({
                   setOpenMenuId(null)
                 }}
               >
-                <Pin size={14} fill={session.is_pinned ? 'currentColor' : 'none'} />
+                <Pin size={14} weight={session.is_pinned ? 'fill' : 'regular'} />
                 {session.is_pinned ? 'Unpin' : 'Pin'}
               </button>
               <button
@@ -406,7 +403,7 @@ function Sidebar({
             {/* {isOpen && <span className="sidebar-logo-subtitle">Research workspace</span>} */}
           </div>
           <button className="sidebar-toggle-btn" onClick={onClose}>
-            <ChevronLeft size={16} />
+            <TextOutdent size={16} />
           </button>
         </div>
 
@@ -467,7 +464,7 @@ function Sidebar({
                   {pinnedSessions.length > 0 && (
                     <>
                       <div className="sidebar-section-header">
-                        <Pin size={11} fill="currentColor" />
+                        <Pin size={11} weight="fill" />
                         <span>Pinned</span>
                       </div>
                       {pinnedSessions.map((session) => renderSessionItem(session))}

@@ -1,7 +1,5 @@
 import logging
-import time
 import uuid
-from collections import defaultdict
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Depends, status
@@ -33,33 +31,63 @@ logger = logging.getLogger("cortex.auth")
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-# Account lockout: track failed login attempts per email
 _MAX_FAILED_ATTEMPTS = 5
 _LOCKOUT_DURATION = 900  # 15 minutes in seconds
-_failed_attempts: dict[str, list[float]] = defaultdict(list)
 
 
-def _check_lockout(email: str) -> None:
-    """Check if account is locked out due to too many failed attempts."""
-    now = time.time()
-    # Clean old attempts
-    _failed_attempts[email] = [t for t in _failed_attempts[email] if now - t < _LOCKOUT_DURATION]
-    if len(_failed_attempts[email]) >= _MAX_FAILED_ATTEMPTS:
-        remaining = int(_LOCKOUT_DURATION - (now - _failed_attempts[email][0]))
+async def _check_lockout(email: str) -> None:
+    """Check if account is locked out due to too many failed attempts.
+
+    Uses MongoDB so lockout state survives restarts and is consistent
+    across multiple workers.
+    """
+    from db.connection import get_database
+
+    db = await get_database()
+    col = db["login_attempts"]
+    now = datetime.now(timezone.utc)
+
+    doc = await col.find_one({"_id": email})
+    if doc is None:
+        return
+
+    attempts = doc.get("attempts", [])
+    cutoff = now.timestamp() - _LOCKOUT_DURATION
+    recent = [t for t in attempts if t > cutoff]
+
+    if len(recent) >= _MAX_FAILED_ATTEMPTS:
+        oldest = min(recent)
+        remaining = int(_LOCKOUT_DURATION - (now.timestamp() - oldest))
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=f"Account temporarily locked due to too many failed attempts. Try again in {remaining // 60} minutes.",
         )
 
 
-def _record_failed_attempt(email: str) -> None:
-    """Record a failed login attempt."""
-    _failed_attempts[email].append(time.time())
+async def _record_failed_attempt(email: str) -> None:
+    """Record a failed login attempt in MongoDB."""
+    from db.connection import get_database
+
+    db = await get_database()
+    now = datetime.now(timezone.utc)
+    cutoff = now.timestamp() - _LOCKOUT_DURATION
+
+    await db["login_attempts"].update_one(
+        {"_id": email},
+        {
+            "$push": {"attempts": {"$each": [now.timestamp()], "$slice": -_MAX_FAILED_ATTEMPTS * 2}},
+            "$set": {"updated_at": now},
+        },
+        upsert=True,
+    )
 
 
-def _clear_failed_attempts(email: str) -> None:
+async def _clear_failed_attempts(email: str) -> None:
     """Clear failed attempts after successful login."""
-    _failed_attempts.pop(email, None)
+    from db.connection import get_database
+
+    db = await get_database()
+    await db["login_attempts"].delete_one({"_id": email})
 
 
 def _build_user_response(user: dict) -> UserResponse:
@@ -95,7 +123,7 @@ async def register(
         )
 
     user_id = str(uuid.uuid4())
-    hashed = hash_password(request.password)
+    hashed = await hash_password(request.password)
     avatar = generate_avatar(request.email)
 
     try:
@@ -108,9 +136,21 @@ async def register(
 
     logger.info(f"New user registered: {user_id}")
 
+    from db.connection import get_database
+    db = await get_database()
+    family_id = str(uuid.uuid4())
+    jti = str(uuid.uuid4())
+    await db["refresh_tokens"].insert_one({
+        "family_id": family_id,
+        "user_id": user_id,
+        "current_jti": jti,
+        "created_at": datetime.now(timezone.utc),
+        "revoked": False,
+    })
+
     return TokenResponse(
         access_token=create_access_token(user_id),
-        refresh_token=create_refresh_token(user_id),
+        refresh_token=create_refresh_token(user_id, family_id=family_id, jti=jti),
     )
 
 
@@ -123,33 +163,46 @@ async def login(
     """Authenticate and receive access + refresh tokens."""
     email_lower = request.email.lower()
 
-    # Check lockout before doing any work
-    _check_lockout(email_lower)
+    await _check_lockout(email_lower)
 
     user = await user_repo.get_by_email(request.email)
 
-    # Always run bcrypt to prevent timing-based email enumeration
     if user:
-        password_valid = verify_password(request.password, user["hashed_password"])
+        password_valid = await verify_password(request.password, user["hashed_password"])
     else:
-        # Dummy verify to consume constant time even when user doesn't exist
-        verify_password(request.password, "$2b$12$LJ3m4ys3Lg2r6VCMkxZBOepAx0cjJkMBgPMCEID4jFl0Q5UuZkPmK")
+        await verify_password(request.password, "$2b$12$LJ3m4ys3Lg2r6VCMkxZBOepAx0cjJkMBgPMCEID4jFl0Q5UuZkPmK")
         password_valid = False
 
     if not password_valid:
-        _record_failed_attempt(email_lower)
+        await _record_failed_attempt(email_lower)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
         )
 
-    _clear_failed_attempts(email_lower)
+    await _clear_failed_attempts(email_lower)
     user_id = user["id"]
     logger.info("User logged in successfully")
 
+    # Create the refresh token family in the DB at login time so that the
+    # first /refresh call finds it already registered. This closes the
+    # "first-refresh race" where a stolen token could register the family
+    # before the legitimate user.
+    from db.connection import get_database
+    db = await get_database()
+    family_id = str(uuid.uuid4())
+    jti = str(uuid.uuid4())
+    await db["refresh_tokens"].insert_one({
+        "family_id": family_id,
+        "user_id": user_id,
+        "current_jti": jti,
+        "created_at": datetime.now(timezone.utc),
+        "revoked": False,
+    })
+
     return TokenResponse(
         access_token=create_access_token(user_id),
-        refresh_token=create_refresh_token(user_id),
+        refresh_token=create_refresh_token(user_id, family_id=family_id, jti=jti),
     )
 
 
@@ -238,13 +291,13 @@ async def change_password(
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    if not verify_password(request.current_password, user["hashed_password"]):
+    if not await verify_password(request.current_password, user["hashed_password"]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Current password is incorrect",
         )
 
-    await user_repo.update_password(current_user_id, hash_password(request.new_password))
+    await user_repo.update_password(current_user_id, await hash_password(request.new_password))
 
     # Revoke all refresh token families for this user
     from db.connection import get_database
@@ -269,7 +322,7 @@ async def delete_account(
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    if not verify_password(request.password, user["hashed_password"]):
+    if not await verify_password(request.password, user["hashed_password"]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Password is incorrect",
@@ -302,9 +355,16 @@ async def check_email(
     user_repo: UserRepository = Depends(get_user_repository),
     _rate_limit: None = Depends(check_rate_limit),
 ):
-    """Check if an email is already registered."""
-    existing = await user_repo.get_by_email(email)
-    return {"available": existing is None}
+    """Validate email format.
+
+    Always returns ``available: true`` for well-formed addresses to prevent
+    account enumeration.  Actual uniqueness is enforced at registration time
+    (backed by a unique DB index).
+    """
+    import re
+    if not email or not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+        return {"available": False, "reason": "Invalid email format"}
+    return {"available": True}
 
 
 @router.post("/refresh", response_model=TokenResponse)
@@ -371,24 +431,11 @@ async def refresh_token(
     family_doc = await rt_col.find_one({"family_id": token_family, "user_id": user_id})
 
     if not family_doc:
-        # First use of this family — register it
-        new_jti = str(_uuid.uuid4())
-        try:
-            await rt_col.insert_one({
-                "family_id": token_family,
-                "user_id": user_id,
-                "current_jti": new_jti,
-                "created_at": datetime.now(timezone.utc),
-                "revoked": False,
-            })
-        except Exception:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token family conflict. Please log in again.",
-            )
-        return TokenResponse(
-            access_token=create_access_token(user_id),
-            refresh_token=create_refresh_token(user_id, family_id=token_family, jti=new_jti),
+        # Families are now pre-registered at login/register time.  A missing
+        # family means the token was forged or belongs to an old session.
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unknown token family. Please log in again.",
         )
 
     # Family is revoked — reject
@@ -429,3 +476,30 @@ async def refresh_token(
         access_token=create_access_token(user_id),
         refresh_token=create_refresh_token(user_id, family_id=token_family, jti=new_jti),
     )
+
+
+@router.post("/logout")
+async def logout(
+    request: RefreshRequest,
+    current_user_id: str = Depends(get_current_user),
+):
+    """Revoke the current refresh token family so it can no longer be used.
+
+    The access token remains valid until it expires (short-lived), but the
+    refresh token is immediately unusable for rotation.
+    """
+    from db.connection import get_database
+
+    payload = decode_token(request.refresh_token, expected_type="refresh")
+    token_family = payload.get("family")
+
+    if not token_family:
+        return {"message": "Logged out"}
+
+    db = await get_database()
+    await db["refresh_tokens"].update_one(
+        {"family_id": token_family, "user_id": current_user_id, "revoked": False},
+        {"$set": {"revoked": True, "revoked_at": datetime.now(timezone.utc)}},
+    )
+
+    return {"message": "Logged out"}

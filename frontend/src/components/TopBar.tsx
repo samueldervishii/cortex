@@ -1,4 +1,8 @@
-import { Ghost } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { GhostIcon as Ghost } from '@phosphor-icons/react/Ghost'
+import { NotePencilIcon as NotePencil } from '@phosphor-icons/react/NotePencil'
+import { SidebarIcon as Sidebar } from '@phosphor-icons/react/Sidebar'
+import { TextIndentIcon as TextIndent } from '@phosphor-icons/react/TextIndent'
 
 interface TopBarProps {
   onNewChat: () => void
@@ -13,6 +17,7 @@ interface TopBarProps {
 }
 
 function TopBar({
+  onNewChat,
   onToggleSidebar,
   sidebarOpen,
   onToggleRightPanel,
@@ -27,18 +32,17 @@ function TopBar({
       <div className="top-bar-left">
         {!sidebarOpen && (
           <button className="menu-btn" onClick={onToggleSidebar} title="Open sidebar">
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <polyline points="9 18 15 12 9 6" />
-            </svg>
+            <TextIndent size={18} weight="regular" />
+          </button>
+        )}
+        {hasSession && (
+          <button
+            className="menu-btn top-bar-new-chat"
+            onClick={onNewChat}
+            title="New chat"
+            aria-label="Start a new chat"
+          >
+            <NotePencil size={18} weight="regular" />
           </button>
         )}
       </div>
@@ -46,15 +50,17 @@ function TopBar({
       <div className="top-bar-center">
         {ghostMode ? (
           <span className="top-bar-ghost-label">
-            <Ghost size={14} /> Temporary Chat
+            <Ghost size={14} weight="regular" /> Temporary Chat
           </span>
         ) : hasSession && sessionTitle ? (
           <span className="top-bar-session-title">{sessionTitle}</span>
         ) : (
-          <span className="top-bar-brand">
-            <img src="/logo.svg" alt="" width="22" height="22" />
-            Cortex
-          </span>
+          <Link to="/" className="top-bar-brand-link" aria-label="Go to home">
+            <span className="top-bar-brand">
+              <img src="/logo.svg" alt="" width="22" height="22" />
+              Cortex
+            </span>
+          </Link>
         )}
       </div>
 
@@ -66,7 +72,7 @@ function TopBar({
             title={ghostMode ? 'Exit temporary chat' : 'Start temporary chat'}
             aria-pressed={ghostMode}
           >
-            <Ghost size={16} />
+            <Ghost size={16} weight={ghostMode ? 'fill' : 'regular'} />
           </button>
         )}
         {onToggleRightPanel && (
@@ -75,19 +81,7 @@ function TopBar({
             onClick={onToggleRightPanel}
             title="Context panel"
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <rect x="3" y="3" width="18" height="18" rx="2" />
-              <line x1="15" y1="3" x2="15" y2="21" />
-            </svg>
+            <Sidebar size={16} weight="regular" mirrored />
           </button>
         )}
       </div>

@@ -1,5 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
-import { AlertCircle, RefreshCw, RotateCcw } from 'lucide-react'
+import { WarningCircleIcon as WarningCircle } from '@phosphor-icons/react/WarningCircle'
+import { ArrowClockwiseIcon as ArrowClockwise } from '@phosphor-icons/react/ArrowClockwise'
+import { ArrowCounterClockwiseIcon as ArrowCounterClockwise } from '@phosphor-icons/react/ArrowCounterClockwise'
 import './ErrorBoundary.css'
 
 interface Props {
@@ -41,7 +43,7 @@ class ErrorBoundary extends Component<Props, State> {
         <div className="error-boundary">
           <div className="error-boundary-content">
             <div className="error-icon">
-              <AlertCircle size={64} />
+              <WarningCircle size={64} />
             </div>
             <h1>Something went wrong</h1>
             <p>An unexpected error occurred. Please try again or reload the page.</p>
@@ -56,11 +58,11 @@ class ErrorBoundary extends Component<Props, State> {
 
             <div className="error-actions">
               <button onClick={this.handleReset} className="error-btn primary">
-                <RotateCcw size={16} />
+                <ArrowCounterClockwise size={16} />
                 Try Again
               </button>
               <button onClick={this.handleReload} className="error-btn secondary">
-                <RefreshCw size={16} />
+                <ArrowClockwise size={16} />
                 Reload Page
               </button>
             </div>

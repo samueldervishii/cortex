@@ -2,6 +2,7 @@
 
 import io
 import logging
+import zipfile
 
 logger = logging.getLogger("cortex.file_extractor")
 
@@ -10,6 +11,11 @@ MAX_FILE_SIZE = 10 * 1024 * 1024
 
 # Max extracted text length (characters) to keep prompts reasonable
 MAX_TEXT_LENGTH = 50000
+
+# Resource limits to prevent denial-of-service via crafted files.
+MAX_PDF_PAGES = 500
+MAX_DOCX_UNCOMPRESSED = 50 * 1024 * 1024  # 50 MB uncompressed ceiling
+MAX_DOCX_FILES = 500  # max entries inside the DOCX zip
 
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md", ".csv"}
 ALLOWED_MIME_TYPES = {
@@ -30,10 +36,14 @@ def validate_file(filename: str, content_type: str, size: int, content: bytes = 
         raise ValueError(
             f"Unsupported file type '{ext}'. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
         )
+    if content_type and content_type not in ALLOWED_MIME_TYPES:
+        raise ValueError(
+            f"Unsupported content type '{content_type}'. "
+            f"Allowed: {', '.join(sorted(ALLOWED_MIME_TYPES))}"
+        )
     if size > MAX_FILE_SIZE:
         raise ValueError(f"File too large ({size / 1024 / 1024:.1f}MB). Maximum is 10MB.")
 
-    # Validate file content matches declared type (magic byte verification)
     if content and ext in (".pdf", ".docx"):
         _validate_magic_bytes(content, ext)
 
@@ -66,25 +76,42 @@ def extract_text(filename: str, content: bytes) -> str:
 
 
 def _extract_pdf(content: bytes) -> str:
-    """Extract text from PDF bytes."""
-    from PyPDF2 import PdfReader
-
-    reader = PdfReader(io.BytesIO(content))
-    pages = []
-    for page in reader.pages:
-        text = page.extract_text()
-        if text:
-            pages.append(text.strip())
-
-    full_text = "\n\n".join(pages)
-    if len(full_text) > MAX_TEXT_LENGTH:
-        full_text = full_text[:MAX_TEXT_LENGTH] + "\n\n[... content truncated due to length]"
-
+    """Extract text from PDF bytes (full text, no per-page breakdown)."""
+    full_text, _ = extract_pdf_with_pages(content)
     return full_text
+
+
+def _validate_docx_zip(content: bytes) -> None:
+    """Guard against zip-bombs before handing the file to python-docx."""
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(content))
+    except zipfile.BadZipFile:
+        raise ValueError("File is not a valid DOCX archive")
+
+    if len(zf.infolist()) > MAX_DOCX_FILES:
+        raise ValueError(
+            f"DOCX contains too many internal files ({len(zf.infolist())}). "
+            f"Maximum is {MAX_DOCX_FILES}."
+        )
+    total_uncompressed = sum(info.file_size for info in zf.infolist())
+    if total_uncompressed > MAX_DOCX_UNCOMPRESSED:
+        raise ValueError(
+            f"DOCX uncompressed size ({total_uncompressed / 1024 / 1024:.0f} MB) "
+            f"exceeds the {MAX_DOCX_UNCOMPRESSED / 1024 / 1024:.0f} MB limit."
+        )
 
 
 def _extract_docx(content: bytes) -> str:
     """Extract text from DOCX bytes."""
+    _validate_docx_zip(content)
+
+    # Disable external entity resolution in lxml (XXE prevention).
+    # python-docx uses lxml under the hood; configuring a safe parser
+    # ensures crafted DOCX XML cannot trigger external lookups.
+    from lxml import etree
+    safe_parser = etree.XMLParser(resolve_entities=False, no_network=True)
+    etree.set_default_parser(safe_parser)
+
     from docx import Document
 
     doc = Document(io.BytesIO(content))
@@ -201,13 +228,42 @@ def chunk_text(text: str, filename: str, pages: list[str] | None = None) -> list
     return chunks
 
 
-def extract_pdf_pages(content: bytes) -> list[str]:
-    """Extract text per page from PDF bytes (used for chunk metadata)."""
+def extract_pdf_with_pages(content: bytes) -> tuple[str, list[str]]:
+    """Extract full text **and** per-page text from a PDF in a single pass.
+
+    Returns ``(full_text, pages)`` where *pages* is a list of per-page
+    strings (used for chunking / citation metadata).
+    """
     from PyPDF2 import PdfReader
 
     reader = PdfReader(io.BytesIO(content))
-    pages = []
+
+    if len(reader.pages) > MAX_PDF_PAGES:
+        raise ValueError(
+            f"PDF has {len(reader.pages)} pages, maximum allowed is {MAX_PDF_PAGES}."
+        )
+
+    pages: list[str] = []
+    text_parts: list[str] = []
     for page in reader.pages:
         text = page.extract_text()
-        pages.append(text.strip() if text else "")
+        page_text = text.strip() if text else ""
+        pages.append(page_text)
+        if page_text:
+            text_parts.append(page_text)
+
+    full_text = "\n\n".join(text_parts)
+    if len(full_text) > MAX_TEXT_LENGTH:
+        full_text = full_text[:MAX_TEXT_LENGTH] + "\n\n[... content truncated due to length]"
+
+    return full_text, pages
+
+
+def extract_pdf_pages(content: bytes) -> list[str]:
+    """Extract text per page from PDF bytes.
+
+    Thin wrapper around :func:`extract_pdf_with_pages` kept for backward
+    compatibility.
+    """
+    _, pages = extract_pdf_with_pages(content)
     return pages

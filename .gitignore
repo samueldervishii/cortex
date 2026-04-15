@@ -32,3 +32,4 @@ api/tests/pentest.py
 .codex
 
 api/tests/
+.cursor/

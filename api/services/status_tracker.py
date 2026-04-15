@@ -60,47 +60,49 @@ async def get_uptime_history(db: AsyncIOMotorDatabase) -> dict:
 
     services_out: list[dict] = []
 
+    import asyncio
+
     for svc in SERVICES:
         svc_id = svc["id"]
         coll = db["service_checks"]
 
-        # Most recent check
-        latest_doc = await coll.find_one(
-            {"service": svc_id},
-            sort=[("checked_at", -1)],
+        # Run the three independent queries in parallel
+        latest_doc, docs_24h, docs_7d = await asyncio.gather(
+            coll.find_one(
+                {"service": svc_id},
+                sort=[("checked_at", -1)],
+            ),
+            coll.find(
+                {"service": svc_id, "checked_at": {"$gte": cutoff_24h}},
+                projection={"status": 1, "_id": 0},
+            ).to_list(length=2000),
+            coll.find(
+                {"service": svc_id, "checked_at": {"$gte": cutoff_7d}},
+                projection={
+                    "status": 1,
+                    "checked_at": 1,
+                    "detail": 1,
+                    "latency_ms": 1,
+                    "_id": 0,
+                },
+            ).to_list(length=20000),
         )
+
         current_status = (latest_doc or {}).get("status", STATUS_UNKNOWN)
         latest_checked = (latest_doc or {}).get("checked_at")
 
-        # 24h samples
-        docs_24h = await coll.find(
-            {"service": svc_id, "checked_at": {"$gte": cutoff_24h}},
-            projection={"status": 1, "_id": 0},
-        ).to_list(length=2000)
         total_24h = len(docs_24h)
         ok_24h = sum(1 for d in docs_24h if d.get("status") == STATUS_OPERATIONAL)
         uptime_24h = (ok_24h / total_24h * 100.0) if total_24h else None
-
-        # 7d samples (used for the daily roll-up and the 7d uptime %)
-        docs_7d = await coll.find(
-            {"service": svc_id, "checked_at": {"$gte": cutoff_7d}},
-            projection={
-                "status": 1,
-                "checked_at": 1,
-                "detail": 1,
-                "latency_ms": 1,
-                "_id": 0,
-            },
-        ).to_list(length=20000)
         total_7d = len(docs_7d)
         ok_7d = sum(1 for d in docs_7d if d.get("status") == STATUS_OPERATIONAL)
         uptime_7d = (ok_7d / total_7d * 100.0) if total_7d else None
 
-        # Bucket checks by UTC date. For each day we track:
-        #   - the worst status seen (drives the bar color)
-        #   - total probes and operational probes (gives us daily uptime %)
-        #   - the "worst" probe's detail and its latency (surfaced in the
-        #     hover tooltip so users understand why a bar is red/yellow)
+        # Bucket checks by UTC date.  For each day we track total vs
+        # operational probes and the worst individual probe (for tooltip
+        # detail).  The bar *color* is driven by the daily uptime
+        # percentage, NOT the single worst probe — otherwise one cold-start
+        # timeout in an otherwise perfect day turns the whole bar red.
         day_map: dict[str, dict] = {}
         for d in docs_7d:
             dt = d.get("checked_at")
@@ -113,7 +115,6 @@ async def get_uptime_history(db: AsyncIOMotorDatabase) -> dict:
             bucket = day_map.get(key)
             if bucket is None:
                 bucket = {
-                    "status": status,
                     "total": 0,
                     "ok": 0,
                     "worst_detail": d.get("detail") or "",
@@ -126,13 +127,10 @@ async def get_uptime_history(db: AsyncIOMotorDatabase) -> dict:
                 bucket["ok"] += 1
             rank = _STATUS_RANK.get(status, 99)
             if rank < bucket["worst_rank"]:
-                bucket["status"] = status
                 bucket["worst_rank"] = rank
                 bucket["worst_detail"] = d.get("detail") or ""
                 bucket["worst_latency_ms"] = d.get("latency_ms")
 
-        # Produce an ordered list for the last 7 days (oldest → newest).
-        # Only include days we actually have data for.
         days: list[dict[str, Any]] = []
         today = now.date()
         for offset in range(6, -1, -1):
@@ -142,10 +140,24 @@ async def get_uptime_history(db: AsyncIOMotorDatabase) -> dict:
                 continue
             total = bucket["total"]
             uptime_pct = (bucket["ok"] / total * 100.0) if total else None
+
+            # Derive bar status from the day's uptime percentage:
+            #   ≥90% operational → green
+            #   ≥50% operational → degraded (yellow)
+            #   <50% operational → down (red)
+            if uptime_pct is not None and uptime_pct >= 90:
+                day_status = STATUS_OPERATIONAL
+            elif uptime_pct is not None and uptime_pct >= 50:
+                day_status = STATUS_DEGRADED
+            elif uptime_pct is not None:
+                day_status = STATUS_DOWN
+            else:
+                day_status = STATUS_UNKNOWN
+
             days.append(
                 {
                     "date": day,
-                    "status": bucket["status"],
+                    "status": day_status,
                     "uptime_pct": uptime_pct,
                     "sample_count": total,
                     "detail": bucket["worst_detail"],

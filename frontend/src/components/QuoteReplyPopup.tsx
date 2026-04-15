@@ -1,4 +1,4 @@
-import { CornerUpLeft } from 'lucide-react'
+import { ArrowBendUpLeftIcon as ArrowBendUpLeft } from '@phosphor-icons/react/ArrowBendUpLeft'
 
 interface QuoteReplyPopupProps {
   top: number
@@ -21,7 +21,7 @@ function QuoteReplyPopup({ top, left, onReply }: QuoteReplyPopupProps) {
         title="Reply to selection"
       >
         <span>Reply</span>
-        <CornerUpLeft size={14} />
+        <ArrowBendUpLeft size={14} />
       </button>
     </div>
   )

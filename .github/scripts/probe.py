@@ -35,13 +35,18 @@ from pymongo import MongoClient
 from pymongo.errors import PyMongoError
 
 # Long enough to survive a Render free-tier cold start (typically
-# 30–60s). Without this, the first probe after an idle period would get
-# logged as "down" even though the service is actually fine.
-HTTP_TIMEOUT_SECONDS = 45.0
+# 30–60s, occasionally longer).  Previous value of 45s was marginal;
+# bumped to 90s so even a sluggish wake-up isn't misclassified as down.
+HTTP_TIMEOUT_SECONDS = 90.0
+
+# If the first attempt times out (likely a cold start that's still
+# booting), wait this many seconds and try once more.  The instance
+# should be warm by then.
+RETRY_DELAY_SECONDS = 10.0
 
 # Latency above this threshold is still "operational" but worth noting —
 # it usually means Render just spun the instance back up.
-SLOW_THRESHOLD_MS = 3000
+SLOW_THRESHOLD_MS = 5000
 
 # Atlas ping threshold. Anything over this is still "operational" but
 # tagged as slow — Atlas free tier occasionally has high-latency bursts
@@ -66,8 +71,8 @@ def classify_response(status_code: int | None, latency_ms: int | None) -> tuple[
     return "degraded", f"Unexpected status {status_code}"
 
 
-def probe_api(url: str) -> dict:
-    """Hit the Cortex /health endpoint and return a probe result dict."""
+def _single_probe(url: str) -> tuple[int | None, int | None]:
+    """Make one HTTP GET and return (status_code, latency_ms)."""
     started = time.perf_counter()
     status_code: int | None = None
     try:
@@ -75,15 +80,29 @@ def probe_api(url: str) -> dict:
             response = client.get(url)
             status_code = response.status_code
     except httpx.TimeoutException:
-        # Timed out even after the generous window — treat as down.
         pass
     except httpx.HTTPError as exc:
-        # Network error, DNS failure, TLS failure, etc.
         print(f"probe: http error: {type(exc).__name__}: {exc}", file=sys.stderr)
 
     latency_ms: int | None = (
         int((time.perf_counter() - started) * 1000) if status_code is not None else None
     )
+    return status_code, latency_ms
+
+
+def probe_api(url: str) -> dict:
+    """Hit the Cortex /health endpoint and return a probe result dict.
+
+    If the first attempt times out (common with Render cold starts),
+    waits briefly and retries once — the instance should be warm by then.
+    """
+    status_code, latency_ms = _single_probe(url)
+
+    if status_code is None:
+        print(f"probe: first attempt failed, retrying in {RETRY_DELAY_SECONDS}s…", file=sys.stderr)
+        time.sleep(RETRY_DELAY_SECONDS)
+        status_code, latency_ms = _single_probe(url)
+
     status, detail = classify_response(status_code, latency_ms)
 
     return {

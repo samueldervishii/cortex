@@ -26,6 +26,7 @@ _session_repository: SessionRepository | None = None
 _settings_repository: SettingsRepository | None = None
 _user_repository: UserRepository | None = None
 _init_lock = asyncio.Lock()
+_api_key_warned = False
 
 
 async def get_session_repository() -> SessionRepository:
@@ -124,14 +125,15 @@ async def verify_api_key(
     API key must be provided via X-API-Key header.
     If no API key is configured in settings, authentication is disabled.
     """
-    # If no API_KEY is configured, authentication is disabled entirely.
-    # This is intentional for local development — returns True to allow all requests.
+    global _api_key_warned
     if not settings.api_key:
-        logger.warning(
-            "API authentication is DISABLED (no API_KEY configured). "
-            "All endpoints are publicly accessible. "
-            "Set API_KEY in .env to enable authentication."
-        )
+        if not _api_key_warned:
+            logger.warning(
+                "API authentication is DISABLED (no API_KEY configured). "
+                "All endpoints are publicly accessible. "
+                "Set API_KEY in .env to enable authentication."
+            )
+            _api_key_warned = True
         return True
 
     if not x_api_key:

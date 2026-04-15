@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Download, X } from 'lucide-react'
+import { DownloadSimpleIcon as DownloadSimple } from '@phosphor-icons/react/DownloadSimple'
+import { XIcon as X } from '@phosphor-icons/react/X'
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>
@@ -68,7 +69,7 @@ export default function PWAInstallPrompt() {
   return (
     <div className="pwa-install-prompt">
       <div className="pwa-install-content">
-        <Download size={20} />
+        <DownloadSimple size={20} />
         <div className="pwa-install-text">
           <strong>Install Cortex</strong>
           <span>Add to your home screen for quick access</span>

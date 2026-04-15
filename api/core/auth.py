@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -20,12 +21,22 @@ def _check_jwt_secret():
         )
 
 
-def hash_password(password: str) -> str:
+def _hash_password_sync(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
+def _verify_password_sync(plain_password: str, hashed_password: str) -> bool:
     return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
+
+
+async def hash_password(password: str) -> str:
+    """Hash a password using bcrypt, offloaded to a thread to avoid blocking the event loop."""
+    return await asyncio.to_thread(_hash_password_sync, password)
+
+
+async def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verify a password against a bcrypt hash, offloaded to a thread."""
+    return await asyncio.to_thread(_verify_password_sync, plain_password, hashed_password)
 
 
 def create_access_token(user_id: str) -> str:

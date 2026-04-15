@@ -63,6 +63,24 @@
   flex-shrink: 0;
 }
 
+.top-bar-brand-link {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  color: inherit;
+  padding: 0.3rem 0.5rem;
+  border-radius: 8px;
+  transition: background 0.15s;
+}
+
+.top-bar-brand-link:hover {
+  background: var(--bg-hover);
+}
+
+.top-bar-new-chat {
+  margin-left: 0.25rem;
+}
+
 .top-bar-center {
   flex: 0 1 auto;
   display: flex;
@@ -1987,7 +2005,6 @@ button.message-file-badge:hover {
 
 .message-header {
   display: flex;
-  align-items: center;
   gap: 0.5rem;
   margin-bottom: 0.5rem;
 }
@@ -3957,7 +3974,6 @@ button.message-file-badge:hover {
 
 .message.eli5 .message-header {
   display: flex;
-  align-items: center;
   gap: 0.5rem;
   margin-bottom: 0.5rem;
 }
@@ -6562,6 +6578,7 @@ button.message-file-badge:hover {
   width: 28px;
   height: 28px;
   border-radius: 10px;
+  margin-top: -20px;
 }
 
 .session-menu-btn:hover {

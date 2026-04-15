@@ -160,14 +160,14 @@ class AIClient:
 
         if response.status_code != 200:
             logger.error(
-                f"Anthropic error for {model_id}: {response.status_code} - {response.text[:500]}"
+                f"Anthropic error for {model_id}: status={response.status_code}"
             )
             raise Exception("The AI service is temporarily unavailable. Please try again.")
 
         data = response.json()
 
         if "error" in data:
-            logger.error(f"Anthropic error for {model_id}: {data['error']}")
+            logger.error(f"Anthropic error for {model_id}: type={data['error'].get('type', 'unknown') if isinstance(data['error'], dict) else 'unknown'}")
             raise Exception("The AI service encountered an error. Please try again.")
 
         content_blocks = data.get("content", [])
@@ -234,6 +234,10 @@ class AIClient:
         - ("web_search", "") when web search is triggered
         - ("usage", {"input_tokens": N, "output_tokens": N}) as a final event
         """
+        from core.circuit_breaker import check_breaker, record_breaker_success, record_breaker_failure
+
+        check_breaker("anthropic")
+
         logger.info(f"Anthropic streaming request to model: {model_id}")
 
         headers = {
@@ -246,11 +250,14 @@ class AIClient:
         # Leave at least 4k for visible output when the caller passes a tight
         # max_tokens (near end of a user's 5-hour bucket).
         safe_thinking = max(1024, min(thinking_budget, max_tokens - 4000))
+        if safe_thinking >= max_tokens:
+            safe_thinking = max_tokens - 1
 
+        # Anthropic requires temperature=1 when extended thinking is enabled.
         payload = {
             "model": model_id,
             "max_tokens": max_tokens,
-            "temperature": 1,
+            "temperature": 1,  # required by Anthropic thinking mode
             "stream": True,
             "messages": [{"role": "user", "content": prompt}],
             "thinking": {"type": "enabled", "budget_tokens": safe_thinking},
@@ -263,68 +270,79 @@ class AIClient:
             payload["system"] = system_prompt
 
         client = await self._get_client()
-        async with client.stream(
-            "POST",
-            f"{self.ANTHROPIC_BASE_URL}/messages",
-            headers=headers,
-            json=payload,
-        ) as response:
-            if response.status_code != 200:
-                body = await response.aread()
-                logger.error(f"Anthropic stream error: {response.status_code} - {body.decode()[:500]}")
-                raise Exception("The AI service is temporarily unavailable. Please try again.")
+        _cb_recorded = False
+        try:
+            async with client.stream(
+                "POST",
+                f"{self.ANTHROPIC_BASE_URL}/messages",
+                headers=headers,
+                json=payload,
+            ) as response:
+                if response.status_code != 200:
+                    record_breaker_failure("anthropic")
+                    _cb_recorded = True
+                    await response.aread()
+                    logger.error(f"Anthropic stream error: status={response.status_code}")
+                    raise Exception("The AI service is temporarily unavailable. Please try again.")
 
-            current_block_type = None
-            input_tokens = 0
-            output_tokens = 0
+                current_block_type = None
+                input_tokens = 0
+                output_tokens = 0
 
-            async for line in response.aiter_lines():
-                if not line.startswith("data: "):
-                    continue
-                data_str = line[6:]
-                if data_str.strip() == "[DONE]":
-                    break
-                try:
-                    data = json.loads(data_str)
-                except json.JSONDecodeError as e:
-                    logger.debug(f"Failed to parse Anthropic stream data: {e}")
-                    continue
+                async for line in response.aiter_lines():
+                    if not line.startswith("data: "):
+                        continue
+                    data_str = line[6:]
+                    if data_str.strip() == "[DONE]":
+                        break
+                    try:
+                        data = json.loads(data_str)
+                    except json.JSONDecodeError as e:
+                        logger.debug(f"Failed to parse Anthropic stream data: {e}")
+                        continue
 
-                event_type = data.get("type", "")
+                    event_type = data.get("type", "")
 
-                if event_type == "message_start":
-                    # Anthropic sends cumulative input tokens here (output=1 placeholder)
-                    msg_usage = data.get("message", {}).get("usage", {}) or {}
-                    input_tokens = int(msg_usage.get("input_tokens", 0) or 0)
+                    if event_type == "message_start":
+                        msg_usage = data.get("message", {}).get("usage", {}) or {}
+                        input_tokens = int(msg_usage.get("input_tokens", 0) or 0)
 
-                elif event_type == "message_delta":
-                    # Cumulative output tokens — last delta wins
-                    delta_usage = data.get("usage", {}) or {}
-                    if "output_tokens" in delta_usage:
-                        output_tokens = int(delta_usage.get("output_tokens", 0) or 0)
+                    elif event_type == "message_delta":
+                        delta_usage = data.get("usage", {}) or {}
+                        if "output_tokens" in delta_usage:
+                            output_tokens = int(delta_usage.get("output_tokens", 0) or 0)
 
-                elif event_type == "content_block_start":
-                    block = data.get("content_block", {})
-                    current_block_type = block.get("type", "text")
+                    elif event_type == "content_block_start":
+                        block = data.get("content_block", {})
+                        current_block_type = block.get("type", "text")
 
-                    # Signal web search to frontend
-                    if current_block_type == "server_tool_use":
-                        yield ("web_search", "")
+                        if current_block_type == "server_tool_use":
+                            yield ("web_search", "")
 
-                elif event_type == "content_block_delta":
-                    delta = data.get("delta", {})
-                    delta_type = delta.get("type", "")
+                    elif event_type == "content_block_delta":
+                        delta = data.get("delta", {})
+                        delta_type = delta.get("type", "")
 
-                    if delta_type == "thinking_delta":
-                        text = delta.get("thinking", "")
-                        if text:
-                            yield ("thinking", text)
-                    elif delta_type == "text_delta":
-                        text = delta.get("text", "")
-                        if text:
-                            yield ("text", text)
+                        if delta_type == "thinking_delta":
+                            text = delta.get("thinking", "")
+                            if text:
+                                yield ("thinking", text)
+                        elif delta_type == "text_delta":
+                            text = delta.get("text", "")
+                            if text:
+                                yield ("text", text)
 
-                elif event_type == "content_block_stop":
-                    current_block_type = None
+                    elif event_type == "content_block_stop":
+                        current_block_type = None
 
-            yield ("usage", {"input_tokens": input_tokens, "output_tokens": output_tokens})
+                yield ("usage", {"input_tokens": input_tokens, "output_tokens": output_tokens})
+
+            record_breaker_success("anthropic")
+            _cb_recorded = True
+        except Exception:
+            if not _cb_recorded:
+                record_breaker_failure("anthropic")
+            raise
+        finally:
+            if not _cb_recorded:
+                record_breaker_success("anthropic")

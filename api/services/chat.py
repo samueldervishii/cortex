@@ -36,14 +36,17 @@ class ChatService:
     def _truncate_history(self, history: List[dict]) -> List[dict]:
         """Truncate conversation history to stay within context limits.
 
-        Keeps the first message (original context) + last N messages.
+        Keeps the first message (original context) + a truncation notice +
+        the most recent messages so the total never exceeds
+        ``MAX_HISTORY_MESSAGES``.
         """
         if len(history) <= MAX_HISTORY_MESSAGES:
             return history
 
-        # Keep first message + last (MAX - 1) messages
+        # first (1) + notice (1) + recent (N) = MAX_HISTORY_MESSAGES
+        recent_count = MAX_HISTORY_MESSAGES - 2
         first = history[:1]
-        recent = history[-(MAX_HISTORY_MESSAGES - 1):]
+        recent = history[-recent_count:]
         return first + [{"role": "system", "content": "[Earlier messages truncated for brevity]"}] + recent
 
     def _build_prompt(self, question: str, history: List[dict]) -> str:
@@ -116,7 +119,7 @@ class ChatService:
         model = model or CHAT_MODEL
         prompt = self._build_prompt(question, history or [])
         start_time = time.time()
-        full_response = ""
+        response_parts: list[str] = []
         token_buffer = ""
         token_count = 0
         input_tokens = 0
@@ -151,7 +154,7 @@ class ChatService:
                     output_tokens = int(content.get("output_tokens", 0) or 0)
                     continue
 
-                full_response += content
+                response_parts.append(content)
                 token_buffer += content
                 token_count += 1
 
@@ -165,6 +168,7 @@ class ChatService:
             if token_buffer:
                 yield _sse_event("token", {"content": token_buffer})
 
+            full_response = "".join(response_parts)
             elapsed_ms = int((time.time() - start_time) * 1000)
             yield _sse_event("message_end", {
                 "model_id": model["id"],

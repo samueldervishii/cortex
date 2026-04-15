@@ -1,16 +1,15 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  Plus,
-  Download,
-  Settings,
-  Palette,
-  Info,
-  MessageSquare,
-  Star,
-  Search,
-  type LucideIcon,
-} from 'lucide-react'
+import { PlusIcon as Plus } from '@phosphor-icons/react/Plus'
+import { DownloadSimpleIcon as Download } from '@phosphor-icons/react/DownloadSimple'
+import { GearIcon as Settings } from '@phosphor-icons/react/Gear'
+import { PaletteIcon as Palette } from '@phosphor-icons/react/Palette'
+import { InfoIcon as Info } from '@phosphor-icons/react/Info'
+import { ChatCircleIcon as MessageSquare } from '@phosphor-icons/react/ChatCircle'
+import { StarIcon as Star } from '@phosphor-icons/react/Star'
+import { MagnifyingGlassIcon as Search } from '@phosphor-icons/react/MagnifyingGlass'
+import type { ForwardRefExoticComponent } from 'react'
+type LucideIcon = ForwardRefExoticComponent<any>
 import { apiClient } from '../config/api'
 import './CommandPalette.css'
 
@@ -147,16 +146,6 @@ function CommandPalette({
     })
     items.push({
       type: 'settings',
-      icon: Palette,
-      title: 'Settings › Appearance',
-      description: 'Theme and display options',
-      action: () => {
-        navigate('/settings?tab=general')
-        onClose()
-      },
-    })
-    items.push({
-      type: 'settings',
       icon: Info,
       title: 'Settings › About',
       description: 'Version and keyboard shortcuts',
@@ -287,7 +276,7 @@ function CommandPalette({
                             <div className="command-palette-item-title">
                               {item.isPinned && (
                                 <span className="pin-badge">
-                                  <Star size={12} fill="currentColor" />
+                                  <Star size={12} weight="fill" />
                                 </span>
                               )}
                               {item.title}

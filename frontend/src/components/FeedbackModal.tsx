@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { X, ChevronDown } from 'lucide-react'
+import { XIcon as X } from '@phosphor-icons/react/X'
+import { CaretDownIcon as CaretDown } from '@phosphor-icons/react/CaretDown'
 
 interface FeedbackModalProps {
   type: 'positive' | 'negative'
@@ -43,7 +44,7 @@ function FeedbackModal({ type, onSubmit, onClose }: FeedbackModalProps) {
             <div className="feedback-select-wrapper">
               <button className="feedback-select" onClick={() => setSelectOpen(!selectOpen)}>
                 <span>{issueType || 'Select...'}</span>
-                <ChevronDown size={16} />
+                <CaretDown size={16} />
               </button>
               {selectOpen && (
                 <div className="feedback-select-dropdown">

@@ -2,10 +2,20 @@
 Circuit Breaker pattern for external API calls.
 
 Prevents cascading failures by temporarily blocking requests to failing services.
+
+The async path manages state manually (pybreaker's ``call_async`` needs Tornado)
+while still using pybreaker's ``CircuitBreaker`` as the underlying state/counter
+storage.  Key invariants:
+
+* **Consecutive failures** trip the breaker — a success resets the counter.
+* After ``reset_timeout`` seconds in the OPEN state, **one** probe request is
+  allowed (half-open).  If the probe succeeds the breaker closes; if it fails
+  it reopens with a fresh timeout.
 """
 
 import logging
 import threading
+import time
 from functools import wraps
 from typing import Optional, Callable, Any
 
@@ -13,18 +23,17 @@ from config import settings
 
 logger = logging.getLogger("cortex.circuit_breaker")
 
-# Global circuit breaker instances with lock for thread-safe initialization
 _breakers: dict[str, Any] = {}
 _breaker_lock = threading.Lock()
 
+# Monotonic timestamp of the last time each breaker was opened.  Used by the
+# async path to decide when the reset_timeout has elapsed (pybreaker only
+# checks this inside ``call()`` which we cannot use for async functions).
+_breaker_opened_at: dict[str, float] = {}
+
 
 def get_circuit_breaker(name: str = "default"):
-    """
-    Get or create a circuit breaker instance.
-
-    Args:
-        name: Unique name for this circuit breaker
-    """
+    """Get or create a circuit breaker instance."""
     if name not in _breakers:
         with _breaker_lock:
             if name not in _breakers:
@@ -49,89 +58,126 @@ class CircuitBreakerLogger:
     """Listener for circuit breaker events."""
 
     def state_change(self, cb, old_state, new_state):
-        """Called when circuit breaker changes state."""
         logger.warning(
             f"Circuit breaker '{cb.name}' state changed: {old_state.name} -> {new_state.name}"
         )
 
     def failure(self, cb, exception):
-        """Called on failure."""
         logger.debug(f"Circuit breaker '{cb.name}' recorded failure: {exception}")
 
     def success(self, cb):
-        """Called on success."""
         logger.debug(f"Circuit breaker '{cb.name}' recorded success")
 
+
+# ── Helpers for the async state machine ──────────────────────────────────
+
+def _breaker_state_name(breaker) -> str:
+    state = breaker.current_state
+    return getattr(state, "name", str(state)).lower()
+
+
+def _reset_counter(breaker) -> None:
+    """Reset the consecutive-failure counter without triggering a state change."""
+    try:
+        breaker._state_storage.reset_counter()
+    except AttributeError:
+        pass
+
+
+def _open_breaker(breaker, name: str) -> None:
+    if hasattr(breaker, "open"):
+        breaker.open()
+    _breaker_opened_at[name] = time.monotonic()
+
+
+def _close_breaker(breaker, name: str) -> None:
+    if hasattr(breaker, "close"):
+        breaker.close()
+    _breaker_opened_at.pop(name, None)
+
+
+# ── Public helpers for non-decorator usage (e.g. streaming) ──────────────
+
+def check_breaker(name: str = "default") -> None:
+    """Raise if the circuit breaker is OPEN and the cooldown hasn't elapsed.
+
+    If the cooldown *has* elapsed the call succeeds (probe request allowed).
+    Callers must follow up with ``record_breaker_success`` or
+    ``record_breaker_failure`` once the outcome is known.
+    """
+    breaker = get_circuit_breaker(name)
+    if breaker is None:
+        return
+
+    state = _breaker_state_name(breaker)
+    if state == "open":
+        opened_at = _breaker_opened_at.get(name, 0)
+        if time.monotonic() - opened_at < breaker.reset_timeout:
+            logger.error(f"Circuit breaker '{name}' is OPEN — request blocked")
+            raise Exception("Service temporarily unavailable (circuit breaker open)")
+        logger.info(f"Circuit breaker '{name}' cooldown elapsed — allowing probe request")
+
+
+def record_breaker_success(name: str = "default") -> None:
+    """Record a successful call — resets counter or closes after probe."""
+    breaker = get_circuit_breaker(name)
+    if breaker is None:
+        return
+
+    state = _breaker_state_name(breaker)
+    if state in ("open", "half-open"):
+        _close_breaker(breaker, name)
+        logger.info(f"Circuit breaker '{name}' probe succeeded — closed")
+    else:
+        _reset_counter(breaker)
+
+
+def record_breaker_failure(name: str = "default") -> None:
+    """Record a failed call — increments counter and may trip the breaker."""
+    breaker = get_circuit_breaker(name)
+    if breaker is None:
+        return
+
+    state = _breaker_state_name(breaker)
+    if state in ("open", "half-open"):
+        _open_breaker(breaker, name)
+        logger.warning(f"Circuit breaker '{name}' probe failed — reopened")
+        return
+
+    if hasattr(breaker, "_inc_counter"):
+        breaker._inc_counter()
+    if breaker.fail_counter >= breaker.fail_max:
+        _open_breaker(breaker, name)
+
+
+# ── Decorator ────────────────────────────────────────────────────────────
 
 def with_circuit_breaker(
     breaker_name: str = "default", fallback: Optional[Callable] = None
 ):
-    """
-    Decorator to protect function with circuit breaker.
-
-    Usage:
-        @with_circuit_breaker(breaker_name="anthropic", fallback=lambda *args: "Service unavailable")
-        async def call_external_api():
-            # API call here
-            pass
-
-    Args:
-        breaker_name: Name of the circuit breaker
-        fallback: Optional fallback function to call when circuit is open
-    """
+    """Decorator to protect an async or sync function with the circuit breaker."""
 
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         async def async_wrapper(*args, **kwargs):
             breaker = get_circuit_breaker(breaker_name)
 
-            # If pybreaker not installed, skip circuit breaking entirely
             if breaker is None:
                 return await func(*args, **kwargs)
 
             try:
-                # Circuit breaker states (pybreaker):
-                #   closed    → normal operation, requests go through
-                #   open      → too many failures, block all requests until reset_timeout
-                #   half-open → after timeout, allow ONE request to test if service recovered
-                #
-                # pybreaker's current_state can be a string or object with .name,
-                # depending on the version — getattr handles both.
-                state = breaker.current_state
-                state_name = getattr(state, "name", str(state)).lower()
-
-                if state_name == "open":
-                    logger.error(
-                        f"Circuit breaker '{breaker_name}' is OPEN - requests blocked"
-                    )
-                    if fallback:
-                        return fallback(*args, **kwargs)
-                    raise Exception(
-                        "Service temporarily unavailable (circuit breaker open)"
-                    )
-
-                # We call the async function directly instead of pybreaker's call_async()
-                # because call_async() requires Tornado. We manually track state transitions.
-                try:
-                    result = await func(*args, **kwargs)
-                    # Only transition to closed when recovering from half-open state.
-                    # Important: calling close() in normal (closed) state would reset the
-                    # fail counter on every successful request, preventing failures from
-                    # ever accumulating to the threshold.
-                    if state_name == "half-open" and hasattr(breaker, "close"):
-                        breaker.close()
-                    return result
-                except Exception:
-                    # Record failure — _inc_counter increments pybreaker's internal counter
-                    if hasattr(breaker, "_inc_counter"):
-                        breaker._inc_counter()
-                    # Trip the breaker if we've hit the failure threshold
-                    if breaker.fail_counter >= breaker.fail_max:
-                        if hasattr(breaker, "open"):
-                            breaker.open()
-                    raise
-
+                check_breaker(breaker_name)
             except Exception:
+                if fallback:
+                    return fallback(*args, **kwargs)
+                raise
+
+            try:
+                result = await func(*args, **kwargs)
+                record_breaker_success(breaker_name)
+                return result
+            except Exception:
+                record_breaker_failure(breaker_name)
                 raise
 
         @wraps(func)
@@ -147,7 +193,7 @@ def with_circuit_breaker(
                 error_name = type(e).__name__
                 if error_name == "CircuitBreakerError":
                     logger.error(
-                        f"Circuit breaker '{breaker_name}' is OPEN - requests blocked"
+                        f"Circuit breaker '{breaker_name}' is OPEN — requests blocked"
                     )
                     if fallback:
                         return fallback(*args, **kwargs)
@@ -156,7 +202,6 @@ def with_circuit_breaker(
                     )
                 raise
 
-        # Return appropriate wrapper
         import asyncio
 
         if asyncio.iscoroutinefunction(func):

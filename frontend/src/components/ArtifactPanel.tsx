@@ -1,21 +1,19 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import {
-  X,
-  Copy,
-  Check,
-  Download,
-  FileText,
-  ChevronLeft,
-  BookOpen,
-  Search,
-  Link2,
-  Globe,
-  File,
-  Quote,
-  Loader2,
-  Eye,
-  ArrowLeft,
-} from 'lucide-react'
+import { XIcon as X } from '@phosphor-icons/react/X'
+import { CopyIcon as Copy } from '@phosphor-icons/react/Copy'
+import { CheckIcon as Check } from '@phosphor-icons/react/Check'
+import { DownloadSimpleIcon as Download } from '@phosphor-icons/react/DownloadSimple'
+import { FileTextIcon as FileText } from '@phosphor-icons/react/FileText'
+import { CaretLeftIcon as ChevronLeft } from '@phosphor-icons/react/CaretLeft'
+import { BookOpenIcon as BookOpen } from '@phosphor-icons/react/BookOpen'
+import { MagnifyingGlassIcon as Search } from '@phosphor-icons/react/MagnifyingGlass'
+import { LinkIcon as Link2 } from '@phosphor-icons/react/Link'
+import { GlobeIcon as Globe } from '@phosphor-icons/react/Globe'
+import { FileIcon as File } from '@phosphor-icons/react/File'
+import { QuotesIcon as Quote } from '@phosphor-icons/react/Quotes'
+import { CircleNotchIcon as Loader2 } from '@phosphor-icons/react/CircleNotch'
+import { EyeIcon as Eye } from '@phosphor-icons/react/Eye'
+import { ArrowLeftIcon as ArrowLeft } from '@phosphor-icons/react/ArrowLeft'
 import { apiClient, API_BASE, getAccessToken } from '../config/api'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'

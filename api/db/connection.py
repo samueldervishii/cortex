@@ -115,7 +115,10 @@ async def ensure_indexes(database: AsyncIOMotorDatabase) -> None:
 
     # ── Users ──
     await _create_index(users, [("id", ASCENDING)], unique=True, name="idx_user_id_pk")
-    await _create_index(users, [("email", ASCENDING)], unique=True, name="idx_user_email")
+    # CRITICAL: email uniqueness prevents duplicate accounts and is assumed
+    # by registration and login logic.
+    if not await _create_index(users, [("email", ASCENDING)], unique=True, name="idx_user_email", critical=True):
+        critical_failures += 1
     await _create_index(
         users, [("username", ASCENDING)],
         unique=True,
@@ -183,6 +186,14 @@ async def ensure_indexes(database: AsyncIOMotorDatabase) -> None:
         usage_buckets, [("bucket_end", ASCENDING)],
         expireAfterSeconds=30 * 24 * 60 * 60, name="idx_usage_ttl",
     )
+
+    # ── Feedback ──
+    feedback = database["feedback"]
+    await _create_index(
+        feedback, [("session_id", ASCENDING), ("message_index", ASCENDING)],
+        name="idx_feedback_session_msg",
+    )
+    await _create_index(feedback, [("user_id", ASCENDING)], name="idx_feedback_user")
 
     # ── Service checks (status tracking) ──
     # Per-service time-series for the uptime page. Compound index powers

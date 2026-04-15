@@ -9,6 +9,27 @@
   margin-bottom: 1.75rem;
 }
 
+.settings-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+  padding: 0.35rem 0.65rem 0.35rem 0.45rem;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-decoration: none;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.settings-back-link:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
 .settings-title {
   font-size: 1.4rem;
   font-weight: 700;

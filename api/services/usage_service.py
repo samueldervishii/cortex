@@ -71,10 +71,17 @@ def _empty_bucket_payload(user_id: str, now: datetime) -> dict:
 async def _get_or_create_current_bucket(
     db: AsyncIOMotorDatabase, user_id: str
 ) -> dict:
-    """Return the active bucket for a user, creating one if none exists."""
+    """Return the active bucket for a user, creating one if none exists.
+
+    Uses ``findOneAndUpdate`` with ``upsert=True`` so two concurrent callers
+    never create duplicate buckets for the same user.
+    """
+    from pymongo import ReturnDocument
+
     now = _utcnow()
     coll = db["usage_buckets"]
 
+    # Fast path: bucket already exists.
     bucket = await coll.find_one(
         {"user_id": user_id, "bucket_end": {"$gt": now}},
         sort=[("bucket_end", -1)],
@@ -82,10 +89,59 @@ async def _get_or_create_current_bucket(
     if bucket is not None:
         return bucket
 
+    # Atomic upsert: if a concurrent request already inserted a bucket that
+    # matches the query, the $setOnInsert is a no-op and we get it back.
     payload = _empty_bucket_payload(user_id, now)
-    result = await coll.insert_one(payload)
-    payload["_id"] = result.inserted_id
-    return payload
+    bucket = await coll.find_one_and_update(
+        {"user_id": user_id, "bucket_end": {"$gt": now}},
+        {"$setOnInsert": payload},
+        upsert=True,
+        return_document=ReturnDocument.AFTER,
+    )
+    return bucket
+
+
+async def try_reserve_tokens(
+    db: AsyncIOMotorDatabase, user_id: str, reserve: int
+) -> tuple[dict, bool]:
+    """Atomically reserve tokens before streaming.
+
+    Returns ``(serialized_bucket, ok)``.  When *ok* is ``False`` the user
+    has hit the quota and the reservation was **not** placed.  The caller
+    must pass ``release_reserved=reserve`` to :func:`record_usage` once the
+    actual token counts are known so the reservation is released.
+    """
+    from pymongo import ReturnDocument
+
+    bucket = await _get_or_create_current_bucket(db, user_id)
+
+    # Atomically increment reserved_tokens only if doing so stays within the
+    # limit.  The ``$expr`` guard makes the update a no-op (matched_count=0)
+    # when the user is already over budget.
+    result = await db["usage_buckets"].find_one_and_update(
+        {
+            "_id": bucket["_id"],
+            "$expr": {
+                "$lte": [
+                    {
+                        "$add": [
+                            "$input_tokens",
+                            "$output_tokens",
+                            {"$ifNull": ["$reserved_tokens", 0]},
+                            reserve,
+                        ]
+                    },
+                    LIMIT_TOKENS,
+                ]
+            },
+        },
+        {"$inc": {"reserved_tokens": reserve}},
+        return_document=ReturnDocument.AFTER,
+    )
+
+    if result is not None:
+        return _serialize_bucket(result), True
+    return _serialize_bucket(bucket), False
 
 
 async def record_usage(
@@ -94,10 +150,15 @@ async def record_usage(
     *,
     input_tokens: int = 0,
     output_tokens: int = 0,
+    release_reserved: int = 0,
     is_artifact: bool = False,
     has_file: bool = False,
 ) -> dict:
-    """Increment counters on the user's current bucket and return it."""
+    """Increment counters on the user's current bucket and return it.
+
+    If ``release_reserved`` > 0 the corresponding reservation (placed by
+    :func:`try_reserve_tokens`) is released at the same time.
+    """
     bucket = await _get_or_create_current_bucket(db, user_id)
 
     inc: dict = {
@@ -105,6 +166,8 @@ async def record_usage(
         "output_tokens": max(0, int(output_tokens)),
         "message_count": 1,
     }
+    if release_reserved > 0:
+        inc["reserved_tokens"] = -release_reserved
     if is_artifact:
         inc["artifact_count"] = 1
     if has_file:

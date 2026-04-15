@@ -173,7 +173,7 @@ async def status_uptime():
                 },
             ],
             "generated_at": now_iso,
-            "error": f"Database unreachable: {type(e).__name__}",
+            "error": "database_unavailable",
         }
 
 

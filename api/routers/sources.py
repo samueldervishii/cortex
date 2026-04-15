@@ -174,12 +174,14 @@ async def import_url(
         )
         return ImportUrlResponse(source=summary, message="Source already imported")
 
+    import asyncio
+
     try:
         html, final_url = await fetch_url(clean_url)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    extracted = extract_content(html, final_url)
+    extracted = await asyncio.to_thread(extract_content, html, final_url)
 
     if not extracted["text"] or len(extracted["text"].strip()) < 50:
         raise HTTPException(status_code=400, detail="Could not extract meaningful content from this URL.")
@@ -208,10 +210,8 @@ async def import_url(
         )
         return ImportUrlResponse(source=summary, message="Source already imported")
 
-    # Chunk the extracted text
-    chunk_dicts = chunk_text(
-        text=extracted["text"],
-        filename=extracted["domain"],
+    chunk_dicts = await asyncio.to_thread(
+        chunk_text, extracted["text"], extracted["domain"],
     )
 
     now = utc_iso()

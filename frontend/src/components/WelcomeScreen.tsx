@@ -1,5 +1,10 @@
 import { useMemo, useRef, useState } from 'react'
-import { RefreshCcw, Sparkles, FileText, Mail, SearchCheck, PenSquare } from 'lucide-react'
+import { ArrowsCounterClockwiseIcon as ArrowsCounterClockwise } from '@phosphor-icons/react/ArrowsCounterClockwise'
+import { SparkleIcon as Sparkle } from '@phosphor-icons/react/Sparkle'
+import { FileTextIcon as FileText } from '@phosphor-icons/react/FileText'
+import { EnvelopeIcon as Envelope } from '@phosphor-icons/react/Envelope'
+import { MagnifyingGlassIcon as MagnifyingGlass } from '@phosphor-icons/react/MagnifyingGlass'
+import { NotePencilIcon as NotePencil } from '@phosphor-icons/react/NotePencil'
 import ChatInput, { type ChatInputHandle } from './ChatInput'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -15,7 +20,7 @@ interface WelcomeScreenProps {
 const SUGGESTIONS = [
   {
     eyebrow: 'Draft',
-    icon: PenSquare,
+    icon: NotePencil,
     title: 'Write a thesis introduction',
     description: 'Frame your argument with strong structure and a clear research tone.',
     prompt:
@@ -23,7 +28,7 @@ const SUGGESTIONS = [
   },
   {
     eyebrow: 'Research',
-    icon: SearchCheck,
+    icon: MagnifyingGlass,
     title: 'Overview of a complex topic',
     description: 'Break a subject into themes, key findings, and critical comparisons.',
     prompt:
@@ -39,7 +44,7 @@ const SUGGESTIONS = [
   },
   {
     eyebrow: 'Reply',
-    icon: Mail,
+    icon: Envelope,
     title: 'Generate a polished response',
     description: 'Turn rough notes into a clear, well-structured email or formal reply.',
     prompt:
@@ -113,7 +118,7 @@ function WelcomeScreen({
     <div className="welcome-screen">
       <div className="welcome-center">
         <div className="welcome-badge">
-          <Sparkles size={14} />
+          <Sparkle size={14} />
           Cortex workspace
         </div>
         <h1 className="welcome-heading">
@@ -144,7 +149,7 @@ function WelcomeScreen({
 
       <div className="welcome-toolbar">
         <button className="welcome-toolbar-btn" type="button" onClick={shuffleSuggestions}>
-          <RefreshCcw size={14} />
+          <ArrowsCounterClockwise size={14} />
           Refresh prompts
         </button>
       </div>
@@ -157,7 +162,7 @@ function WelcomeScreen({
           onSubmit={onSubmit}
           onFileUpload={onFileUpload}
           disabled={loading}
-          placeholder="Ask for a draft, upload a source, or describe what you need..."
+          placeholder="Describe anything you need..."
           centered
         />
         <p className="welcome-hint">

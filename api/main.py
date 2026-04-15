@@ -350,10 +350,13 @@ async def log_and_track_requests(request: Request, call_next):
         f"client={client_ip}"
     )
 
-    # Track metrics
+    # Use the route template (e.g. "/session/{session_id}") instead of
+    # the raw path to avoid unbounded label cardinality in Prometheus.
+    route = request.scope.get("route")
+    endpoint_label = route.path if route else request.url.path
     track_request(
         method=request.method,
-        endpoint=request.url.path,
+        endpoint=endpoint_label,
         status=response.status_code,
         duration=duration,
     )

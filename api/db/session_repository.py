@@ -161,10 +161,10 @@ class SessionRepository:
             {
                 "$facet": {
                     "page": [
-                        self._SUMMARY_PROJECT_STAGE,
                         {"$sort": {"created_at": -1}},
                         {"$skip": offset},
                         {"$limit": limit},
+                        self._SUMMARY_PROJECT_STAGE,
                         {"$project": {"pinned_at": 0}},
                     ],
                     "total": [{"$count": "count"}],
@@ -358,7 +358,8 @@ class SessionRepository:
         return sessions
 
     async def append_message(
-        self, session_id: str, message_doc: dict, position: Optional[int] = None
+        self, session_id: str, message_doc: dict, position: Optional[int] = None,
+        user_id: Optional[str] = None,
     ) -> bool:
         """Append a message to a session without replacing the full document.
         This avoids overwriting concurrent mutations (pin, rename, delete, share).
@@ -367,13 +368,18 @@ class SessionRepository:
             position: If set, insert at this index instead of the end.
                       Used by stream completion to place the assistant reply
                       right after the user message it responded to.
+            user_id: If set, the update only matches if the session belongs to
+                     this user (defense-in-depth tenant isolation).
         """
         if position is not None:
             push_spec = {"$each": [message_doc], "$position": position}
         else:
             push_spec = message_doc
+        query: dict = {"id": session_id, "is_deleted": {"$ne": True}}
+        if user_id is not None:
+            query["user_id"] = user_id
         result = await self.collection.update_one(
-            {"id": session_id, "is_deleted": {"$ne": True}},
+            query,
             {
                 "$push": {"messages": push_spec},
                 "$set": {"updated_at": datetime.now(timezone.utc)},
@@ -383,7 +389,8 @@ class SessionRepository:
         return result.modified_count > 0
 
     async def replace_last_message(
-        self, session_id: str, message_doc: dict, expected_count: int
+        self, session_id: str, message_doc: dict, expected_count: int,
+        user_id: Optional[str] = None,
     ) -> bool:
         """Replace the last message in a session (used for upload-with-replace).
 
@@ -394,14 +401,16 @@ class SessionRepository:
         if expected_count <= 0:
             return False
         last_idx = expected_count - 1
+        query: dict = {
+            "id": session_id,
+            "is_deleted": {"$ne": True},
+            f"messages.{last_idx}": {"$exists": True},
+            f"messages.{expected_count}": {"$exists": False},
+        }
+        if user_id is not None:
+            query["user_id"] = user_id
         result = await self.collection.update_one(
-            {
-                "id": session_id,
-                "is_deleted": {"$ne": True},
-                # Ensure the array hasn't grown since the caller's snapshot
-                f"messages.{last_idx}": {"$exists": True},
-                f"messages.{expected_count}": {"$exists": False},
-            },
+            query,
             {
                 "$set": {
                     f"messages.{last_idx}": message_doc,
@@ -472,10 +481,13 @@ class SessionRepository:
         Removes session documents, artifacts, sources, file blobs, and
         feedback.  Used by auto-delete so user data is actually purged,
         not just hidden.
+
+        The final session delete re-applies the time filter so a session
+        that was updated between the ID scan and the delete is not lost.
         """
         cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
 
-        query = {
+        query: dict = {
             "is_deleted": {"$ne": True},
             "created_at": {"$lt": cutoff_date},
             "updated_at": {"$lt": cutoff_date},
@@ -485,7 +497,6 @@ class SessionRepository:
         if not include_pinned:
             query["is_pinned"] = {"$ne": True}
 
-        # Collect session IDs first so we can cascade-delete related data.
         session_ids: List[str] = []
         async for doc in self.collection.find(query, {"id": 1}):
             session_ids.append(doc["id"])
@@ -493,11 +504,21 @@ class SessionRepository:
         if not session_ids:
             return 0
 
+        import asyncio
         db = self.collection.database
         id_filter = {"session_id": {"$in": session_ids}}
-        await db["artifacts"].delete_many(id_filter)
-        await db["sources"].delete_many(id_filter)
-        await db["file_storage"].delete_many(id_filter)
-        await db["feedback"].delete_many(id_filter)
-        result = await self.collection.delete_many({"id": {"$in": session_ids}})
+        await asyncio.gather(
+            db["artifacts"].delete_many(id_filter),
+            db["sources"].delete_many(id_filter),
+            db["file_storage"].delete_many(id_filter),
+            db["feedback"].delete_many(id_filter),
+        )
+
+        # Re-check the time predicate so sessions revived by user activity
+        # between the scan and this point are not accidentally deleted.
+        safe_filter = {
+            "id": {"$in": session_ids},
+            "updated_at": {"$lt": cutoff_date},
+        }
+        result = await self.collection.delete_many(safe_filter)
         return result.deleted_count

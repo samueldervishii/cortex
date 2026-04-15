@@ -34,6 +34,20 @@ apiClient.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config
 
+    // Network / unreachable server — detect this BEFORE the auth-endpoint
+    // early return so login/register pages also get the isNetworkError flag
+    // (otherwise ERR_CONNECTION_REFUSED shows a vague "Something went wrong").
+    if (!error.response && (error.code === 'ERR_NETWORK' || error.code === 'ECONNABORTED')) {
+      const networkError = new Error(
+        error.code === 'ECONNABORTED'
+          ? 'The server is taking too long to respond. Please try again.'
+          : 'Please check your internet connection or try again.'
+      ) as any
+      networkError.isNetworkError = true
+      networkError.originalError = error
+      return Promise.reject(networkError)
+    }
+
     // Don't retry auth endpoints or already-retried requests
     if (!originalRequest || originalRequest._retry || originalRequest.url?.startsWith('/auth/')) {
       return Promise.reject(error)
@@ -68,24 +82,6 @@ apiClient.interceptors.response.use(
         window.location.href = '/login'
         return Promise.reject(error)
       }
-    }
-
-    // Network / unreachable server. Covers both:
-    // - ERR_NETWORK: the request could not reach the server at all
-    // - ECONNABORTED: the request timed out (happens on Render free tier
-    //   cold starts where the backend takes longer than our client timeout
-    //   to spin back up). Without this, timeouts look like successful
-    //   errors to AuthContext and it logs the user out instead of showing
-    //   a connection-failed screen.
-    if (!error.response && (error.code === 'ERR_NETWORK' || error.code === 'ECONNABORTED')) {
-      const networkError = new Error(
-        error.code === 'ECONNABORTED'
-          ? 'The server is taking too long to respond. Please try again.'
-          : 'Please check your internet connection.'
-      ) as any
-      networkError.isNetworkError = true
-      networkError.originalError = error
-      return Promise.reject(networkError)
     }
 
     return Promise.reject(error)

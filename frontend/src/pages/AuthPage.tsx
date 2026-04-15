@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation, Navigate } from 'react-router-dom'
-import { Eye, EyeOff } from 'lucide-react'
+import { EyeIcon as Eye } from '@phosphor-icons/react/Eye'
+import { EyeSlashIcon as EyeSlash } from '@phosphor-icons/react/EyeSlash'
 import { useAuth } from '../contexts/AuthContext'
 import { apiClient } from '../config/api'
 import './AuthPage.css'
@@ -202,7 +203,7 @@ function AuthPage() {
                     onClick={() => setShowPassword(!showPassword)}
                     tabIndex={-1}
                   >
-                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    {showPassword ? <EyeSlash size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
               </div>
@@ -226,7 +227,7 @@ function AuthPage() {
                       onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                       tabIndex={-1}
                     >
-                      {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      {showConfirmPassword ? <EyeSlash size={18} /> : <Eye size={18} />}
                     </button>
                   </div>
                 </div>

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
+import { ArrowLeftIcon as ArrowLeft } from '@phosphor-icons/react/ArrowLeft'
 import { useAuth } from '../contexts/AuthContext'
 import { useUsage } from '../contexts/UsageContext'
 import useTitle from '../hooks/useTitle'
@@ -324,6 +325,10 @@ function Settings() {
   return (
     <div className="settings-page">
       <div className="settings-header">
+        <Link to="/" className="settings-back-link">
+          <ArrowLeft size={14} />
+          <span>Back to chat</span>
+        </Link>
         <h1 className="settings-title">Settings</h1>
         <p className="settings-subtitle">Manage your profile and personal preferences here.</p>
       </div>

@@ -82,15 +82,20 @@ async def list_sessions(
     Returns all pinned sessions (on offset=0 only) plus a page of non-pinned
     sessions. The frontend paginates only the non-pinned list.
     """
-    recent_docs, total = await repo.list_recent_page(
-        user_id=user_id, limit=limit, offset=offset
-    )
-    recent = [_doc_to_summary(s) for s in recent_docs]
+    import asyncio
 
-    pinned: list[SessionSummary] = []
     if offset == 0:
-        pinned_docs = await repo.list_pinned(user_id=user_id)
+        (recent_docs, total), pinned_docs = await asyncio.gather(
+            repo.list_recent_page(user_id=user_id, limit=limit, offset=offset),
+            repo.list_pinned(user_id=user_id),
+        )
         pinned = [_doc_to_summary(s) for s in pinned_docs]
+    else:
+        recent_docs, total = await repo.list_recent_page(
+            user_id=user_id, limit=limit, offset=offset
+        )
+        pinned = []
+    recent = [_doc_to_summary(s) for s in recent_docs]
 
     return PaginatedSessionsResponse(
         sessions=recent,
@@ -234,7 +239,7 @@ async def continue_session(
     user_message = Message(role="user", content=clean_question)
 
     # Use targeted $push to avoid read-modify-write race with concurrent streams
-    saved = await repo.append_message(session_id, user_message.model_dump())
+    saved = await repo.append_message(session_id, user_message.model_dump(), user_id=user_id)
     if not saved:
         raise HTTPException(status_code=404, detail="Session not found or was deleted")
     session.messages.append(user_message)
@@ -258,12 +263,17 @@ async def upload_file_to_session(
     """Upload a file (PDF, DOCX, TXT) and add it as context to the conversation."""
     import os
     import base64
-    from services.file_extractor import validate_file, extract_text, chunk_text, extract_pdf_pages
+    from services.file_extractor import validate_file, extract_text, chunk_text
+    from core.sanitization import sanitize_filename
     from schemas import FileAttachment, SourceChunk
 
     session = await repo.get(session_id, user_id=user_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
+
+    # Normalize the client-supplied filename once and use it everywhere.
+    safe_name = sanitize_filename(file.filename or "upload")
+    safe_content_type = file.content_type or "application/octet-stream"
 
     # Read file in chunks to enforce size limit without trusting Content-Length
     MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
@@ -280,43 +290,46 @@ async def upload_file_to_session(
     content = b"".join(chunks_buf)
 
     try:
-        validate_file(file.filename, file.content_type, len(content), content)
+        validate_file(safe_name, safe_content_type, len(content), content)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    import asyncio
+    ext = os.path.splitext(safe_name)[1].lower()
     try:
-        extracted_text = extract_text(file.filename, content)
+        if ext == ".pdf":
+            from services.file_extractor import extract_pdf_with_pages
+            extracted_text, pages = await asyncio.to_thread(extract_pdf_with_pages, content)
+        else:
+            extracted_text = await asyncio.to_thread(extract_text, safe_name, content)
+            pages = None
     except Exception:
-        logger.exception(f"File extraction failed for {file.filename}")
+        logger.exception(f"File extraction failed for {safe_name}")
         raise HTTPException(status_code=400, detail="Could not process this file. Please ensure it is a valid PDF, DOCX, or text file.")
 
-    # Build source chunks for citation-aware answers
-    ext = os.path.splitext(file.filename)[1].lower()
     try:
-        pages = extract_pdf_pages(content) if ext == ".pdf" else None
-        chunk_dicts = chunk_text(extracted_text, file.filename, pages=pages)
+        chunk_dicts = await asyncio.to_thread(chunk_text, extracted_text, safe_name, pages)
         chunks = [SourceChunk(**c) for c in chunk_dicts]
     except Exception:
-        logger.debug(f"Chunking failed for {file.filename}, proceeding without chunks")
+        logger.debug(f"Chunking failed for {safe_name}, proceeding without chunks")
         chunks = []
 
-    # Store binary file data in a separate collection to keep session documents small.
-    # This prevents session docs from exceeding MongoDB's 16MB document limit.
     db = repo.collection.database
     storage_id = str(uuid.uuid4())
+    data_b64 = await asyncio.to_thread(lambda: base64.b64encode(content).decode("ascii"))
     await db["file_storage"].insert_one({
         "id": storage_id,
         "session_id": session_id,
-        "data_base64": base64.b64encode(content).decode("ascii"),
-        "filename": file.filename,
-        "content_type": file.content_type,
+        "data_base64": data_b64,
+        "filename": safe_name,
+        "content_type": safe_content_type,
         "size": len(content),
         "created_at": utc_iso(),
     })
 
     attachment = FileAttachment(
-        filename=file.filename,
-        content_type=file.content_type,
+        filename=safe_name,
+        content_type=safe_content_type,
         size=len(content),
         extracted_text=extracted_text,
         data_base64="",
@@ -324,7 +337,7 @@ async def upload_file_to_session(
         chunks=chunks,
     )
 
-    raw_text = question.strip() if question.strip() else f"I've uploaded a file: {file.filename}. Please analyze it."
+    raw_text = question.strip() if question.strip() else f"I've uploaded a file: {safe_name}. Please analyze it."
     user_text = sanitize_text(raw_text, max_length=10000)
     user_message = Message(role="user", content=user_text, file=attachment)
 
@@ -333,18 +346,19 @@ async def upload_file_to_session(
         last_msg = session.messages[-1]
         if last_msg.role == "user" and not last_msg.file:
             saved = await repo.replace_last_message(
-                session_id, user_message.model_dump(), expected_count=len(session.messages)
+                session_id, user_message.model_dump(), expected_count=len(session.messages),
+                user_id=user_id,
             )
             if not saved:
                 raise HTTPException(status_code=409, detail="Session was modified concurrently. Please retry.")
             session.messages[-1] = user_message
         else:
-            saved = await repo.append_message(session_id, user_message.model_dump())
+            saved = await repo.append_message(session_id, user_message.model_dump(), user_id=user_id)
             if not saved:
                 raise HTTPException(status_code=404, detail="Session not found or was deleted")
             session.messages.append(user_message)
     else:
-        saved = await repo.append_message(session_id, user_message.model_dump())
+        saved = await repo.append_message(session_id, user_message.model_dump(), user_id=user_id)
         if not saved:
             raise HTTPException(status_code=404, detail="Session not found or was deleted")
         session.messages.append(user_message)
@@ -357,12 +371,12 @@ async def upload_file_to_session(
             "id": str(uuid.uuid4()),
             "session_id": session_id,
             "kind": "file",
-            "title": file.filename,
+            "title": safe_name,
             "url": None,
             "normalized_url": None,
             "domain": None,
-            "filename": file.filename,
-            "content_type": file.content_type,
+            "filename": safe_name,
+            "content_type": safe_content_type,
             "size": len(content),
             "extracted_text": extracted_text,
             "chunks": [c.model_dump() for c in chunks],
@@ -374,9 +388,9 @@ async def upload_file_to_session(
         }
         await db["sources"].insert_one(source_doc)
     except DuplicateKeyError:
-        logger.debug(f"Source already registered for {file.filename}")
+        logger.debug(f"Source already registered for {safe_name}")
     except Exception:
-        logger.debug(f"Failed to register source for {file.filename}")
+        logger.debug(f"Failed to register source for {safe_name}")
 
     return SessionResponse(
         session=_strip_file_data(session),
@@ -408,14 +422,16 @@ async def stream_response(
     user_usage.check(user_id)
     user_usage.record(user_id)
 
-    # Token bucket enforcement: block if the user has hit their 5-hour cap,
-    # or if the next response could plausibly push them over.
-    # Must happen before the StreamingResponse is returned, or the 429 will
-    # get eaten by the already-open SSE connection.
+    # Atomic token reservation: claim RESPONSE_TOKEN_RESERVE tokens *before*
+    # the stream starts.  The reservation is released when record_usage runs
+    # after the stream finishes, swapping the placeholder for actual counts.
+    # This prevents concurrent streams from each seeing "under cap" and
+    # collectively exceeding the limit.
     db = repo.collection.database
-    current_usage = await usage_service.get_current_usage(db, user_id)
-    projected = current_usage["total_tokens"] + usage_service.RESPONSE_TOKEN_RESERVE
-    if projected > usage_service.LIMIT_TOKENS:
+    current_usage, reserved_ok = await usage_service.try_reserve_tokens(
+        db, user_id, usage_service.RESPONSE_TOKEN_RESERVE,
+    )
+    if not reserved_ok:
         reset = usage_service.format_reset_time(current_usage["resets_in_seconds"])
         raise HTTPException(
             status_code=429,
@@ -533,6 +549,7 @@ async def stream_response(
 
     async def event_stream():
         import json as _json
+        response_parts: list[str] = []
         full_response = ""
         model_id = None
         model_name = None
@@ -540,7 +557,6 @@ async def stream_response(
         input_tokens = 0
         output_tokens = 0
 
-        # Tell frontend if this is an artifact response
         if is_artifact:
             yield f"event: artifact_hint\ndata: {_json.dumps({'is_artifact': True})}\n\n"
 
@@ -552,8 +568,6 @@ async def stream_response(
                 remaining_tokens=remaining_tokens,
                 model=selected_model,
             ):
-                # Capture usage before forwarding the done event so we can
-                # enrich it with hydrated bucket data for the frontend.
                 if event.startswith("event: done"):
                     try:
                         data_start = event.index("data: ") + 6
@@ -562,16 +576,21 @@ async def stream_response(
                         output_tokens = int(done_data.get("output_tokens", 0) or 0)
                     except (ValueError, _json.JSONDecodeError):
                         pass
-                    # Hold the done event — we'll emit it after recording usage
                     continue
 
                 yield event
-                # Parse the event to capture the full response for saving
-                if "message_end" in event:
+
+                if "event: token" in event:
                     try:
                         data_start = event.index("data: ") + 6
                         data = _json.loads(event[data_start:].strip())
-                        full_response = data.get("content", "")
+                        response_parts.append(data.get("content", ""))
+                    except (ValueError, _json.JSONDecodeError):
+                        pass
+                elif "message_end" in event:
+                    try:
+                        data_start = event.index("data: ") + 6
+                        data = _json.loads(event[data_start:].strip())
                         model_id = data.get("model_id")
                         response_time_ms = data.get("response_time_ms")
                     except (ValueError, _json.JSONDecodeError):
@@ -583,6 +602,8 @@ async def stream_response(
                         model_name = data.get("model_name")
                     except (ValueError, _json.JSONDecodeError):
                         pass
+
+            full_response = "".join(response_parts)
 
             # Save assistant message to session using targeted $push
             # to avoid overwriting concurrent mutations (pin/rename/delete/share)
@@ -618,7 +639,7 @@ async def stream_response(
                     is_artifact=is_artifact,
                     citations=parsed_citations,
                 )
-                msg_saved = await repo.append_message(session_id, assistant_msg.model_dump(), position=reply_position)
+                msg_saved = await repo.append_message(session_id, assistant_msg.model_dump(), position=reply_position, user_id=user_id)
 
                 # Only create artifact if the message was actually persisted
                 if msg_saved and is_artifact and full_response.strip():
@@ -681,15 +702,26 @@ async def stream_response(
         # Wrapped in try/except so failures never block the terminating event.
         usage_payload = None
         try:
+            db = repo.collection.database
             if input_tokens or output_tokens or full_response:
-                db = repo.collection.database
                 usage_payload = await usage_service.record_usage(
                     db,
                     user_id,
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
+                    release_reserved=usage_service.RESPONSE_TOKEN_RESERVE,
                     is_artifact=is_artifact,
                     has_file=bool(last_user_msg.file),
+                )
+            else:
+                # Stream produced no output (error/empty) — release the
+                # reservation without recording real usage.
+                usage_payload = await usage_service.record_usage(
+                    db,
+                    user_id,
+                    input_tokens=0,
+                    output_tokens=0,
+                    release_reserved=usage_service.RESPONSE_TOKEN_RESERVE,
                 )
         except Exception:
             logger.exception("Failed to record usage")
@@ -772,8 +804,9 @@ async def download_file(
     if not data_b64:
         raise HTTPException(status_code=404, detail="File data not found")
 
+    import asyncio
     from core.sanitization import sanitize_filename
-    file_bytes = base64.b64decode(data_b64)
+    file_bytes = await asyncio.to_thread(base64.b64decode, data_b64)
     safe_filename = sanitize_filename(msg.file.filename)
     return Response(
         content=file_bytes,
@@ -789,6 +822,7 @@ async def export_session_docx(
     user_id: str = Depends(get_current_user),
 ):
     """Export a session as a DOCX document."""
+    import asyncio
     from fastapi.responses import Response
     from services.docx_export import session_to_docx
 
@@ -796,7 +830,7 @@ async def export_session_docx(
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    docx_bytes = session_to_docx(session)
+    docx_bytes = await asyncio.to_thread(session_to_docx, session)
     title_slug = (session.title or "chat")[:30].replace(" ", "-").lower()
     filename = f"cortex-{title_slug}.docx"
 
@@ -815,6 +849,7 @@ async def export_message_docx(
     user_id: str = Depends(get_current_user),
 ):
     """Export a single message as a DOCX document."""
+    import asyncio
     from fastapi.responses import Response
     from services.docx_export import message_to_docx
 
@@ -826,7 +861,7 @@ async def export_message_docx(
         raise HTTPException(status_code=404, detail="Message not found")
 
     msg = session.messages[message_index]
-    docx_bytes = message_to_docx(msg.content, session.title)
+    docx_bytes = await asyncio.to_thread(message_to_docx, msg.content, session.title)
     filename = f"cortex-document.docx"
 
     return Response(
@@ -842,6 +877,7 @@ async def share_session(
     request: Request,
     repo: SessionRepository = Depends(get_session_repository),
     user_id: str = Depends(get_current_user),
+    _rate_limit: None = Depends(check_rate_limit),
 ):
     """Generate a public share link for a session."""
     session = await repo.get(session_id, user_id=user_id)
@@ -976,6 +1012,7 @@ async def export_sessions(
     user_id: str = Depends(get_current_user),
 ):
     """Export sessions as JSON or Markdown."""
+    import asyncio
     from fastapi.responses import Response
     from services.export import format_as_json, format_as_markdown
 
@@ -987,11 +1024,11 @@ async def export_sessions(
     sessions = await repo.get_all_full(include_deleted=include_deleted, limit=limit, user_id=user_id)
 
     if format == "json":
-        content = format_as_json(sessions)
+        content = await asyncio.to_thread(format_as_json, sessions)
         media_type = "application/json"
         filename = f"chat_export_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.json"
     else:
-        content = format_as_markdown(sessions)
+        content = await asyncio.to_thread(format_as_markdown, sessions)
         media_type = "text/markdown"
         filename = f"chat_export_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.md"
 
