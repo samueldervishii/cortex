@@ -58,8 +58,6 @@ function SettingsPage() {
               startNewChat()
               navigate('/')
             }}
-            onToggleSidebar={toggleSidebar}
-            sidebarOpen={sidebarOpen}
           />
           <Settings />
         </div>

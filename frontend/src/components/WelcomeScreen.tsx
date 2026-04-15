@@ -166,8 +166,8 @@ function WelcomeScreen({
           centered
         />
         <p className="welcome-hint">
-          Press <kbd className="shortcut-kbd">Alt</kbd>
-          <kbd className="shortcut-kbd">?</kbd> to open the command palette
+          Press <kbd className="shortcut-kbd">Shift</kbd> +<kbd className="shortcut-kbd">?</kbd> to
+          open the command palette
         </p>
       </div>
     </div>

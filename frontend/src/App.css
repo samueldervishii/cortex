@@ -5396,6 +5396,7 @@ button.message-file-badge:hover {
   border-top: 1px solid var(--border-color);
   border-bottom: 1px solid var(--border-color);
   margin-bottom: 0.85rem;
+  justify-content: space-between;
 }
 
 .status-metric {
@@ -6659,6 +6660,46 @@ button.message-file-badge:hover {
 
 .sidebar.collapsed .sidebar-toggle-btn {
   display: none;
+}
+
+/* Collapsed logo → open-sidebar icon on hover */
+.sidebar-collapsed-logo-btn {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.16s ease;
+}
+
+.sidebar-collapsed-logo-btn .logo-default {
+  width: 26px;
+  height: 26px;
+  transition: opacity 0.18s ease;
+}
+
+.sidebar-collapsed-logo-btn .logo-hover-icon {
+  position: absolute;
+  opacity: 0;
+  color: var(--text-primary);
+  transition: opacity 0.18s ease;
+}
+
+.sidebar-collapsed-logo-btn:hover {
+  background: rgba(88, 67, 39, 0.08);
+}
+
+.sidebar-collapsed-logo-btn:hover .logo-default {
+  opacity: 0;
+}
+
+.sidebar-collapsed-logo-btn:hover .logo-hover-icon {
+  opacity: 1;
 }
 
 .sidebar-toggle-btn {

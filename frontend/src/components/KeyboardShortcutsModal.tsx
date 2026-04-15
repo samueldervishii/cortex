@@ -1,3 +1,5 @@
+import { KEYBOARD_SHORTCUTS } from '../data/keyboardShortcuts'
+
 interface KeyboardShortcutsModalProps {
   isOpen: boolean
   onClose: () => void
@@ -5,16 +7,6 @@ interface KeyboardShortcutsModalProps {
 
 function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShortcutsModalProps) {
   if (!isOpen) return null
-
-  const shortcuts = [
-    { keys: ['Enter'], description: 'Send message' },
-    { keys: ['Shift', 'Enter'], description: 'New line' },
-    { keys: ['Ctrl', 'K'], description: 'Open command palette' },
-    { keys: ['Alt', 'N'], description: 'New chat' },
-    { keys: ['Ctrl', '\\'], description: 'Toggle sidebar' },
-    { keys: ['?'], description: 'Show keyboard shortcuts' },
-    { keys: ['Esc'], description: 'Close modals / panels' },
-  ]
 
   return (
     <div className="shortcuts-modal-overlay" onClick={onClose}>
@@ -36,7 +28,7 @@ function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShortcutsModalProps
           </button>
         </div>
         <div className="shortcuts-list">
-          {shortcuts.map((s, i) => (
+          {KEYBOARD_SHORTCUTS.map((s, i) => (
             <div key={i} className="shortcut-row">
               <span className="shortcut-description">{s.description}</span>
               <span className="shortcut-keys">

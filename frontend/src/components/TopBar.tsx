@@ -2,12 +2,9 @@ import { Link } from 'react-router-dom'
 import { GhostIcon as Ghost } from '@phosphor-icons/react/Ghost'
 import { NotePencilIcon as NotePencil } from '@phosphor-icons/react/NotePencil'
 import { SidebarIcon as Sidebar } from '@phosphor-icons/react/Sidebar'
-import { TextIndentIcon as TextIndent } from '@phosphor-icons/react/TextIndent'
 
 interface TopBarProps {
   onNewChat: () => void
-  onToggleSidebar: () => void
-  sidebarOpen?: boolean
   onToggleRightPanel?: () => void
   rightPanelOpen?: boolean
   hasSession?: boolean
@@ -18,8 +15,6 @@ interface TopBarProps {
 
 function TopBar({
   onNewChat,
-  onToggleSidebar,
-  sidebarOpen,
   onToggleRightPanel,
   rightPanelOpen,
   hasSession,
@@ -30,11 +25,6 @@ function TopBar({
   return (
     <div className={`top-bar ${ghostMode ? 'ghost-mode' : ''}`}>
       <div className="top-bar-left">
-        {!sidebarOpen && (
-          <button className="menu-btn" onClick={onToggleSidebar} title="Open sidebar">
-            <TextIndent size={18} weight="regular" />
-          </button>
-        )}
         {hasSession && (
           <button
             className="menu-btn top-bar-new-chat"

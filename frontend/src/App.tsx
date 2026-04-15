@@ -251,8 +251,6 @@ function App() {
         <div className="chat-content">
           <TopBar
             onNewChat={handleNewChat}
-            onToggleSidebar={toggleSidebar}
-            sidebarOpen={sidebarOpen}
             onToggleRightPanel={toggleRightPanel}
             rightPanelOpen={rightPanelOpen}
             hasSession={!!sessionId}

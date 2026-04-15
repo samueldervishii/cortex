@@ -11,6 +11,7 @@ import { NotePencilIcon as SquarePen } from '@phosphor-icons/react/NotePencil'
 import { SignOutIcon as LogOut } from '@phosphor-icons/react/SignOut'
 import { CaretUpIcon as ChevronUp } from '@phosphor-icons/react/CaretUp'
 import { TextOutdentIcon as TextOutdent } from '@phosphor-icons/react/TextOutdent'
+import { TextIndentIcon as TextIndent } from '@phosphor-icons/react/TextIndent'
 import { FRONTEND_URL } from '../config/api'
 import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -386,25 +387,28 @@ function Sidebar({
     <div className={`sidebar ${isOpen ? 'expanded' : 'collapsed'}`}>
       <div className="sidebar-shell">
         <div className="sidebar-brand">
-          <div className="sidebar-brand-main">
-            <div className="sidebar-logo">
-              <img src="/logo.svg" alt="Cortex" className="sidebar-logo-icon" />
-              {isOpen && (
-                <div className="sidebar-logo-copy">
-                  <span className="sidebar-logo-title">
-                    Cortex -{' '}
-                    {isOpen && <span className="sidebar-logo-subtitle">Research workspace</span>}
-                  </span>
-                  {/* <span className="sidebar-logo-subtitle">Research workspace</span> */}
+          {isOpen ? (
+            <>
+              <div className="sidebar-brand-main">
+                <div className="sidebar-logo">
+                  <img src="/logo.svg" alt="Cortex" className="sidebar-logo-icon" />
+                  <div className="sidebar-logo-copy">
+                    <span className="sidebar-logo-title">
+                      Cortex - <span className="sidebar-logo-subtitle">Research workspace</span>
+                    </span>
+                  </div>
                 </div>
-              )}
-            </div>
-            {/* {isOpen && <span className="sidebar-meta-badge">Desk</span>} */}
-            {/* {isOpen && <span className="sidebar-logo-subtitle">Research workspace</span>} */}
-          </div>
-          <button className="sidebar-toggle-btn" onClick={onClose}>
-            <TextOutdent size={16} />
-          </button>
+              </div>
+              <button className="sidebar-toggle-btn" onClick={onClose}>
+                <TextOutdent size={16} />
+              </button>
+            </>
+          ) : (
+            <button className="sidebar-collapsed-logo-btn" onClick={onClose} title="Open sidebar">
+              <img src="/logo.svg" alt="Cortex" className="sidebar-logo-icon logo-default" />
+              <TextIndent size={18} className="logo-hover-icon" />
+            </button>
+          )}
         </div>
 
         {isOpen ? (

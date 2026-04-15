@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { ArrowLeftIcon as ArrowLeft } from '@phosphor-icons/react/ArrowLeft'
+import { Keyboard as KeyboardIcon } from '@phosphor-icons/react/Keyboard'
 import { useAuth } from '../contexts/AuthContext'
 import { useUsage } from '../contexts/UsageContext'
 import useTitle from '../hooks/useTitle'
 import { useToast } from '../contexts/ToastContext'
 import { FRONTEND_VERSION, apiClient } from '../config/api'
+import { KEYBOARD_SHORTCUTS } from '../data/keyboardShortcuts'
 import './Settings.css'
 
 // Hard token cap per 5-hour bucket. Must match api/services/usage_service.py
@@ -957,55 +959,83 @@ function Settings() {
                   Learn more &rarr;
                 </a>
               </p>
-              <div className="about-links-row">
-                <a
-                  href="https://github.com/samueldervishii/cortex"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="about-link-card"
-                >
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+              <div className="about-cards-stack">
+                <div className="about-links-row">
+                  <a
+                    href="https://github.com/samueldervishii/cortex"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="about-link-card"
                   >
-                    <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />
-                  </svg>
-                  <div>
-                    <strong>Source Code - v{FRONTEND_VERSION}</strong>
-                    <span>View on GitHub</span>
-                  </div>
-                </a>
-                <a
-                  href="https://anthropic.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="about-link-card"
-                >
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />
+                    </svg>
+                    <div>
+                      <strong>Source Code - v{FRONTEND_VERSION}</strong>
+                      <span>View on GitHub</span>
+                    </div>
+                  </a>
+                  <a
+                    href="https://www.anthropic.com/news/claude-sonnet-4-6"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="about-link-card"
                   >
-                    <path d="M12 2L2 7l10 5 10-5-10-5z" />
-                    <path d="M2 17l10 5 10-5" />
-                    <path d="M2 12l10 5 10-5" />
-                  </svg>
-                  <div>
-                    <strong>Powered by Anthropic</strong>
-                    <span>Claude Sonnet 4.6</span>
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                      <path d="M2 17l10 5 10-5" />
+                      <path d="M2 12l10 5 10-5" />
+                    </svg>
+                    <div>
+                      <strong>Powered by Anthropic</strong>
+                      <span>Claude Sonnet 4.6</span>
+                    </div>
+                  </a>
+                </div>
+
+                <div
+                  className="about-link-card about-keyboard-shortcuts-card"
+                  role="region"
+                  aria-label="Keyboard shortcuts"
+                >
+                  <div className="about-keyboard-card-inner">
+                    <strong>Keyboard shortcuts</strong>
+                    <span>On macOS, use Cmd where you see Ctrl.</span>
+                    <div className="about-shortcuts-grid">
+                      {KEYBOARD_SHORTCUTS.map((s, i) => (
+                        <div key={i} className="about-shortcut">
+                          <span>{s.description}</span>
+                          <span className="about-shortcut-keys">
+                            {s.keys.map((key, j) => (
+                              <span key={j}>
+                                <kbd>{key}</kbd>
+                                {j < s.keys.length - 1 && <span>+</span>}
+                              </span>
+                            ))}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </a>
+                </div>
               </div>
             </div>
           )}

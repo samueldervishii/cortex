@@ -17,7 +17,6 @@ interface ServiceDay {
 interface UptimeService {
   id: string
   label: string
-  description: string
   current_status: ServiceStatus
   last_checked: string | null
   uptime_24h: number | null
@@ -40,10 +39,9 @@ interface UptimeResponse {
 // the current client time rather than leaving it null ("Never").
 function buildDownFallback(): UptimeResponse {
   const now = new Date().toISOString()
-  const emptyService = (id: string, label: string, description: string): UptimeService => ({
+  const emptyService = (id: string, label: string): UptimeService => ({
     id,
     label,
-    description,
     current_status: 'down',
     last_checked: now,
     uptime_24h: null,
@@ -54,10 +52,7 @@ function buildDownFallback(): UptimeResponse {
   })
   return {
     overall_status: 'down',
-    services: [
-      emptyService('api', 'API Server', 'Cortex backend'),
-      emptyService('database', 'Database', 'MongoDB Atlas'),
-    ],
+    services: [emptyService('api', 'API Server'), emptyService('database', 'Database')],
     generated_at: now,
   }
 }
@@ -69,35 +64,9 @@ const STATUS_LABEL: Record<ServiceStatus, string> = {
   unknown: 'Unknown',
 }
 
-function formatLastChecked(iso: string | null): string {
-  if (!iso) return 'Never'
-  try {
-    const date = new Date(iso)
-    const diffMs = Date.now() - date.getTime()
-    const minutes = Math.floor(diffMs / 60000)
-    if (minutes < 1) return 'Just now'
-    if (minutes < 60) return `${minutes}m ago`
-    const hours = Math.floor(minutes / 60)
-    if (hours < 24) return `${hours}h ago`
-    const days = Math.floor(hours / 24)
-    return `${days}d ago`
-  } catch {
-    return iso
-  }
-}
-
 function formatUptime(value: number | null, samples: number): string {
   if (value === null || samples === 0) return '—'
   return `${value.toFixed(2)}%`
-}
-
-function dayLabel(isoDate: string): string {
-  try {
-    const d = new Date(isoDate + 'T00:00:00Z')
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-  } catch {
-    return isoDate
-  }
 }
 
 function StatusPage() {
@@ -105,7 +74,7 @@ function StatusPage() {
   const [uptime, setUptime] = useState<UptimeResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [lastFetched, setLastFetched] = useState<Date | null>(null)
+  const [, setLastFetched] = useState<Date | null>(null)
 
   const fetchUptime = useCallback(async () => {
     try {
@@ -137,10 +106,10 @@ function StatusPage() {
     ? uptime.services.some((s) => s.current_status !== 'operational')
     : false
 
-  const bannerText: Record<ServiceStatus, { title: string; sub: string }> = {
+  const bannerText: Record<ServiceStatus, { title: string; sub: string | undefined }> = {
     operational: {
       title: 'All Systems Operational',
-      sub: 'Every tracked service is responding normally.',
+      sub: undefined,
     },
     degraded: {
       title: 'Partial Service Disruption',
@@ -152,7 +121,7 @@ function StatusPage() {
     },
     unknown: {
       title: 'Checking systems…',
-      sub: '',
+      sub: undefined,
     },
   }
 
@@ -269,15 +238,11 @@ function StatusPage() {
                   <span className={`status-service-dot status-${svc.current_status}`} />
                   <div>
                     <h4>{svc.label}</h4>
-                    <span className="status-service-desc">{svc.description}</span>
                   </div>
                 </div>
                 <div className="status-service-right">
                   <span className={`status-service-badge status-${svc.current_status}`}>
                     {STATUS_LABEL[svc.current_status]}
-                  </span>
-                  <span className="status-service-meta">
-                    Last check: {formatLastChecked(svc.last_checked)}
                   </span>
                 </div>
               </div>
@@ -300,66 +265,8 @@ function StatusPage() {
                   <span className="status-metric-value">{svc.sample_count_7d}</span>
                 </div>
               </div>
-
-              <div className="status-day-bars">
-                {svc.days.length === 0 ? (
-                  <div className="status-day-empty">
-                    {svc.current_status === 'down'
-                      ? 'No data available — service unreachable.'
-                      : 'No history yet — data appears as the scheduler collects probes.'}
-                  </div>
-                ) : (
-                  <>
-                    <div className="status-day-row">
-                      {svc.days.map((d) => (
-                        <div
-                          key={d.date}
-                          className={`status-day-cell status-${d.status}`}
-                          tabIndex={0}
-                          aria-label={`${dayLabel(d.date)} — ${STATUS_LABEL[d.status]}`}
-                        >
-                          <div className={`status-day-square status-${d.status}`} />
-                          <div className="status-day-tooltip" role="tooltip">
-                            <div className="status-day-tooltip-head">
-                              <span className={`status-day-tooltip-dot status-${d.status}`} />
-                              <strong>{dayLabel(d.date)}</strong>
-                              <span className="status-day-tooltip-status">
-                                {STATUS_LABEL[d.status]}
-                              </span>
-                            </div>
-                            <dl className="status-day-tooltip-grid">
-                              <dt>Uptime</dt>
-                              <dd>{d.uptime_pct !== null ? `${d.uptime_pct.toFixed(1)}%` : '—'}</dd>
-                              <dt>Samples</dt>
-                              <dd>{d.sample_count}</dd>
-                              {d.latency_ms !== null && (
-                                <>
-                                  <dt>Latency</dt>
-                                  <dd>{d.latency_ms}ms</dd>
-                                </>
-                              )}
-                            </dl>
-                            {d.detail && <p className="status-day-tooltip-detail">{d.detail}</p>}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="status-day-labels-row">
-                      {svc.days.map((d) => (
-                        <span key={d.date} className="status-day-label">
-                          {dayLabel(d.date)}
-                        </span>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
             </article>
           ))}
-
-          {lastFetched && (
-            <p className="status-last-updated">Last refresh: {lastFetched.toLocaleTimeString()}</p>
-          )}
         </section>
       ) : (
         <div className="status-page-loading">

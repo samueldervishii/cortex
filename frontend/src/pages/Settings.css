@@ -1015,11 +1015,42 @@
   margin-bottom: 1.25rem;
 }
 
-/* Link cards */
+/* Link cards + keyboard shortcuts */
+.about-cards-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-bottom: 1.25rem;
+}
+
 .about-links-row {
   display: flex;
   gap: 0.65rem;
-  margin-bottom: 1.25rem;
+}
+
+.about-keyboard-shortcuts-card {
+  align-items: flex-start;
+  width: 100%;
+  cursor: default;
+}
+
+.about-keyboard-shortcuts-card:hover {
+  border-color: rgba(88, 67, 39, 0.08);
+  background: rgba(255, 250, 242, 0.5);
+}
+
+.about-keyboard-shortcuts-icon {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.about-keyboard-card-inner {
+  flex: 1;
+  min-width: 0;
+}
+
+.about-keyboard-card-inner .about-shortcuts-grid {
+  margin-top: 0.65rem;
 }
 
 .about-link-card {
