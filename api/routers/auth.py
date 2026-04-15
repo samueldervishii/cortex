@@ -361,8 +361,10 @@ async def check_email(
     account enumeration.  Actual uniqueness is enforced at registration time
     (backed by a unique DB index).
     """
-    import re
-    if not email or not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+    if not email or len(email) > 254 or "@" not in email:
+        return {"available": False, "reason": "Invalid email format"}
+    local, domain = email.rsplit("@", 1)
+    if not local or not domain or " " in email or "." not in domain:
         return {"available": False, "reason": "Invalid email format"}
     return {"available": True}
 
