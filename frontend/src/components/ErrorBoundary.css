@@ -44,10 +44,12 @@
 }
 
 .error-boundary h1 {
+  font-family: var(--font-serif);
   font-size: 2rem;
-  color: var(--text-primary);
+  color: var(--ink);
   margin-bottom: 0.75rem;
   font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .error-boundary p {
@@ -114,14 +116,14 @@
 }
 
 .error-btn.primary {
-  background: var(--accent-color);
-  color: white;
+  background: var(--accent);
+  color: var(--paper);
 }
 
 .error-btn.primary:hover {
-  background: var(--accent-hover);
+  background: var(--accent-dark);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 4px 12px rgba(184, 84, 44, 0.24);
 }
 
 .error-btn.secondary {

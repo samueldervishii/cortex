@@ -15,12 +15,13 @@
 }
 
 .article-hero h1 {
+  font-family: var(--font-serif);
   font-size: 2.5rem;
-  font-weight: 700;
-  color: var(--text-primary);
+  font-weight: 600;
+  color: var(--ink);
   margin: 0;
-  line-height: 1.15;
-  letter-spacing: -0.03em;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
 }
 
 .article-hero-date {
@@ -112,9 +113,10 @@
 }
 
 .article-container h2 {
-  font-size: 1.3rem;
+  font-family: var(--font-serif);
+  font-size: 1.35rem;
   font-weight: 600;
-  color: var(--text-primary);
+  color: var(--ink);
   margin: 0 0 0.75rem 0;
   letter-spacing: -0.01em;
 }
@@ -171,11 +173,12 @@
 }
 
 .not-found h1 {
-  font-size: 5rem;
-  font-weight: 700;
-  color: var(--text-primary);
+  font-family: var(--font-serif);
+  font-size: 5.25rem;
+  font-weight: 600;
+  color: var(--ink);
   margin: 0 0 0.5rem 0;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   line-height: 1;
 }
 
@@ -200,29 +203,32 @@
 
 .not-found-btn {
   padding: 0.65rem 1.5rem;
-  border-radius: 8px;
+  border-radius: var(--radius-btn);
   font-size: 0.9rem;
   font-weight: 500;
-  font-family: inherit;
+  font-family: var(--font-sans);
   cursor: pointer;
-  transition: all 0.15s;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  color: var(--text-primary);
+  transition: all 0.12s;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  color: var(--ink-2);
 }
 
 .not-found-btn:hover {
-  background: var(--bg-hover);
+  background: var(--paper-2);
+  color: var(--ink);
+  border-color: var(--rule-2);
 }
 
 .not-found-btn.primary {
-  background: var(--text-primary);
-  border-color: var(--text-primary);
-  color: var(--bg-primary);
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--paper);
 }
 
 .not-found-btn.primary:hover {
-  opacity: 0.85;
+  background: var(--accent-dark);
+  border-color: var(--accent-dark);
 }
 
 /* ── Responsive ── */

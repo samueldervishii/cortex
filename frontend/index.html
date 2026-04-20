@@ -8,12 +8,20 @@
 
     <!-- PWA Meta Tags -->
     <meta name="description" content="A clean AI chat experience powered by Claude" />
-    <meta name="theme-color" content="#ffffff" />
+    <meta name="theme-color" content="#FAFAF7" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Cortex" />
     <link rel="manifest" href="/manifest.json" />
+
+    <!-- Fonts: Fraunces (serif), Inter (sans), JetBrains Mono (mono) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
 
     <!-- Open Graph / Social -->
     <meta property="og:title" content="Cortex" />
@@ -25,7 +33,7 @@
       /* Initial loader - shown until React mounts */
       body {
         margin: 0;
-        background: #ffffff;
+        background: #fafaf7;
       }
       .initial-loader {
         display: flex;
@@ -33,9 +41,9 @@
         align-items: center;
         justify-content: center;
         height: 100vh;
-        background: #ffffff;
-        color: #b8864a;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background: #fafaf7;
+        color: #b8542c;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       }
       .initial-loader h1 {
         font-size: 2rem;
@@ -45,8 +53,8 @@
       .loader-spinner {
         width: 40px;
         height: 40px;
-        border: 3px solid #ddd;
-        border-top-color: #b8864a;
+        border: 3px solid #e8e2d7;
+        border-top-color: #b8542c;
         border-radius: 50%;
         animation: spin 1s linear infinite;
       }

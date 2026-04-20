@@ -1,37 +1,67 @@
 ::selection {
-  background: rgba(15, 118, 110, 0.18);
+  background: rgba(184, 84, 44, 0.18);
   color: inherit;
 }
 
 :root {
-  /* ─── Color system ─── */
-  --bg-primary: #f5f3ef;
-  --bg-secondary: #ffffff;
-  --bg-tertiary: #ece7df;
-  --bg-hover: #e7e1d8;
-  --border-color: rgba(88, 67, 39, 0.16);
-  --border-hover: rgba(88, 67, 39, 0.28);
-  --border-soft: rgba(88, 67, 39, 0.08);
-  --text-primary: #171411;
-  --text-secondary: #504a42;
-  --text-muted: #7d7467;
-  --accent-color: #0f766e;
-  --accent-hover: #0b5e58;
-  --heading-color: #113533;
-  --council-bg: #f8f6f2;
-  --chairman-bg: linear-gradient(135deg, #eef4ef 0%, #f8f6f2 100%);
-  --chairman-border: rgba(15, 118, 110, 0.22);
-  --error-bg: #fff2ef;
-  --error-border: #f1c8bf;
-  --panel-bg: rgba(255, 255, 255, 0.86);
-  --panel-strong: #ffffff;
-  --panel-warm: rgba(255, 255, 255, 0.54);
-  --shadow-soft: 0 20px 60px rgba(50, 37, 17, 0.1);
-  --shadow-subtle: 0 1px 3px rgba(50, 37, 17, 0.06);
+  /* ─── Paper palette (primary tokens) ─── */
+  --paper: #fafaf7;
+  --paper-2: #f4f1ea;
+  --app-bg: #f0ece3;
+  --ink: #1a1613;
+  --ink-2: #433b32;
+  --muted: #7a7167;
+  --rule: #e8e2d7;
+  --rule-2: #d7cfc1;
+  --accent: #b8542c;
+  --accent-dark: #9a4420;
+  --accent-light: #f5e4d9;
+
+  /* Semi-transparent helpers */
+  --rule-soft: rgba(26, 22, 19, 0.06);
+  --ink-overlay: rgba(26, 22, 19, 0.25);
+  --accent-30: rgba(184, 84, 44, 0.3);
+  --accent-18: rgba(184, 84, 44, 0.18);
+
+  /* ─── Semantic aliases (keep existing ~11k lines of CSS working) ─── */
+  --bg-primary: var(--paper);
+  --bg-secondary: var(--paper);
+  --bg-tertiary: var(--paper-2);
+  --bg-hover: var(--paper-2);
+  --border-color: var(--rule);
+  --border-hover: var(--rule-2);
+  --border-soft: var(--rule-soft);
+  --text-primary: var(--ink);
+  --text-secondary: var(--ink-2);
+  --text-muted: var(--muted);
+  --accent-color: var(--accent);
+  --accent-hover: var(--accent-dark);
+  --heading-color: var(--ink);
+  --council-bg: var(--paper-2);
+  --chairman-bg: linear-gradient(135deg, var(--accent-light) 0%, var(--paper-2) 100%);
+  --chairman-border: var(--accent-30);
+  --error-bg: #fbefe7;
+  --error-border: #e9c9b6;
+  --panel-bg: rgba(250, 250, 247, 0.86);
+  --panel-strong: var(--paper);
+  --panel-warm: rgba(250, 250, 247, 0.6);
+  --shadow-soft: 0 20px 60px rgba(26, 22, 19, 0.1);
+  --shadow-subtle: 0 1px 3px rgba(26, 22, 19, 0.06);
+  --shadow-pop: 0 1px 2px rgba(26, 22, 19, 0.04), 0 8px 24px rgba(26, 22, 19, 0.08),
+    0 0 0 1px rgba(26, 22, 19, 0.06);
+  --shadow-ring: 0 0 0 3px rgba(184, 84, 44, 0.18);
 
   /* ─── Typography ─── */
-  font-family:
-    'Avenir Next', 'Segoe UI Variable', 'SF Pro Display', 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  --font-serif: 'Fraunces', ui-serif, Georgia, 'Times New Roman', serif;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* ─── Radii ─── */
+  --radius-card: 10px;
+  --radius-btn: 6px;
+  --radius-input: 4px;
+
+  font-family: var(--font-sans);
   line-height: 1.5;
   font-weight: 400;
   color-scheme: light;
@@ -47,12 +77,18 @@
   padding: 0;
 }
 
+*,
+*::before,
+*::after {
+  -webkit-font-smoothing: antialiased;
+}
+
 html,
 body,
 #root {
   height: 100%;
   width: 100%;
-  background: var(--bg-primary);
+  background: var(--paper);
 }
 
 body {
@@ -64,17 +100,16 @@ body {
   overflow-x: hidden;
   overscroll-behavior-y: none;
   -webkit-text-size-adjust: 100%;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  font-family:
-    'Avenir Next', 'Segoe UI Variable', 'SF Pro Display', 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
   transition:
     background 0.3s,
     color 0.3s;
 }
 
 button {
-  border-radius: 8px;
+  border-radius: var(--radius-btn);
   border: 1px solid transparent;
   font-size: 1em;
   font-weight: 500;
@@ -85,4 +120,79 @@ button {
 button:focus,
 button:focus-visible {
   outline: none;
+}
+
+/* ─── Paper-tone custom scrollbars ─── */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(26, 22, 19, 0.08);
+  border-radius: 10px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(26, 22, 19, 0.18);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+/* ─── kbd chips ─── */
+kbd {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  padding: 1px 5px;
+  border: 1px solid var(--rule-2);
+  border-radius: 3px;
+  background: var(--paper);
+  color: var(--ink-2);
+  box-shadow: 0 1px 0 var(--rule-2);
+  line-height: 1;
+}
+
+/* ─── Shared animations ─── */
+@keyframes cortex-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes cortex-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes cortex-caret-blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  51%,
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes cortex-typing-dot {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
 }

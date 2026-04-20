@@ -33,7 +33,7 @@
   place-items: center;
   padding: 1.5rem;
   background:
-    radial-gradient(circle at 20% 10%, rgba(15, 118, 110, 0.08), transparent 40%), var(--bg-primary);
+    radial-gradient(circle at 20% 10%, rgba(184, 84, 44, 0.08), transparent 40%), var(--bg-primary);
 }
 
 .network-error-card {
@@ -63,9 +63,11 @@
 
 .network-error-title {
   margin: 0 0 0.5rem;
-  color: var(--heading-color);
-  font-size: 1.2rem;
-  font-weight: 700;
+  font-family: var(--font-serif);
+  color: var(--ink);
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .network-error-text {
@@ -131,10 +133,10 @@
 }
 
 .network-error-btn.primary {
-  background: var(--accent-color);
-  color: #fff;
+  background: var(--accent);
+  color: var(--paper);
 }
 
 .network-error-btn.primary:hover {
-  background: var(--accent-hover);
+  background: var(--accent-dark);
 }

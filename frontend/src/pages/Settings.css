@@ -245,8 +245,8 @@
 .profile-inline-edit input:focus,
 .profile-inline-edit select:focus {
   outline: none;
-  border-color: rgba(15, 118, 110, 0.3);
-  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.06);
+  border-color: rgba(184, 84, 44, 0.3);
+  box-shadow: 0 0 0 3px rgba(184, 84, 44, 0.06);
 }
 
 .profile-inline-actions {
@@ -314,8 +314,8 @@
 
 .profile-inline-edit .settings-select:focus {
   outline: none;
-  border-color: rgba(15, 118, 110, 0.3);
-  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.06);
+  border-color: rgba(184, 84, 44, 0.3);
+  box-shadow: 0 0 0 3px rgba(184, 84, 44, 0.06);
 }
 
 /* ── Field status indicators (username/email availability) ── */
@@ -379,8 +379,8 @@
 
 .custom-select-trigger:focus {
   outline: none;
-  border-color: rgba(15, 118, 110, 0.3);
-  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.06);
+  border-color: rgba(184, 84, 44, 0.3);
+  box-shadow: 0 0 0 3px rgba(184, 84, 44, 0.06);
 }
 
 .custom-select-trigger svg {
@@ -435,7 +435,7 @@
 }
 
 .custom-select-option.selected {
-  background: rgba(15, 118, 110, 0.08);
+  background: rgba(184, 84, 44, 0.08);
   color: var(--accent-color);
   font-weight: 600;
 }
@@ -541,8 +541,8 @@
 
 .settings-field input:focus {
   outline: none;
-  border-color: rgba(15, 118, 110, 0.3);
-  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.06);
+  border-color: rgba(184, 84, 44, 0.3);
+  box-shadow: 0 0 0 3px rgba(184, 84, 44, 0.06);
 }
 
 .settings-field input::placeholder {
@@ -596,8 +596,8 @@
 
 .settings-textarea:focus {
   outline: none;
-  border-color: rgba(15, 118, 110, 0.3);
-  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.06);
+  border-color: rgba(184, 84, 44, 0.3);
+  box-shadow: 0 0 0 3px rgba(184, 84, 44, 0.06);
 }
 
 .settings-textarea::placeholder {
@@ -786,7 +786,7 @@
 }
 
 .settings-select:hover {
-  border-color: rgba(15, 118, 110, 0.2);
+  border-color: rgba(184, 84, 44, 0.2);
 }
 
 .settings-action {
@@ -1068,7 +1068,7 @@
 }
 
 .about-link-card:hover {
-  border-color: rgba(15, 118, 110, 0.15);
+  border-color: rgba(184, 84, 44, 0.15);
   background: rgba(255, 250, 242, 0.8);
 }
 
@@ -1345,12 +1345,12 @@
 }
 
 .export-format-option:hover {
-  border-color: rgba(15, 118, 110, 0.2);
+  border-color: rgba(184, 84, 44, 0.2);
 }
 
 .export-format-option.active {
-  border-color: rgba(15, 118, 110, 0.25);
-  background: rgba(15, 118, 110, 0.04);
+  border-color: rgba(184, 84, 44, 0.25);
+  background: rgba(184, 84, 44, 0.04);
 }
 
 .export-format-option input[type='radio'] {
@@ -1450,7 +1450,7 @@
     flex-shrink: 0;
     padding: 0.5rem 1rem;
     border-radius: 999px;
-    background: rgba(15, 118, 110, 0.1);
+    background: rgba(184, 84, 44, 0.1);
     color: var(--accent-color);
     min-height: 36px;
     display: inline-flex;
@@ -1458,7 +1458,7 @@
   }
 
   .profile-row-value .profile-action-link:hover:not(:disabled) {
-    background: rgba(15, 118, 110, 0.16);
+    background: rgba(184, 84, 44, 0.16);
     color: var(--accent-color);
   }
 
@@ -1522,4 +1522,160 @@
   .modal-actions {
     flex-direction: column;
   }
+}
+
+/* ── Paper redesign overrides (Settings) ─────────────────── */
+
+.settings-page {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+}
+
+.settings-title,
+.settings-section-title {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.settings-subtitle {
+  font-family: var(--font-sans);
+  color: var(--ink-2);
+}
+
+.settings-nav {
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-card);
+}
+.settings-nav-item {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  color: var(--muted);
+  border-radius: var(--radius-btn);
+}
+.settings-nav-item:hover {
+  background: var(--paper);
+  color: var(--ink-2);
+}
+.settings-nav-item.active {
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 1px 0 var(--rule);
+}
+
+.settings-card,
+.settings-block,
+.settings-section,
+.settings-panel {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-card);
+}
+
+.settings-label,
+.settings-field label,
+label.settings-label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.settings-input,
+.settings-field input,
+.settings-field select,
+.settings-field textarea {
+  font-family: var(--font-sans);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-input);
+  color: var(--ink);
+}
+.settings-input:focus,
+.settings-field input:focus,
+.settings-field select:focus,
+.settings-field textarea:focus {
+  outline: none;
+  border-color: var(--accent-30);
+  box-shadow: var(--shadow-ring);
+}
+
+.settings-btn,
+.settings-btn-primary {
+  font-family: var(--font-sans);
+  border-radius: var(--radius-btn);
+  font-weight: 500;
+  transition:
+    background 0.12s,
+    border-color 0.12s,
+    color 0.12s;
+}
+.settings-btn-primary {
+  background: var(--accent);
+  color: var(--paper);
+  border: 1px solid var(--accent);
+}
+.settings-btn-primary:hover:not(:disabled) {
+  background: var(--accent-dark);
+  border-color: var(--accent-dark);
+}
+
+.settings-btn-secondary,
+.settings-btn.secondary {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  color: var(--ink-2);
+}
+.settings-btn-secondary:hover:not(:disabled),
+.settings-btn.secondary:hover:not(:disabled) {
+  background: var(--paper-2);
+  color: var(--ink);
+  border-color: var(--rule-2);
+}
+
+.settings-btn-danger,
+.settings-btn.danger {
+  background: #b91c1c;
+  color: var(--paper);
+  border: 1px solid #b91c1c;
+}
+.settings-btn-danger:hover:not(:disabled),
+.settings-btn.danger:hover:not(:disabled) {
+  background: #8a1414;
+  border-color: #8a1414;
+}
+
+.settings-header,
+.settings-card-header,
+.settings-block h2,
+.settings-block h3,
+.settings-card h2,
+.settings-card h3 {
+  font-family: var(--font-serif);
+  color: var(--ink);
+  letter-spacing: -0.005em;
+  font-weight: 600;
+}
+
+.modal,
+.settings-modal {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-pop);
+  font-family: var(--font-sans);
+  color: var(--ink);
+}
+.modal h2,
+.modal h3,
+.settings-modal h2,
+.settings-modal h3 {
+  font-family: var(--font-serif);
+  letter-spacing: -0.005em;
+  color: var(--ink);
 }
