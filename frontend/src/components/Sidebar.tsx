@@ -410,7 +410,7 @@ function Sidebar({
             <>
               <div className="sidebar-brand-main">
                 <div className="sidebar-logo">
-                  <img src="/logo.svg" alt="Cortex" className="sidebar-logo-icon" />
+                  {/* <img src="/logo.svg" alt="Cortex" className="sidebar-logo-icon" /> */}
                   <div className="sidebar-logo-copy">
                     <span className="sidebar-logo-title">
                       Cortex - <span className="sidebar-logo-subtitle">Research workspace</span>

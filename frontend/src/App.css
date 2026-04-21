@@ -6246,9 +6246,11 @@ button.message-file-badge:hover {
   box-shadow: 0 4px 12px rgba(184, 84, 44, 0.18);
 }
 
-/* Desktop: hide profile from top bar (lives in sidebar) */
-@media (min-width: 769px) {
-  .top-bar-mobile-only {
+/* Laptop+: sidebar rail is always visible, so hide the hamburger. */
+/* Uses a compound selector to out-rank `.menu-btn { display: flex }` defined later in the file. */
+@media (min-width: 1024px) {
+  .top-bar-mobile-only,
+  .menu-btn.top-bar-mobile-only {
     display: none;
   }
 }
@@ -8186,9 +8188,8 @@ button.message-file-badge:hover {
   width: 28px;
   height: 28px;
   border-radius: var(--radius-btn);
-  background: var(--ink);
+  background: transparent;
   padding: 4px;
-  filter: brightness(1.4) saturate(0);
 }
 
 .sidebar-logo-copy {
@@ -8620,12 +8621,12 @@ button.message-file-badge:hover {
 }
 
 .sidebar-rail-btn-primary {
-  background: var(--ink);
-  color: var(--paper);
+  background: transparent;
+  color: var(--ink);
 }
 .sidebar-rail-btn-primary:hover {
-  background: var(--ink-2);
-  color: var(--paper);
+  background: var(--paper-2);
+  color: var(--ink);
 }
 
 .sidebar-collapsed-logo-btn {
@@ -8633,19 +8634,18 @@ button.message-file-badge:hover {
   height: 32px;
   margin: 10px auto 0;
   padding: 0;
-  background: var(--ink);
-  color: var(--paper);
+  background: transparent;
+  color: var(--ink);
 }
 .sidebar-collapsed-logo-btn .sidebar-logo-icon {
   width: 22px;
   height: 22px;
   background: transparent;
   padding: 0;
-  filter: brightness(2) saturate(0);
 }
 
 .sidebar-collapsed-logo-btn .logo-hover-icon {
-  color: var(--paper);
+  color: var(--ink);
 }
 
 /* ── Top bar ───────────────────────────────────────────────── */

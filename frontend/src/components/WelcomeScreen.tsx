@@ -41,15 +41,7 @@ const SUGGESTIONS = [
     description: 'Tighten clarity, flow, and academic tone across your existing writing.',
     prompt:
       'Help me improve the clarity, structure, and academic tone of my draft. I will paste it next.',
-  },
-  {
-    eyebrow: 'Reply',
-    icon: Envelope,
-    title: 'Generate a polished response',
-    description: 'Turn rough notes into a clear, well-structured email or formal reply.',
-    prompt:
-      'Help me write a polished email reply to a professor asking for a deadline extension on my research paper.',
-  },
+  }
 ]
 
 function WelcomeScreen({
@@ -125,9 +117,6 @@ function WelcomeScreen({
           <span className="welcome-heading-static">Hi there, {firstName}</span>
           <span className="welcome-heading-gradient">What should we research today?</span>
         </h1>
-        <p className="welcome-subheading">
-          Use one of the starter prompts below or describe your question in your own words to begin.
-        </p>
       </div>
 
       <div className="welcome-suggestions">
