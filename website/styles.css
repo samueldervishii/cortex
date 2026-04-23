@@ -1410,16 +1410,39 @@ main,
 
   .footer-brand-col {
     max-width: none;
+    align-items: center;
+    text-align: center;
+  }
+
+  .footer-brand-col .footer-brand,
+  .footer-brand-col .footer-tagline {
+    align-self: center;
   }
 
   .footer-cols {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 1rem;
+    gap: 1.25rem 0.75rem;
+  }
+
+  .footer-col {
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .footer-col h4 {
+    font-size: 0.68rem;
+    letter-spacing: 0.14em;
+    margin-bottom: 0.2rem;
+  }
+
+  .footer-col a {
+    font-size: 0.88rem;
   }
 
   .footer-bottom {
     justify-content: center;
     text-align: center;
+    gap: 0.5rem 1rem;
   }
 
   /* Center-align the main content blocks on phones. Cards keep their
@@ -1588,9 +1611,12 @@ main,
   }
 }
 
-@media (max-width: 480px) {
+@media (max-width: 420px) {
   .footer-cols {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 1.5rem 1rem;
+    gap: 1rem 0.5rem;
+  }
+
+  .footer-col a {
+    font-size: 0.84rem;
   }
 }
