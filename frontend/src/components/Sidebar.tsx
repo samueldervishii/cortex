@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, memo } from 'react'
+import { createPortal } from 'react-dom'
 import { Link, useNavigate } from 'react-router-dom'
 import { PushPinIcon as Pin } from '@phosphor-icons/react/PushPin'
 import { PencilSimpleIcon as Edit2 } from '@phosphor-icons/react/PencilSimple'
@@ -630,58 +631,62 @@ function Sidebar({
         )}
       </div>
 
-      {deleteConfirm.open && (
-        <div className="delete-modal-overlay" onClick={cancelDelete}>
-          <div className="delete-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="delete-modal-icon">
-              <X size={24} />
+      {deleteConfirm.open &&
+        createPortal(
+          <div className="delete-modal-overlay" onClick={cancelDelete}>
+            <div className="delete-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="delete-modal-icon">
+                <X size={24} />
+              </div>
+              <h3>Delete Chat?</h3>
+              <p>
+                Are you sure you want to delete{' '}
+                <strong>"{truncateQuestion(deleteConfirm.title, 30)}"</strong>? This action cannot be
+                undone.
+              </p>
+              <div className="delete-modal-actions">
+                <button className="delete-cancel" onClick={cancelDelete}>
+                  Cancel
+                </button>
+                <button className="delete-confirm" onClick={handleDelete}>
+                  Delete
+                </button>
+              </div>
             </div>
-            <h3>Delete Chat?</h3>
-            <p>
-              Are you sure you want to delete{' '}
-              <strong>"{truncateQuestion(deleteConfirm.title, 30)}"</strong>? This action cannot be
-              undone.
-            </p>
-            <div className="delete-modal-actions">
-              <button className="delete-cancel" onClick={cancelDelete}>
-                Cancel
-              </button>
-              <button className="delete-confirm" onClick={handleDelete}>
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
 
-      {shareModal.open && (
-        <div
-          className="share-modal-overlay"
-          onClick={() => setShareModal({ open: false, url: '', loading: false })}
-        >
-          <div className="share-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="share-modal-header">
-              <h3>Share Session</h3>
-              <button onClick={() => setShareModal({ open: false, url: '', loading: false })}>
-                <X size={20} />
-              </button>
+      {shareModal.open &&
+        createPortal(
+          <div
+            className="share-modal-overlay"
+            onClick={() => setShareModal({ open: false, url: '', loading: false })}
+          >
+            <div className="share-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="share-modal-header">
+                <h3>Share Session</h3>
+                <button onClick={() => setShareModal({ open: false, url: '', loading: false })}>
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="share-modal-content">
+                {shareModal.loading ? (
+                  <p>Generating share link...</p>
+                ) : (
+                  <>
+                    <p>Anyone with this link can view this session:</p>
+                    <div className="share-url-container">
+                      <input type="text" value={shareModal.url} readOnly />
+                      <button onClick={copyToClipboard}>Copy</button>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
-            <div className="share-modal-content">
-              {shareModal.loading ? (
-                <p>Generating share link...</p>
-              ) : (
-                <>
-                  <p>Anyone with this link can view this session:</p>
-                  <div className="share-url-container">
-                    <input type="text" value={shareModal.url} readOnly />
-                    <button onClick={copyToClipboard}>Copy</button>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   )
 }

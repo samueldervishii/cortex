@@ -15,26 +15,38 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <nav class="nav">
+    <nav class="nav" aria-label="Primary">
       <a href="index.html" class="nav-brand">
         <img src="assets/logo.svg" alt="" />
-        Cortex
+        <span>Cortex</span>
       </a>
       <div class="nav-links">
         <a href="about.html">About</a>
         <a href="personalization.html">Help</a>
-        <a href="privacy-policy.html">Privacy</a>
-        <a href="terms-of-service.html">Terms</a>
-        <a href="usage-policy.html">Usage Policy</a>
         <a href="support.html">Support</a>
+        <span class="nav-divider" aria-hidden="true"></span>
+        <a
+          href="https://github.com/samueldervishii/cortex"
+          class="nav-icon"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="GitHub"
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path
+              d="M12 .5C5.73.5.67 5.57.67 11.84c0 5.02 3.25 9.27 7.76 10.77.57.1.78-.25.78-.55 0-.27-.01-1.16-.02-2.1-3.16.69-3.82-1.35-3.82-1.35-.52-1.32-1.27-1.67-1.27-1.67-1.04-.71.08-.69.08-.69 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.68 1.25 3.34.96.1-.74.4-1.25.73-1.54-2.52-.29-5.18-1.26-5.18-5.6 0-1.24.44-2.25 1.17-3.04-.12-.29-.51-1.45.11-3.02 0 0 .96-.31 3.14 1.16.91-.25 1.89-.38 2.86-.38.97 0 1.95.13 2.86.38 2.18-1.47 3.14-1.16 3.14-1.16.62 1.57.23 2.73.11 3.02.73.79 1.17 1.8 1.17 3.04 0 4.35-2.67 5.31-5.2 5.59.41.35.77 1.04.77 2.11 0 1.52-.01 2.75-.01 3.12 0 .3.21.66.79.55 4.5-1.5 7.75-5.75 7.75-10.77C23.33 5.57 18.27.5 12 .5z"
+            />
+          </svg>
+        </a>
         <a href="https://cortex-al-app.vercel.app/login" class="nav-cta">
-          Try Cortex
+          Open Cortex
           <svg
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
             stroke-width="2"
             stroke-linecap="round"
+            aria-hidden="true"
           >
             <path d="M5 12h14M12 5l7 7-7 7" />
           </svg>
@@ -42,17 +54,17 @@
       </div>
       <button class="nav-toggle" aria-label="Menu">
         <svg
-          width="24"
-          height="24"
+          width="20"
+          height="20"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
           stroke-width="2"
           stroke-linecap="round"
+          aria-hidden="true"
         >
-          <line x1="3" y1="6" x2="21" y2="6" />
-          <line x1="3" y1="12" x2="21" y2="12" />
-          <line x1="3" y1="18" x2="21" y2="18" />
+          <line x1="4" y1="8" x2="20" y2="8" />
+          <line x1="4" y1="16" x2="20" y2="16" />
         </svg>
       </button>
     </nav>
@@ -121,25 +133,55 @@
 
     <footer class="footer">
       <div class="footer-inner">
-        <a href="index.html" class="footer-brand">
-          <img src="assets/logo.svg" alt="" />
-          Cortex
-        </a>
-        <div class="footer-links">
-          <a href="about.html">About</a>
-          <a href="personalization.html">Help</a>
-          <a href="privacy-policy.html">Privacy Policy</a>
-          <a href="terms-of-service.html">Terms of Service</a>
-          <a href="usage-policy.html">Usage Policy</a>
-          <a href="support.html">Support</a>
-          <a
-            href="https://github.com/samueldervishii/cortex"
-            target="_blank"
-            rel="noopener noreferrer"
-            >GitHub</a
-          >
+        <div class="footer-top">
+          <div class="footer-brand-col">
+            <a href="index.html" class="footer-brand">
+              <img src="assets/logo.svg" alt="" />
+              <span>Cortex</span>
+            </a>
+            <p class="footer-tagline">
+              A calmer AI workspace for students, researchers, and anyone who
+              would rather be writing than wrestling with tools.
+            </p>
+            <a
+              href="https://cortex-al-app.vercel.app/status"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="footer-status"
+            >
+              <span class="footer-status-dot" aria-hidden="true"></span>
+              All systems normal
+            </a>
+          </div>
+          <div class="footer-cols">
+            <div class="footer-col">
+              <h4>Product</h4>
+              <a href="index.html">Overview</a>
+              <a href="personalization.html">Help</a>
+              <a href="https://cortex-al-app.vercel.app/login">Open app</a>
+            </div>
+            <div class="footer-col">
+              <h4>Resources</h4>
+              <a href="about.html">About</a>
+              <a href="support.html">Support</a>
+              <a
+                href="https://github.com/samueldervishii/cortex"
+                target="_blank"
+                rel="noopener noreferrer"
+                >GitHub</a
+              >
+            </div>
+            <div class="footer-col">
+              <h4>Legal</h4>
+              <a href="privacy-policy.html">Privacy</a>
+              <a href="terms-of-service.html">Terms</a>
+              <a href="usage-policy.html">Usage policy</a>
+            </div>
+          </div>
         </div>
-        <span class="footer-copy">&copy; 2026 Cortex. </span>
+        <div class="footer-bottom">
+          <span class="footer-copy">&copy; 2026 Cortex</span>
+        </div>
       </div>
     </footer>
     <script src="assets/nav.js" defer></script>

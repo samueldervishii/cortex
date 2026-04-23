@@ -30,4 +30,18 @@
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") setOpen(false);
   });
+
+  const current = (location.pathname.split("/").pop() || "index.html").toLowerCase();
+  links.querySelectorAll("a[href]").forEach((link) => {
+    const href = (link.getAttribute("href") || "").toLowerCase();
+    if (!href || href.startsWith("http") || href.startsWith("#")) return;
+    const target = href.split("/").pop();
+    if (target === current) link.setAttribute("aria-current", "page");
+  });
+
+  const setScrolled = () => {
+    nav.classList.toggle("is-scrolled", window.scrollY > 12);
+  };
+  setScrolled();
+  window.addEventListener("scroll", setScrolled, { passive: true });
 })();

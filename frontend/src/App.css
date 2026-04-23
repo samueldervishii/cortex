@@ -10134,12 +10134,12 @@ button.message-file-badge:hover {
     gap: 6px;
   }
   .model-selector.topbar .model-selector-trigger {
-    max-width: 180px;
+    max-width: none;
     padding: 0 10px;
   }
   .model-selector.topbar .model-selector-name {
-    overflow: hidden;
-    text-overflow: ellipsis;
+    overflow: visible;
+    text-overflow: clip;
     white-space: nowrap;
   }
   .top-bar-title-block .top-bar-session-title {
