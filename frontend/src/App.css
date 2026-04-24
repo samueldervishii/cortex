@@ -890,7 +890,7 @@
     max-width: 100%;
   }
 
-  .message-header {
+  .message .message-header {
     flex-direction: column;
     align-items: flex-start;
     gap: 0.3rem;
@@ -906,8 +906,12 @@
 
   /* Input */
   .input-container.bottom {
-    padding: 0.5rem;
-    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+    padding: 0.5rem 0.5rem 0;
+  }
+
+  .input-footer-note {
+    margin: 4px 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
   }
 
   .input-wrapper {
