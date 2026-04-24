@@ -224,7 +224,7 @@ function Message({
     return (
       <div className="message assistant message-artifact">
         <div className="message-avatar message-avatar-cortex" aria-hidden="true">
-          <img src="/logo.svg" alt="" />
+          <img src="/IMG_6935.png" alt="" />
         </div>
         <div className="message-body">
           <div className="message-header">
@@ -279,7 +279,7 @@ function Message({
   return (
     <div className="message assistant">
       <div className="message-avatar message-avatar-cortex" aria-hidden="true">
-        <img src="/logo.svg" alt="" />
+        <img src="/IMG_6935.png" alt="" />
       </div>
       <div className="message-body message-assistant-content">
         <div className="message-header">

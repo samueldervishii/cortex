@@ -943,7 +943,7 @@ function Settings() {
           {activeTab === 'about' && (
             <div className="settings-section">
               <div className="about-brand">
-                <img src="/logo.svg" alt="" className="about-logo" />
+                <img src="/IMG_6935.png" alt="" className="about-logo" />
                 <h2 className="about-title">Cortex</h2>
               </div>
               <p className="about-desc">
