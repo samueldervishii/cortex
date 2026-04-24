@@ -411,7 +411,7 @@ function Sidebar({
             <>
               <div className="sidebar-brand-main">
                 <div className="sidebar-logo">
-                  {/* <img src="/logo.svg" alt="Cortex" className="sidebar-logo-icon" /> */}
+                  {/* <img src="/IMG_6935.png" alt="Cortex" className="sidebar-logo-icon" /> */}
                   <div className="sidebar-logo-copy">
                     <span className="sidebar-logo-title">
                       Cortex - <span className="sidebar-logo-subtitle">Research workspace</span>
@@ -425,7 +425,7 @@ function Sidebar({
             </>
           ) : (
             <button className="sidebar-collapsed-logo-btn" onClick={onClose} title="Open sidebar">
-              <img src="/logo.svg" alt="Cortex" className="sidebar-logo-icon logo-default" />
+              <img src="/IMG_6935.png" alt="Cortex" className="sidebar-logo-icon logo-default" />
               <TextIndent size={18} className="logo-hover-icon" />
             </button>
           )}

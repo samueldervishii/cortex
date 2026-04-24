@@ -119,7 +119,7 @@ function AuthPage() {
         <div className="auth-left-content">
           <div className="auth-brand">
             <div className="auth-brand-row">
-              <img src="/logo.svg" alt="" className="auth-logo" />
+              <img src="/IMG_6935.png" alt="" className="auth-logo" />
               <span className="auth-brand-name">Cortex</span>
             </div>
             <h1 className="auth-headline">
