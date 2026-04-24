@@ -10436,6 +10436,14 @@ button.message-file-badge:hover {
   .message.assistant .message-assistant-content {
     padding-left: 12px;
   }
+  /* Stack the role label + model pill + response time vertically on
+   * the left, overriding the later desktop rule that otherwise wins
+   * the cascade despite our earlier mobile override. */
+  .message .message-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════
