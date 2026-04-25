@@ -4745,7 +4745,8 @@ button.message-file-badge:hover {
 .status-page {
   max-width: 720px;
   margin: 0 auto;
-  padding: 2rem 1.5rem;
+  padding: calc(2rem + env(safe-area-inset-top)) 1.5rem
+    calc(2rem + env(safe-area-inset-bottom));
   min-height: 100vh;
   min-height: 100dvh;
   background: var(--bg-primary);
@@ -10593,4 +10594,166 @@ button.message-file-badge:hover {
   .skeleton-message .skeleton-line-short {
     max-width: 100%;
   }
+}
+
+/* ========================================================================== */
+/* Dark theme surface overrides                                               */
+/*                                                                            */
+/* Most of the app is driven by semantic CSS variables (overridden in         */
+/* index.css), so dark mode "just works" for those rules. The block below     */
+/* patches the remaining places where translucent paper/white tints are       */
+/* hardcoded as rgba() — they look right on a paper background but burn       */
+/* white on a dark one.                                                       */
+/* ========================================================================== */
+html[data-theme='dark'] .chat-content {
+  border-left-color: var(--rule);
+}
+
+html[data-theme='dark'] .top-bar {
+  background: rgba(26, 22, 19, 0.72);
+  border-bottom-color: var(--rule);
+}
+
+html[data-theme='dark'] .top-bar.ghost-mode {
+  background: linear-gradient(180deg, var(--paper-2) 0%, var(--paper) 100%);
+}
+
+html[data-theme='dark'] .menu-btn,
+html[data-theme='dark'] .new-chat-btn,
+html[data-theme='dark'] .top-bar-action,
+html[data-theme='dark'] .top-bar-icon-btn,
+html[data-theme='dark'] .model-selector-trigger {
+  background: rgba(244, 236, 223, 0.04);
+  border-color: var(--rule);
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .menu-btn:hover,
+html[data-theme='dark'] .new-chat-btn:hover,
+html[data-theme='dark'] .top-bar-action:hover,
+html[data-theme='dark'] .top-bar-icon-btn:hover,
+html[data-theme='dark'] .model-selector-trigger:hover {
+  background: rgba(244, 236, 223, 0.08);
+  border-color: var(--rule-2);
+}
+
+html[data-theme='dark'] .sidebar,
+html[data-theme='dark'] .sidebar-rail {
+  background: var(--paper);
+  border-color: var(--rule);
+}
+
+html[data-theme='dark'] .session-item,
+html[data-theme='dark'] .sidebar-session,
+html[data-theme='dark'] .session-card {
+  background: transparent;
+}
+
+html[data-theme='dark'] .session-item:hover,
+html[data-theme='dark'] .sidebar-session:hover,
+html[data-theme='dark'] .session-card:hover {
+  background: rgba(244, 236, 223, 0.05);
+}
+
+html[data-theme='dark'] .session-item.active,
+html[data-theme='dark'] .sidebar-session.active,
+html[data-theme='dark'] .session-card.active {
+  background: rgba(244, 236, 223, 0.08);
+}
+
+html[data-theme='dark'] .chat-input-wrapper,
+html[data-theme='dark'] .chat-input-bar,
+html[data-theme='dark'] .chat-input-container,
+html[data-theme='dark'] .chat-input {
+  background: rgba(244, 236, 223, 0.04);
+  border-color: var(--rule);
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .chat-input::placeholder {
+  color: var(--muted);
+}
+
+html[data-theme='dark'] .message,
+html[data-theme='dark'] .message-bubble,
+html[data-theme='dark'] .message-content {
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .message.user,
+html[data-theme='dark'] .message-user .message-bubble {
+  background: rgba(244, 236, 223, 0.06);
+  border-color: var(--rule);
+}
+
+html[data-theme='dark'] .welcome-screen,
+html[data-theme='dark'] .welcome-card,
+html[data-theme='dark'] .quick-action {
+  background: rgba(244, 236, 223, 0.04);
+  border-color: var(--rule);
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .quick-action:hover {
+  background: rgba(244, 236, 223, 0.08);
+  border-color: var(--rule-2);
+}
+
+html[data-theme='dark'] .modal-overlay {
+  background: rgba(0, 0, 0, 0.65);
+}
+
+html[data-theme='dark'] .modal,
+html[data-theme='dark'] .settings-modal,
+html[data-theme='dark'] .command-palette,
+html[data-theme='dark'] .feedback-modal,
+html[data-theme='dark'] .keyboard-shortcuts-modal {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  color: var(--ink);
+}
+
+html[data-theme='dark'] code,
+html[data-theme='dark'] pre {
+  background: rgba(244, 236, 223, 0.06);
+}
+
+html[data-theme='dark'] .status-overall-icon {
+  background: rgba(244, 236, 223, 0.06);
+}
+
+html[data-theme='dark'] .status-incident-banner {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.3);
+  color: #f3c477;
+}
+
+html[data-theme='dark'] .status-overall-card {
+  background: rgba(47, 204, 102, 0.08);
+  border-color: rgba(47, 204, 102, 0.22);
+}
+
+html[data-theme='dark'] .status-overall-card.status-degraded {
+  background: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.25);
+}
+
+html[data-theme='dark'] .status-overall-card.status-down {
+  background: rgba(220, 38, 38, 0.1);
+  border-color: rgba(220, 38, 38, 0.28);
+}
+
+html[data-theme='dark'] .status-overall-card.status-unknown {
+  background: rgba(244, 236, 223, 0.04);
+  border-color: var(--rule);
+}
+
+html[data-theme='dark'] .status-service-card {
+  background: rgba(244, 236, 223, 0.03);
+  border: 1px solid var(--rule);
+}
+
+html[data-theme='dark'] .top-bar-brand-link,
+html[data-theme='dark'] .top-bar-brand {
+  color: var(--ink);
 }

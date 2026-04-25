@@ -1690,3 +1690,176 @@ label.settings-label {
   letter-spacing: -0.005em;
   color: var(--ink);
 }
+
+/* ─── Theme toggle ─── */
+.theme-toggle-group {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+  max-width: 480px;
+}
+
+.theme-toggle-option {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 0.85rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s,
+    box-shadow 0.15s;
+}
+
+.theme-toggle-option:hover {
+  border-color: var(--border-hover);
+}
+
+.theme-toggle-option.active {
+  border-color: var(--accent-color);
+  background: var(--accent-light);
+  box-shadow: 0 0 0 1px var(--accent-color) inset;
+}
+
+.theme-toggle-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  flex-shrink: 0;
+}
+
+.theme-swatch-light {
+  background: linear-gradient(135deg, #fafaf7 50%, #f0ece3 50%);
+}
+
+.theme-swatch-dark {
+  background: linear-gradient(135deg, #1a1613 50%, #2c241d 50%);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.theme-swatch-system {
+  background: linear-gradient(135deg, #fafaf7 50%, #1a1613 50%);
+}
+
+.theme-toggle-label {
+  font-weight: 500;
+}
+
+@media (max-width: 600px) {
+  .theme-toggle-group {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ─── Dark theme: settings page surfaces ─── */
+html[data-theme='dark'] .settings-page {
+  background: var(--app-bg);
+}
+
+html[data-theme='dark'] .settings-nav-item {
+  color: var(--text-secondary);
+}
+
+html[data-theme='dark'] .settings-nav-item:hover {
+  background: rgba(244, 236, 223, 0.05);
+  color: var(--text-primary);
+}
+
+html[data-theme='dark'] .settings-nav-item.active {
+  background: rgba(244, 236, 223, 0.08);
+  color: var(--text-primary);
+}
+
+html[data-theme='dark'] .settings-option,
+html[data-theme='dark'] .settings-action,
+html[data-theme='dark'] .profile-row,
+html[data-theme='dark'] .profile-table,
+html[data-theme='dark'] .usage-card,
+html[data-theme='dark'] .usage-meter,
+html[data-theme='dark'] .about-link-card,
+html[data-theme='dark'] .about-keyboard-shortcuts-card,
+html[data-theme='dark'] .export-format-option {
+  background: rgba(244, 236, 223, 0.04);
+  border-color: var(--rule);
+}
+
+html[data-theme='dark'] .settings-action.danger {
+  background: rgba(220, 38, 38, 0.06);
+  border-color: rgba(220, 38, 38, 0.22);
+}
+
+html[data-theme='dark'] .settings-select,
+html[data-theme='dark'] .settings-textarea,
+html[data-theme='dark'] .profile-inline-edit input,
+html[data-theme='dark'] .settings-password-form input,
+html[data-theme='dark'] .settings-delete-form input,
+html[data-theme='dark'] .custom-select-trigger {
+  background: rgba(244, 236, 223, 0.04);
+  border-color: var(--rule);
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .settings-select:hover,
+html[data-theme='dark'] .custom-select-trigger:hover {
+  border-color: var(--rule-2);
+}
+
+html[data-theme='dark'] .custom-select-menu {
+  background: var(--paper);
+  border-color: var(--rule);
+}
+
+html[data-theme='dark'] .custom-select-option:hover {
+  background: rgba(244, 236, 223, 0.06);
+}
+
+html[data-theme='dark'] .custom-select-option.selected {
+  background: var(--accent-light);
+  color: var(--accent-color);
+}
+
+html[data-theme='dark'] .settings-divider {
+  background: var(--rule);
+}
+
+html[data-theme='dark'] .profile-value-pill {
+  background: rgba(244, 236, 223, 0.06);
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .profile-action-link {
+  color: var(--accent-color);
+}
+
+html[data-theme='dark'] .modal,
+html[data-theme='dark'] .settings-modal {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .modal-checkbox {
+  background: rgba(244, 236, 223, 0.04);
+  border-color: var(--rule);
+}
+
+html[data-theme='dark'] .theme-toggle-option {
+  background: rgba(244, 236, 223, 0.04);
+}
+
+html[data-theme='dark'] .theme-toggle-option.active {
+  background: rgba(217, 112, 73, 0.18);
+  box-shadow: 0 0 0 1px var(--accent-color) inset;
+}
+
+html[data-theme='dark'] .theme-toggle-swatch {
+  border-color: rgba(244, 236, 223, 0.18);
+}

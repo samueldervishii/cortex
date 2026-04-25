@@ -4,6 +4,7 @@ import { ArrowLeftIcon as ArrowLeft } from '@phosphor-icons/react/ArrowLeft'
 import { Keyboard as KeyboardIcon } from '@phosphor-icons/react/Keyboard'
 import { useAuth } from '../contexts/AuthContext'
 import { useUsage } from '../contexts/UsageContext'
+import { useTheme, type ThemeMode } from '../contexts/ThemeContext'
 import useTitle from '../hooks/useTitle'
 import { useToast } from '../contexts/ToastContext'
 import { FRONTEND_VERSION, apiClient } from '../config/api'
@@ -47,6 +48,7 @@ function Settings() {
   useTitle('Settings')
   const { user, updateProfile, regenerateAvatar, changePassword, deleteAccount } = useAuth() as any
   const { showToast } = useToast()
+  const { theme, setTheme } = useTheme()
   const {
     current: usageCurrent,
     history: usageHistory,
@@ -665,6 +667,40 @@ function Settings() {
                   >
                     {profileSaving ? 'Saving...' : 'Save changes'}
                   </button>
+                </div>
+              </div>
+
+              <div className="settings-divider" />
+              <div className="settings-section">
+                <h2>Appearance</h2>
+                <p className="settings-field-hint" style={{ marginTop: '-0.25rem' }}>
+                  Choose how Cortex looks. "System" follows your device setting.
+                </p>
+                <div
+                  className="theme-toggle-group"
+                  role="radiogroup"
+                  aria-label="Theme preference"
+                >
+                  {(['light', 'dark', 'system'] as ThemeMode[]).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      role="radio"
+                      aria-checked={theme === mode}
+                      className={`theme-toggle-option ${theme === mode ? 'active' : ''}`}
+                      onClick={() => {
+                        setTheme(mode)
+                        showToast(
+                          `Theme set to ${mode === 'system' ? 'system default' : mode}`
+                        )
+                      }}
+                    >
+                      <span className={`theme-toggle-swatch theme-swatch-${mode}`} aria-hidden />
+                      <span className="theme-toggle-label">
+                        {mode === 'light' ? 'Light' : mode === 'dark' ? 'Dark' : 'System'}
+                      </span>
+                    </button>
+                  ))}
                 </div>
               </div>
 
