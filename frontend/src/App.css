@@ -10757,3 +10757,545 @@ html[data-theme='dark'] .top-bar-brand-link,
 html[data-theme='dark'] .top-bar-brand {
   color: var(--ink);
 }
+
+/* ========================================================================== */
+/* Dark theme — comprehensive surface patches                                 */
+/*                                                                            */
+/* The block below replaces every hardcoded paper-toned tint in the rest of   */
+/* App.css that doesn't respond to CSS variables. Translucent whites turn     */
+/* into low-alpha cream tints, and brown borders/dividers fall back to the    */
+/* semantic --rule tokens so the whole UI reads as a single dark surface      */
+/* instead of an off-white sidebar floating in a black void.                  */
+/* ========================================================================== */
+
+/* Main app background — replace warm paper gradient with neutral dark wash */
+html[data-theme='dark'] .chat-app,
+html[data-theme='dark'] .app,
+html[data-theme='dark'] .app-shell {
+  background: linear-gradient(180deg, var(--paper) 0%, var(--app-bg) 100%);
+}
+
+html[data-theme='dark'] .chat-body {
+  background:
+    radial-gradient(circle at top left, rgba(201, 106, 69, 0.05), transparent 32%),
+    linear-gradient(180deg, var(--app-bg) 0%, var(--paper) 100%);
+}
+
+html[data-theme='dark'] .chat-content {
+  border-left-color: var(--rule);
+  border-right-color: var(--rule);
+}
+
+/* Top bar polish */
+html[data-theme='dark'] .top-bar {
+  background: rgba(28, 25, 22, 0.78);
+  border-bottom-color: var(--rule);
+  backdrop-filter: blur(10px);
+}
+
+html[data-theme='dark'] .menu-btn:hover,
+html[data-theme='dark'] .top-bar-icon-btn:hover {
+  background: rgba(236, 228, 214, 0.06);
+  border-color: var(--rule-2);
+}
+
+html[data-theme='dark'] .top-bar-icon-btn.active,
+html[data-theme='dark'] .top-bar-icon-btn[aria-pressed='true'] {
+  background: rgba(201, 106, 69, 0.14);
+  border-color: rgba(201, 106, 69, 0.22);
+  color: var(--accent-color);
+}
+
+html[data-theme='dark'] .top-bar-ghost-label {
+  background: rgba(236, 228, 214, 0.06);
+  color: var(--text-secondary);
+}
+
+/* ─── Sidebar shell + every translucent-white surface inside it ─── */
+html[data-theme='dark'] .sidebar-shell {
+  background: linear-gradient(180deg, var(--paper) 0%, var(--app-bg) 100%);
+  border-right: 1px solid var(--rule);
+}
+
+html[data-theme='dark'] .sidebar-overlay {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+html[data-theme='dark'] .sidebar-divider {
+  background: rgba(236, 228, 214, 0.08);
+}
+
+html[data-theme='dark'] .sidebar-meta-badge {
+  background: rgba(201, 106, 69, 0.12);
+  color: var(--accent-color);
+}
+
+html[data-theme='dark'] .sidebar-nav-item {
+  background: rgba(236, 228, 214, 0.04);
+  border-color: var(--rule);
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .sidebar-nav-item:hover {
+  background: rgba(236, 228, 214, 0.07);
+  border-color: var(--rule-2);
+}
+
+html[data-theme='dark'] .sidebar-nav-item-primary {
+  background: rgba(201, 106, 69, 0.12);
+  border-color: rgba(201, 106, 69, 0.2);
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .sidebar-nav-item-primary:hover {
+  background: rgba(201, 106, 69, 0.18);
+  border-color: rgba(201, 106, 69, 0.28);
+}
+
+html[data-theme='dark'] .sidebar-search {
+  background: rgba(236, 228, 214, 0.04);
+  border-color: var(--rule);
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .sidebar-search input {
+  color: var(--ink);
+  background: transparent;
+}
+
+html[data-theme='dark'] .sidebar-search input::placeholder {
+  color: var(--muted);
+}
+
+html[data-theme='dark'] .sidebar-search-hint {
+  background: rgba(236, 228, 214, 0.07);
+  color: var(--text-muted);
+}
+
+html[data-theme='dark'] .sidebar-search-quick {
+  background: rgba(236, 228, 214, 0.04);
+  border-color: var(--rule);
+  color: var(--text-secondary);
+}
+
+html[data-theme='dark'] .sidebar-search-quick:hover {
+  background: rgba(236, 228, 214, 0.08);
+  color: var(--text-primary);
+}
+
+html[data-theme='dark'] .sidebar-section-header {
+  color: var(--text-muted);
+}
+
+html[data-theme='dark'] .sidebar-session,
+html[data-theme='dark'] .session-item,
+html[data-theme='dark'] .session-card {
+  background: transparent;
+  border-color: transparent;
+}
+
+html[data-theme='dark'] .sidebar-session:hover,
+html[data-theme='dark'] .session-item:hover,
+html[data-theme='dark'] .session-card:hover {
+  background: rgba(236, 228, 214, 0.05);
+  border-color: var(--rule);
+}
+
+html[data-theme='dark'] .sidebar-session.active,
+html[data-theme='dark'] .session-item.active,
+html[data-theme='dark'] .session-card.active {
+  background: rgba(201, 106, 69, 0.12);
+  border-color: rgba(201, 106, 69, 0.22);
+}
+
+html[data-theme='dark'] .sidebar-session.pinned {
+  background: rgba(236, 228, 214, 0.04);
+}
+
+html[data-theme='dark'] .session-name {
+  color: var(--text-primary);
+}
+
+html[data-theme='dark'] .session-date {
+  color: var(--text-muted);
+}
+
+html[data-theme='dark'] .session-menu-btn:hover {
+  background: rgba(236, 228, 214, 0.08);
+  color: var(--text-primary);
+}
+
+html[data-theme='dark'] .session-menu-dropdown {
+  background: var(--paper);
+  border-color: var(--rule);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+html[data-theme='dark'] .load-more-btn {
+  background: rgba(236, 228, 214, 0.04);
+  border-color: var(--rule);
+  color: var(--text-secondary);
+}
+
+html[data-theme='dark'] .load-more-btn:hover {
+  background: rgba(236, 228, 214, 0.08);
+  color: var(--text-primary);
+}
+
+/* Sidebar account / footer */
+html[data-theme='dark'] .sidebar-account-trigger {
+  background: rgba(236, 228, 214, 0.04);
+  border-color: var(--rule);
+}
+
+html[data-theme='dark'] .sidebar-account-trigger:hover,
+html[data-theme='dark'] .sidebar-account-trigger.open {
+  background: rgba(236, 228, 214, 0.08);
+  border-color: var(--rule-2);
+}
+
+html[data-theme='dark'] .sidebar-account-name {
+  color: var(--text-primary);
+}
+
+html[data-theme='dark'] .sidebar-account-email,
+html[data-theme='dark'] .sidebar-account-role {
+  color: var(--text-muted);
+}
+
+html[data-theme='dark'] .sidebar-account-dropdown {
+  background: var(--paper);
+  border-color: var(--rule);
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.5);
+}
+
+html[data-theme='dark'] .sidebar-account-item {
+  color: var(--text-primary);
+}
+
+html[data-theme='dark'] .sidebar-account-item:hover {
+  background: rgba(236, 228, 214, 0.06);
+}
+
+html[data-theme='dark'] .sidebar-account-divider {
+  background: var(--rule);
+}
+
+/* Sidebar usage meter */
+html[data-theme='dark'] .sidebar-usage-bar {
+  background: rgba(236, 228, 214, 0.06);
+}
+
+html[data-theme='dark'] .sidebar-usage-bar-fill {
+  background: linear-gradient(90deg, var(--accent) 0%, var(--accent-dark) 100%);
+}
+
+html[data-theme='dark'] .sidebar-usage-label,
+html[data-theme='dark'] .sidebar-usage-count,
+html[data-theme='dark'] .sidebar-usage-reset {
+  color: var(--text-muted);
+}
+
+/* Sidebar collapse / toggle button */
+html[data-theme='dark'] .sidebar-toggle-btn {
+  background: rgba(236, 228, 214, 0.05);
+  border-color: var(--rule-2);
+  color: var(--text-secondary);
+}
+
+html[data-theme='dark'] .sidebar-toggle-btn:hover {
+  background: rgba(236, 228, 214, 0.1);
+  color: var(--text-primary);
+}
+
+html[data-theme='dark'] .sidebar-collapsed-logo-btn:hover {
+  background: rgba(236, 228, 214, 0.07);
+}
+
+/* Sidebar collapsed rail */
+html[data-theme='dark'] .sidebar-rail-btn:hover,
+html[data-theme='dark'] .sidebar-rail-session:hover,
+html[data-theme='dark'] .sidebar-rail-profile:hover,
+html[data-theme='dark'] .sidebar-rail-profile.open {
+  background: rgba(236, 228, 214, 0.07);
+  color: var(--text-primary);
+}
+
+html[data-theme='dark'] .sidebar-rail-btn-primary,
+html[data-theme='dark'] .sidebar-rail-session.active {
+  background: rgba(201, 106, 69, 0.14);
+  border-color: rgba(201, 106, 69, 0.22);
+  color: var(--text-primary);
+}
+
+html[data-theme='dark'] .sidebar-rail-empty {
+  background: rgba(236, 228, 214, 0.04);
+  color: var(--text-muted);
+}
+
+html[data-theme='dark'] .sidebar-rail-session::after {
+  background: var(--paper);
+  border-color: var(--rule);
+  color: var(--text-primary);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.5);
+}
+
+/* ─── Welcome screen ─── */
+html[data-theme='dark'] .welcome-screen {
+  background: transparent;
+}
+
+html[data-theme='dark'] .welcome-badge {
+  background: rgba(201, 106, 69, 0.14);
+  border-color: rgba(201, 106, 69, 0.22);
+  color: var(--accent-color);
+}
+
+html[data-theme='dark'] .welcome-heading-static {
+  color: var(--text-primary);
+}
+
+html[data-theme='dark'] .welcome-suggestion-card,
+html[data-theme='dark'] .welcome-card,
+html[data-theme='dark'] .quick-action {
+  background: rgba(236, 228, 214, 0.04);
+  border-color: var(--rule);
+  color: var(--ink);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+html[data-theme='dark'] .welcome-suggestion-card:hover,
+html[data-theme='dark'] .quick-action:hover {
+  background: rgba(236, 228, 214, 0.08);
+  border-color: rgba(201, 106, 69, 0.24);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+html[data-theme='dark'] .welcome-suggestion-eyebrow,
+html[data-theme='dark'] .welcome-toolbar-btn {
+  color: var(--text-muted);
+}
+
+html[data-theme='dark'] .welcome-suggestion-desc {
+  color: var(--text-secondary);
+}
+
+html[data-theme='dark'] .welcome-ghost-title {
+  color: var(--text-primary);
+}
+
+html[data-theme='dark'] .welcome-ghost-sub,
+html[data-theme='dark'] .welcome-ghost-footer,
+html[data-theme='dark'] .welcome-hint {
+  color: var(--text-muted);
+}
+
+/* ─── Chat input / composer ─── */
+html[data-theme='dark'] .input-container.bottom {
+  background: var(--paper);
+  border-top-color: var(--rule);
+}
+
+html[data-theme='dark'] .input-wrapper {
+  background: rgba(236, 228, 214, 0.04);
+  border-color: var(--rule-2);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+html[data-theme='dark'] .input-wrapper:focus-within {
+  border-color: rgba(201, 106, 69, 0.34);
+  box-shadow:
+    0 0 0 3px rgba(201, 106, 69, 0.12),
+    0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+html[data-theme='dark'] .input-wrapper textarea {
+  color: var(--text-primary);
+}
+
+html[data-theme='dark'] .input-wrapper textarea::placeholder {
+  color: var(--text-muted);
+}
+
+html[data-theme='dark'] .attach-btn {
+  background: rgba(236, 228, 214, 0.05);
+  color: var(--text-secondary);
+}
+
+html[data-theme='dark'] .attach-btn:hover:not(:disabled) {
+  background: rgba(236, 228, 214, 0.1);
+  color: var(--text-primary);
+}
+
+html[data-theme='dark'] .send-btn {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
+  box-shadow: 0 4px 12px rgba(201, 106, 69, 0.28);
+}
+
+html[data-theme='dark'] .model-selector-trigger {
+  background: rgba(236, 228, 214, 0.05);
+  border-color: var(--rule-2);
+  color: var(--text-primary);
+}
+
+html[data-theme='dark'] .model-selector-trigger:hover {
+  background: rgba(236, 228, 214, 0.09);
+  border-color: rgba(201, 106, 69, 0.3);
+}
+
+html[data-theme='dark'] .model-selector-dropdown {
+  background: var(--paper);
+  border-color: var(--rule);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+/* ─── Messages ─── */
+html[data-theme='dark'] .message.user .message-content {
+  background: rgba(236, 228, 214, 0.06);
+  border-color: var(--rule);
+  color: var(--text-primary);
+}
+
+html[data-theme='dark'] .message-file-badge {
+  background: rgba(236, 228, 214, 0.05);
+  border-color: var(--rule);
+  color: var(--text-secondary);
+}
+
+html[data-theme='dark'] .message-actions button {
+  color: var(--text-muted);
+}
+
+html[data-theme='dark'] .message-actions button:hover {
+  background: rgba(236, 228, 214, 0.07);
+  color: var(--text-primary);
+}
+
+html[data-theme='dark'] .artifact-card {
+  background: rgba(236, 228, 214, 0.04);
+  border-color: var(--rule);
+}
+
+html[data-theme='dark'] .artifact-card-header,
+html[data-theme='dark'] .artifact-card-footer {
+  background: rgba(236, 228, 214, 0.03);
+  border-color: var(--rule);
+}
+
+/* ─── Modals & overlays ─── */
+html[data-theme='dark'] .delete-modal-overlay,
+html[data-theme='dark'] .share-modal-overlay {
+  background: rgba(0, 0, 0, 0.65);
+}
+
+html[data-theme='dark'] .delete-modal,
+html[data-theme='dark'] .share-modal {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  color: var(--text-primary);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+}
+
+html[data-theme='dark'] .delete-cancel,
+html[data-theme='dark'] .share-modal button {
+  background: rgba(236, 228, 214, 0.05);
+  border-color: var(--rule);
+  color: var(--text-primary);
+}
+
+html[data-theme='dark'] .delete-cancel:hover {
+  background: rgba(236, 228, 214, 0.1);
+}
+
+html[data-theme='dark'] .delete-confirm {
+  background: rgba(220, 38, 38, 0.16);
+  border-color: rgba(220, 38, 38, 0.4);
+  color: #ff8a7a;
+}
+
+html[data-theme='dark'] .delete-confirm:hover {
+  background: rgba(220, 38, 38, 0.24);
+}
+
+/* ─── Misc surface patches ─── */
+html[data-theme='dark'] .right-panel {
+  background: var(--paper);
+  border-left-color: var(--rule);
+}
+
+html[data-theme='dark'] kbd,
+html[data-theme='dark'] .shortcut-kbd {
+  background: rgba(236, 228, 214, 0.06);
+  border-color: var(--rule-2);
+  color: var(--text-secondary);
+}
+
+/* DOCX / Copy buttons under message + standalone download chip */
+html[data-theme='dark'] .docx-btn,
+html[data-theme='dark'] .copy-btn,
+html[data-theme='dark'] .download-chip {
+  background: rgba(236, 228, 214, 0.05);
+  border-color: var(--rule);
+  color: var(--text-secondary);
+}
+
+html[data-theme='dark'] .docx-btn:hover,
+html[data-theme='dark'] .copy-btn:hover,
+html[data-theme='dark'] .download-chip:hover {
+  background: rgba(236, 228, 214, 0.1);
+  color: var(--text-primary);
+}
+
+/* Inline code and code blocks inside messages */
+html[data-theme='dark'] .message-content code {
+  background: rgba(236, 228, 214, 0.08);
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .message-content pre {
+  background: rgba(236, 228, 214, 0.04);
+  border-color: var(--rule);
+}
+
+html[data-theme='dark'] .message-content pre code {
+  background: transparent;
+  color: var(--ink);
+}
+
+/* Council / chairman / system message backgrounds */
+html[data-theme='dark'] .message.council {
+  background: var(--paper-2);
+  border-color: var(--rule);
+}
+
+html[data-theme='dark'] .message.system {
+  color: var(--text-muted);
+}
+
+html[data-theme='dark'] .message-content blockquote {
+  border-left-color: var(--accent-color);
+  color: var(--text-secondary);
+}
+
+html[data-theme='dark'] .message-content th,
+html[data-theme='dark'] .message-content td {
+  border-color: var(--rule);
+  color: var(--text-primary);
+}
+
+html[data-theme='dark'] .message-content th {
+  background: rgba(236, 228, 214, 0.05);
+}
+
+html[data-theme='dark'] .message-content a {
+  color: var(--accent-color);
+}
+
+html[data-theme='dark'] .message-content a:hover {
+  color: var(--accent-hover);
+}
+
+/* Mobile sidebar overlay backdrop, when sidebar slides in over content */
+html[data-theme='dark'] .sidebar.expanded {
+  box-shadow: 0 0 60px rgba(0, 0, 0, 0.5);
+}

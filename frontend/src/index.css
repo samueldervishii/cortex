@@ -73,22 +73,22 @@
 
 /* ─── Dark theme overrides ─── */
 html[data-theme='dark'] {
-  --paper: #1a1613;
-  --paper-2: #211c18;
-  --app-bg: #15110e;
-  --ink: #f4ecdf;
-  --ink-2: #cdbfae;
-  --muted: #8a7d6c;
-  --rule: #2c241d;
-  --rule-2: #3b3128;
-  --accent: #d97049;
-  --accent-dark: #b8542c;
-  --accent-light: rgba(217, 112, 73, 0.18);
+  --paper: #1c1916;
+  --paper-2: #24201c;
+  --app-bg: #161310;
+  --ink: #ece4d6;
+  --ink-2: #b8ad9c;
+  --muted: #7a7062;
+  --rule: #312a23;
+  --rule-2: #423931;
+  --accent: #c96a45;
+  --accent-dark: #a85535;
+  --accent-light: rgba(201, 106, 69, 0.16);
 
-  --rule-soft: rgba(244, 236, 223, 0.06);
-  --ink-overlay: rgba(0, 0, 0, 0.45);
-  --accent-30: rgba(217, 112, 73, 0.3);
-  --accent-18: rgba(217, 112, 73, 0.18);
+  --rule-soft: rgba(236, 228, 214, 0.05);
+  --ink-overlay: rgba(0, 0, 0, 0.5);
+  --accent-30: rgba(201, 106, 69, 0.28);
+  --accent-18: rgba(201, 106, 69, 0.16);
 
   --bg-primary: var(--paper);
   --bg-secondary: var(--paper);
@@ -104,18 +104,23 @@ html[data-theme='dark'] {
   --accent-hover: var(--accent-dark);
   --heading-color: var(--ink);
   --council-bg: var(--paper-2);
-  --chairman-bg: linear-gradient(135deg, rgba(217, 112, 73, 0.16) 0%, var(--paper-2) 100%);
+  --chairman-bg: linear-gradient(135deg, rgba(201, 106, 69, 0.14) 0%, var(--paper-2) 100%);
   --chairman-border: var(--accent-30);
-  --error-bg: rgba(220, 38, 38, 0.12);
-  --error-border: rgba(220, 38, 38, 0.32);
-  --panel-bg: rgba(26, 22, 19, 0.86);
+  --error-bg: rgba(220, 38, 38, 0.1);
+  --error-border: rgba(220, 38, 38, 0.28);
+  --panel-bg: rgba(28, 25, 22, 0.88);
   --panel-strong: var(--paper);
-  --panel-warm: rgba(26, 22, 19, 0.6);
+  --panel-warm: rgba(28, 25, 22, 0.62);
   --shadow-soft: 0 20px 60px rgba(0, 0, 0, 0.5);
   --shadow-subtle: 0 1px 3px rgba(0, 0, 0, 0.4);
   --shadow-pop: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.4),
-    0 0 0 1px rgba(244, 236, 223, 0.06);
-  --shadow-ring: 0 0 0 3px rgba(217, 112, 73, 0.28);
+    0 0 0 1px rgba(236, 228, 214, 0.05);
+  --shadow-ring: 0 0 0 3px rgba(201, 106, 69, 0.26);
+
+  /* Surface tints used for translucent fills that originally hardcoded white */
+  --surface-tint-strong: rgba(236, 228, 214, 0.06);
+  --surface-tint-soft: rgba(236, 228, 214, 0.04);
+  --surface-tint-faint: rgba(236, 228, 214, 0.025);
 
   color-scheme: dark;
 }
@@ -127,12 +132,12 @@ html[data-theme='dark'] #root {
 }
 
 html[data-theme='dark'] *::-webkit-scrollbar-thumb {
-  background: rgba(244, 236, 223, 0.1);
+  background: rgba(236, 228, 214, 0.09);
   border: 3px solid transparent;
   background-clip: padding-box;
 }
 html[data-theme='dark'] *::-webkit-scrollbar-thumb:hover {
-  background: rgba(244, 236, 223, 0.22);
+  background: rgba(236, 228, 214, 0.2);
   border: 3px solid transparent;
   background-clip: padding-box;
 }
@@ -145,7 +150,7 @@ html[data-theme='dark'] kbd {
 }
 
 html[data-theme='dark'] ::selection {
-  background: rgba(217, 112, 73, 0.3);
+  background: rgba(201, 106, 69, 0.28);
 }
 
 * {
