@@ -30,11 +30,32 @@
     <meta property="og:type" content="website" />
     <meta property="og:image" content="/IMG_6935.png" />
 
+    <script>
+      // Resolve theme before paint to avoid a flash of the wrong palette.
+      (function () {
+        try {
+          var stored = localStorage.getItem('cortex-theme')
+          var mode = stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'system'
+          var resolved =
+            mode === 'system'
+              ? window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light'
+              : mode
+          document.documentElement.dataset.theme = resolved
+          var meta = document.querySelector('meta[name="theme-color"]')
+          if (meta) meta.setAttribute('content', resolved === 'dark' ? '#15110e' : '#FAFAF7')
+        } catch (e) {}
+      })()
+    </script>
     <style>
       /* Initial loader - shown until React mounts */
       body {
         margin: 0;
         background: #fafaf7;
+      }
+      html[data-theme='dark'] body {
+        background: #15110e;
       }
       .initial-loader {
         display: flex;
@@ -45,6 +66,9 @@
         background: #fafaf7;
         color: #b8542c;
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      }
+      html[data-theme='dark'] .initial-loader {
+        background: #15110e;
       }
       .initial-loader h1 {
         font-size: 2rem;
@@ -58,6 +82,10 @@
         border-top-color: #b8542c;
         border-radius: 50%;
         animation: spin 1s linear infinite;
+      }
+      html[data-theme='dark'] .loader-spinner {
+        border-color: #2a221c;
+        border-top-color: #d97049;
       }
       @keyframes spin {
         to {
