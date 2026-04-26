@@ -173,6 +173,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [isLoading, networkError, user, restoreSession])
 
   const login = async (email: string, password: string) => {
+    // Discard any stale session so the background restore loop can't
+    // auto-restore old tokens over a failed login attempt during a
+    // cold-start network error.
+    clearTokens()
+    setUser(null)
+    setNetworkError(false)
     const res = await apiClient.post('/auth/login', { email, password })
     storeTokens(res.data.access_token, res.data.refresh_token)
     const meRes = await apiClient.get('/auth/me')
@@ -181,6 +187,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const register = async (email: string, password: string) => {
+    clearTokens()
+    setUser(null)
+    setNetworkError(false)
     const res = await apiClient.post('/auth/register', { email, password })
     storeTokens(res.data.access_token, res.data.refresh_token)
     const meRes = await apiClient.get('/auth/me')
