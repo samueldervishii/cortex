@@ -123,8 +123,7 @@ function ModelSelector({ variant = 'topbar' }: ModelSelectorProps) {
       if (left < 8) left = 8
       if (left + width > viewportW - 8) left = viewportW - width - 8
 
-      const top =
-        direction === 'down' ? rect.bottom + DROPDOWN_GAP : rect.top - DROPDOWN_GAP
+      const top = direction === 'down' ? rect.bottom + DROPDOWN_GAP : rect.top - DROPDOWN_GAP
       setPosition({ top, left, width, direction })
     }
 
@@ -141,10 +140,7 @@ function ModelSelector({ variant = 'topbar' }: ModelSelectorProps) {
     if (!isOpen) return
     function handleClickOutside(e: MouseEvent) {
       const target = e.target as Node
-      if (
-        triggerRef.current?.contains(target) ||
-        dropdownRef.current?.contains(target)
-      ) {
+      if (triggerRef.current?.contains(target) || dropdownRef.current?.contains(target)) {
         return
       }
       setIsOpen(false)
@@ -170,55 +166,53 @@ function ModelSelector({ variant = 'topbar' }: ModelSelectorProps) {
     setIsOpen(false)
   }
 
-  const dropdown = isOpen && position
-    ? createPortal(
-        <div
-          ref={dropdownRef}
-          className={`model-selector-dropdown model-selector-dropdown-portal drop-${position.direction}`}
-          role="listbox"
-          style={{
-            position: 'fixed',
-            top: position.direction === 'down' ? position.top : undefined,
-            bottom:
-              position.direction === 'up'
-                ? window.innerHeight - position.top
-                : undefined,
-            left: position.left,
-            width: position.width,
-            maxHeight: DROPDOWN_MAX_HEIGHT,
-            zIndex: 2000,
-          }}
-        >
-          {MODELS.map((model) => {
-            const isSelected = model.id === selected.id
-            return (
-              <button
-                key={model.id}
-                type="button"
-                role="option"
-                aria-selected={isSelected}
-                className={`model-selector-option ${isSelected ? 'selected' : ''}`}
-                onClick={() => choose(model.id)}
-              >
-                <img className="model-option-img" src={model.icon} alt="" />
-                <div className="model-option-info">
-                  <span className="model-option-name-row">
-                    <span className="model-option-name">{model.name}</span>
-                    <span className={`model-option-badge ${model.tier.toLowerCase()}`}>
-                      {model.tier}
+  const dropdown =
+    isOpen && position
+      ? createPortal(
+          <div
+            ref={dropdownRef}
+            className={`model-selector-dropdown model-selector-dropdown-portal drop-${position.direction}`}
+            role="listbox"
+            style={{
+              position: 'fixed',
+              top: position.direction === 'down' ? position.top : undefined,
+              bottom: position.direction === 'up' ? window.innerHeight - position.top : undefined,
+              left: position.left,
+              width: position.width,
+              maxHeight: DROPDOWN_MAX_HEIGHT,
+              zIndex: 2000,
+            }}
+          >
+            {MODELS.map((model) => {
+              const isSelected = model.id === selected.id
+              return (
+                <button
+                  key={model.id}
+                  type="button"
+                  role="option"
+                  aria-selected={isSelected}
+                  className={`model-selector-option ${isSelected ? 'selected' : ''}`}
+                  onClick={() => choose(model.id)}
+                >
+                  <img className="model-option-img" src={model.icon} alt="" />
+                  <div className="model-option-info">
+                    <span className="model-option-name-row">
+                      <span className="model-option-name">{model.name}</span>
+                      <span className={`model-option-badge ${model.tier.toLowerCase()}`}>
+                        {model.tier}
+                      </span>
                     </span>
-                  </span>
-                  <span className="model-option-desc">{model.description}</span>
-                </div>
-                {isSelected && <span className="model-option-dot" aria-hidden="true" />}
-              </button>
-            )
-          })}
-          <div className="model-dropdown-footer">Model choice applies to new messages</div>
-        </div>,
-        document.body
-      )
-    : null
+                    <span className="model-option-desc">{model.description}</span>
+                  </div>
+                  {isSelected && <span className="model-option-dot" aria-hidden="true" />}
+                </button>
+              )
+            })}
+            <div className="model-dropdown-footer">Model choice applies to new messages</div>
+          </div>,
+          document.body
+        )
+      : null
 
   return (
     <div className={`model-selector ${variant}`}>

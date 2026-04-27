@@ -4745,11 +4745,9 @@ button.message-file-badge:hover {
 .status-page {
   max-width: 720px;
   margin: 0 auto;
-  padding: calc(2rem + env(safe-area-inset-top)) 1.5rem
-    calc(2rem + env(safe-area-inset-bottom));
+  padding: calc(2rem + env(safe-area-inset-top)) 1.5rem calc(2rem + env(safe-area-inset-bottom));
   min-height: 100vh;
   min-height: 100dvh;
-  background: var(--bg-primary);
   color: var(--text-primary);
 }
 
@@ -7536,10 +7534,18 @@ button.message-file-badge:hover {
 /* ─── Welcome screen polish ─── */
 .welcome-screen {
   gap: 1.25rem;
-  padding: clamp(1.25rem, 4vw, 3.5rem) clamp(1.5rem, 5vw, 4rem);
-  justify-content: center;
+  padding: clamp(2rem, 7vh, 5rem) clamp(1.5rem, 5vw, 4rem) clamp(1rem, 3vh, 2rem);
+  justify-content: flex-start;
   overflow-y: auto;
   overflow-x: hidden;
+}
+
+/* Anchor the composer toward the bottom so the welcome screen doesn't
+   leave a tall empty band below the input on desktop viewports. The hero +
+   suggestions stack remains comfortably near the top. Ghost (Temporary
+   Chat) keeps its centered layout via the override further down. */
+.welcome-screen:not(.welcome-screen-ghost) > .welcome-input-area {
+  margin-top: auto;
 }
 
 .welcome-center {
@@ -8606,6 +8612,67 @@ button.message-file-badge:hover {
   margin: 4px 0;
 }
 
+/* Anchor tags used as menu items behave like buttons. */
+a.sidebar-account-item {
+  text-decoration: none;
+}
+
+.sidebar-account-item.with-submenu {
+  justify-content: flex-start;
+}
+
+.sidebar-account-item-caret {
+  margin-left: auto;
+  color: var(--muted);
+  flex-shrink: 0;
+  transition: transform 0.12s;
+}
+
+.sidebar-account-item.with-submenu.open .sidebar-account-item-caret {
+  color: var(--ink);
+}
+
+/* Help flyout submenu. Rendered as a sibling of the menu items inside the
+   parent .sidebar-account-dropdown so we can anchor its BOTTOM edge to
+   the dropdown's bottom — this keeps the submenu fully visible regardless
+   of where the Help row sits inside the dropdown (avoids spilling off the
+   bottom of the viewport, since the parent menu opens upward from the
+   account avatar). */
+.sidebar-account-submenu {
+  position: absolute;
+  bottom: 4px;
+  left: calc(100% + 6px);
+  min-width: 200px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-pop);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  z-index: 60;
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  animation: cortex-slide-in 160ms ease-out;
+}
+
+/* Collapsed-rail variant: parent dropdown is `position: fixed`. Same
+   anchoring works there since we still position relative to the dropdown.
+   On narrow viewports we collapse the flyout into a nested inline list
+   (drops below Help with an indent) so it never spills off-screen. */
+@media (max-width: 540px) {
+  .sidebar-account-submenu {
+    position: static;
+    margin: 2px 0 2px 18px;
+    max-height: none;
+    box-shadow: none;
+    animation: none;
+    border-color: var(--rule);
+    background: var(--paper-2);
+  }
+}
+
 /* Collapsed rail */
 .sidebar.collapsed {
   width: 56px;
@@ -9068,10 +9135,10 @@ button.message-file-badge:hover {
 }
 
 /* ── Chat composer / input ────────────────────────────────── */
-.input-container {
+/* .input-container {
   background: var(--paper);
   border-top: 1px solid var(--rule);
-}
+} */
 
 .input-wrapper {
   background: rgba(244, 241, 234, 0.45);
@@ -9162,6 +9229,23 @@ button.message-file-badge:hover {
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--muted);
+  transition: color 0.15s;
+}
+
+.input-char-count.near {
+  color: #b45309;
+}
+
+.input-char-count.over {
+  color: #b91c1c;
+}
+
+html[data-theme='dark'] .input-char-count.near {
+  color: #f59e0b;
+}
+
+html[data-theme='dark'] .input-char-count.over {
+  color: #f87171;
 }
 
 .input-container::after {
@@ -9931,6 +10015,37 @@ button.message-file-badge:hover {
   height: 16px;
 }
 
+/* Locked model pill: shown on session pages (and elsewhere outside the home
+   route) instead of the dropdown trigger. Visually matches the trigger so it
+   still reads as a model badge, but it's a static, non-interactive element. */
+.top-bar-model-locked {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 12px;
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-btn);
+  color: var(--ink-2);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: default;
+  user-select: none;
+}
+
+.top-bar-model-locked .model-selector-img {
+  width: 16px;
+  height: 16px;
+}
+
+html[data-theme='dark'] .top-bar-model-locked {
+  background: rgba(236, 228, 214, 0.05);
+  border-color: var(--rule);
+  color: var(--text-primary);
+}
+
 /* Portalled dropdown: positioned via inline `position: fixed; top/bottom/left;
  * width` styles set by the component so it escapes any `overflow: hidden`
  * ancestors.
@@ -10258,7 +10373,7 @@ button.message-file-badge:hover {
   display: block;
 }
 
-.sidebar-account-settings {
+.sidebar-account-caret {
   margin-left: auto;
   width: 26px;
   height: 26px;
@@ -10267,16 +10382,20 @@ button.message-file-badge:hover {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
-  transition:
-    background 0.12s,
-    color 0.12s;
   flex-shrink: 0;
+  pointer-events: none;
+  transition:
+    transform 0.18s ease,
+    color 0.12s;
 }
 
-.sidebar-account-settings:hover {
-  background: var(--paper-2);
+.sidebar-account-trigger:hover .sidebar-account-caret,
+.sidebar-account-trigger.open .sidebar-account-caret {
   color: var(--ink);
+}
+
+.sidebar-account-caret.open {
+  transform: rotate(180deg);
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -10379,8 +10498,8 @@ button.message-file-badge:hover {
   text-transform: none;
 }
 
-/* Case-preserve the model pill so it reads "Sonnet 4.6" rather than
-   "SONNET 4.6" — the old rule forced uppercase. */
+/* Case-preserve the model pill so it reads e.g. "Sonnet 4.6" / "Opus 4.6" /
+   "Haiku 4.5" rather than the all-caps version the old rule forced. */
 .message .message-header .model-name {
   text-transform: none;
   font-family: var(--font-sans);
@@ -10861,6 +10980,20 @@ html[data-theme='dark'] .sidebar-nav-item-primary:hover {
   border-color: rgba(201, 106, 69, 0.28);
 }
 
+/* Paper theme paints the New chat icon + Alt+N chip with var(--paper)
+   so they read white on the dark filled button. In dark mode --paper is
+   the near-black background, so the icon disappeared. Re-tint with --ink. */
+html[data-theme='dark'] .sidebar-nav-item svg,
+html[data-theme='dark'] .sidebar-nav-item-primary svg {
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .sidebar-nav-shortcut {
+  color: var(--ink);
+  opacity: 0.65;
+  border-color: rgba(236, 228, 214, 0.2);
+}
+
 html[data-theme='dark'] .sidebar-search {
   background: rgba(236, 228, 214, 0.04);
   border-color: var(--rule);
@@ -10988,6 +11121,20 @@ html[data-theme='dark'] .sidebar-account-item:hover {
 
 html[data-theme='dark'] .sidebar-account-divider {
   background: var(--rule);
+}
+
+html[data-theme='dark'] .sidebar-account-submenu {
+  background: var(--paper);
+  border-color: var(--rule);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+html[data-theme='dark'] .sidebar-account-item-caret {
+  color: var(--text-muted);
+}
+
+html[data-theme='dark'] .sidebar-account-item.with-submenu.open .sidebar-account-item-caret {
+  color: var(--text-primary);
 }
 
 /* Sidebar usage meter */

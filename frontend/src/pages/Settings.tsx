@@ -75,6 +75,8 @@ function Settings() {
   const usernameTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [workDropdownOpen, setWorkDropdownOpen] = useState(false)
   const workDropdownRef = useRef<HTMLDivElement>(null)
+  const [autoDeleteOpen, setAutoDeleteOpen] = useState(false)
+  const autoDeleteRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -87,6 +89,18 @@ function Settings() {
       return () => document.removeEventListener('mousedown', handleClick)
     }
   }, [workDropdownOpen])
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (autoDeleteRef.current && !autoDeleteRef.current.contains(e.target as Node)) {
+        setAutoDeleteOpen(false)
+      }
+    }
+    if (autoDeleteOpen) {
+      document.addEventListener('mousedown', handleClick)
+      return () => document.removeEventListener('mousedown', handleClick)
+    }
+  }, [autoDeleteOpen])
 
   const [showPassword, setShowPassword] = useState(false)
   const [currentPassword, setCurrentPassword] = useState('')
@@ -676,11 +690,7 @@ function Settings() {
                 <p className="settings-field-hint" style={{ marginTop: '-0.25rem' }}>
                   Choose how Cortex looks. "System" follows your device setting.
                 </p>
-                <div
-                  className="theme-toggle-group"
-                  role="radiogroup"
-                  aria-label="Theme preference"
-                >
+                <div className="theme-toggle-group" role="radiogroup" aria-label="Theme preference">
                   {(['light', 'dark', 'system'] as ThemeMode[]).map((mode) => (
                     <button
                       key={mode}
@@ -690,9 +700,7 @@ function Settings() {
                       className={`theme-toggle-option ${theme === mode ? 'active' : ''}`}
                       onClick={() => {
                         setTheme(mode)
-                        showToast(
-                          `Theme set to ${mode === 'system' ? 'system default' : mode}`
-                        )
+                        showToast(`Theme set to ${mode === 'system' ? 'system default' : mode}`)
                       }}
                     >
                       <span className={`theme-toggle-swatch theme-swatch-${mode}`} aria-hidden />
@@ -935,19 +943,55 @@ function Settings() {
                   <h3>Auto-Delete Old Chats</h3>
                   <p>Automatically remove sessions after a set period</p>
                 </div>
-                <select
-                  className="settings-select"
-                  value={settings.auto_delete_days || 'never'}
-                  onChange={(e) => {
-                    const v = e.target.value === 'never' ? null : parseInt(e.target.value)
-                    saveSettings({ auto_delete_days: v })
-                  }}
-                >
-                  <option value="never">Never</option>
-                  <option value="30">30 days</option>
-                  <option value="60">60 days</option>
-                  <option value="90">90 days</option>
-                </select>
+                <div className="settings-select-wrap">
+                  <div className="custom-select" ref={autoDeleteRef}>
+                    <button
+                      className="custom-select-trigger"
+                      type="button"
+                      onClick={() => setAutoDeleteOpen((p) => !p)}
+                      aria-haspopup="listbox"
+                      aria-expanded={autoDeleteOpen}
+                    >
+                      <span>
+                        {settings.auto_delete_days
+                          ? `${settings.auto_delete_days} days`
+                          : 'Never'}
+                      </span>
+                      <svg width="12" height="8" viewBox="0 0 12 8" fill="none">
+                        <path
+                          d="M1 1.5L6 6.5L11 1.5"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </button>
+                    {autoDeleteOpen && (
+                      <div className="custom-select-menu" role="listbox">
+                        {[
+                          { value: null, label: 'Never' },
+                          { value: 30, label: '30 days' },
+                          { value: 60, label: '60 days' },
+                          { value: 90, label: '90 days' },
+                        ].map((opt) => (
+                          <button
+                            key={opt.label}
+                            className={`custom-select-option ${
+                              settings.auto_delete_days === opt.value ? 'selected' : ''
+                            }`}
+                            onClick={() => {
+                              saveSettings({ auto_delete_days: opt.value })
+                              setAutoDeleteOpen(false)
+                            }}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
               <div className="settings-action">
                 <div className="settings-action-info">
@@ -983,7 +1027,7 @@ function Settings() {
                 <h2 className="about-title">Cortex</h2>
               </div>
               <p className="about-desc">
-                A clean, fast AI chat platform powered by Anthropic's Claude Sonnet 4.6. Designed to
+                A clean, fast AI chat platform powered by Anthropic's Claude models. Designed to
                 help students write, research, and build their thesis — simply, securely, and
                 affordably.{' '}
                 <a
@@ -1041,8 +1085,7 @@ function Settings() {
                       <path d="M2 12l10 5 10-5" />
                     </svg>
                     <div>
-                      <strong>Powered by Anthropic</strong>
-                      <span>Claude Sonnet 4.6</span>
+                      <strong>Powered by Anthropic models</strong>
                     </div>
                   </a>
                 </div>

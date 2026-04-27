@@ -142,11 +142,7 @@ function Message({
     return (
       <div className="message user">
         <div className="message-avatar message-avatar-user" aria-hidden="true">
-          {userAvatar ? (
-            <img src={userAvatar} alt="" />
-          ) : (
-            <span>{userInitial}</span>
-          )}
+          {userAvatar ? <img src={userAvatar} alt="" /> : <span>{userInitial}</span>}
         </div>
         <div className="message-body">
           <div className="message-header">
@@ -159,12 +155,9 @@ function Message({
                 if (!sessionId || messageIndex == null) return
                 try {
                   const token = getAccessToken()
-                  const res = await fetch(
-                    `${API_BASE}/session/${sessionId}/file/${messageIndex}`,
-                    {
-                      headers: token ? { Authorization: `Bearer ${token}` } : {},
-                    }
-                  )
+                  const res = await fetch(`${API_BASE}/session/${sessionId}/file/${messageIndex}`, {
+                    headers: token ? { Authorization: `Bearer ${token}` } : {},
+                  })
                   if (!res.ok) return
                   const blob = await res.blob()
                   const url = URL.createObjectURL(blob)
@@ -231,44 +224,44 @@ function Message({
             <span className="message-role-label">Cortex</span>
           </div>
           <div className="artifact-card">
-          <div className="artifact-header">
-            <div className="artifact-title-row">
-              <FileText size={16} />
-              <span className="artifact-title">{isEmpty ? 'Generating...' : artifactTitle}</span>
-              {streaming && <span className="artifact-generating">writing</span>}
-            </div>
-          </div>
-          {isEmpty ? (
-            <div className="artifact-loading">
-              <div className="artifact-loading-dots">
-                <span />
-                <span />
-                <span />
+            <div className="artifact-header">
+              <div className="artifact-title-row">
+                <FileText size={16} />
+                <span className="artifact-title">{isEmpty ? 'Generating...' : artifactTitle}</span>
+                {streaming && <span className="artifact-generating">writing</span>}
               </div>
             </div>
-          ) : (
-            <div className="artifact-body">
-              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
-                {content}
-              </ReactMarkdown>
-            </div>
-          )}
-          {!streaming && !isEmpty && (
-            <div className="artifact-footer">
-              <button className="artifact-btn" onClick={handleCopy} title="Copy text">
-                {copied ? <Check size={14} /> : <Copy size={14} />}
-                {copied ? 'Copied' : 'Copy'}
-              </button>
-              <button
-                className="artifact-btn"
-                onClick={handleDownloadDocx}
-                title="Download as DOCX"
-              >
-                <Download size={14} />
-                DOCX
-              </button>
-            </div>
-          )}
+            {isEmpty ? (
+              <div className="artifact-loading">
+                <div className="artifact-loading-dots">
+                  <span />
+                  <span />
+                  <span />
+                </div>
+              </div>
+            ) : (
+              <div className="artifact-body">
+                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
+                  {content}
+                </ReactMarkdown>
+              </div>
+            )}
+            {!streaming && !isEmpty && (
+              <div className="artifact-footer">
+                <button className="artifact-btn" onClick={handleCopy} title="Copy text">
+                  {copied ? <Check size={14} /> : <Copy size={14} />}
+                  {copied ? 'Copied' : 'Copy'}
+                </button>
+                <button
+                  className="artifact-btn"
+                  onClick={handleDownloadDocx}
+                  title="Download as DOCX"
+                >
+                  <Download size={14} />
+                  DOCX
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

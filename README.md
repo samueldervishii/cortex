@@ -1,6 +1,6 @@
 # Cortex
 
-A clean AI chat platform built with FastAPI and React, powered by Anthropic Claude Sonnet 4.6.
+A clean AI chat platform built with FastAPI and React, powered by Anthropic Claude models
 
 ## Features
 
@@ -19,7 +19,7 @@ A clean AI chat platform built with FastAPI and React, powered by Anthropic Clau
 | Frontend | React + Vite, vanilla CSS             |
 | Backend  | FastAPI (Python), async               |
 | Database | MongoDB (Motor)                       |
-| AI Model | Anthropic Claude Sonnet 4.6           |
+| AI Model | Anthropic Claude Models               |
 | Auth     | JWT (access + refresh tokens), bcrypt |
 
 ## License

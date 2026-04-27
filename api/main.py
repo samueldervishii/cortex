@@ -178,7 +178,7 @@ async def lifespan(_app: FastAPI):
 DESCRIPTION = """
 # Cortex API
 
-A clean AI chat platform powered by Claude Sonnet 4.6.
+A clean AI chat platform powered by Claude models.
 
 ## Overview
 

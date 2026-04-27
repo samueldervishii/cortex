@@ -47,7 +47,8 @@
   --panel-warm: rgba(250, 250, 247, 0.6);
   --shadow-soft: 0 20px 60px rgba(26, 22, 19, 0.1);
   --shadow-subtle: 0 1px 3px rgba(26, 22, 19, 0.06);
-  --shadow-pop: 0 1px 2px rgba(26, 22, 19, 0.04), 0 8px 24px rgba(26, 22, 19, 0.08),
+  --shadow-pop:
+    0 1px 2px rgba(26, 22, 19, 0.04), 0 8px 24px rgba(26, 22, 19, 0.08),
     0 0 0 1px rgba(26, 22, 19, 0.06);
   --shadow-ring: 0 0 0 3px rgba(184, 84, 44, 0.18);
 
@@ -113,8 +114,8 @@ html[data-theme='dark'] {
   --panel-warm: rgba(28, 25, 22, 0.62);
   --shadow-soft: 0 20px 60px rgba(0, 0, 0, 0.5);
   --shadow-subtle: 0 1px 3px rgba(0, 0, 0, 0.4);
-  --shadow-pop: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.4),
-    0 0 0 1px rgba(236, 228, 214, 0.05);
+  --shadow-pop:
+    0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(236, 228, 214, 0.05);
   --shadow-ring: 0 0 0 3px rgba(201, 106, 69, 0.26);
 
   /* Surface tints used for translucent fills that originally hardcoded white */

@@ -1,10 +1,10 @@
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { GhostIcon as Ghost } from '@phosphor-icons/react/Ghost'
 import { NotePencilIcon as NotePencil } from '@phosphor-icons/react/NotePencil'
 import { SidebarIcon as Sidebar } from '@phosphor-icons/react/Sidebar'
 import { ListIcon as List } from '@phosphor-icons/react/List'
 import { ShareNetworkIcon as ShareNetwork } from '@phosphor-icons/react/ShareNetwork'
-import ModelSelector from './ModelSelector'
+import ModelSelector, { useSelectedModel } from './ModelSelector'
 
 interface TopBarProps {
   onNewChat: () => void
@@ -31,6 +31,15 @@ function TopBar({
   onToggleGhost,
   onShare,
 }: TopBarProps) {
+  const { pathname } = useLocation()
+  const selectedModel = useSelectedModel()
+  // Model can only be picked on the home/root route, before a session exists.
+  // On session pages, settings, etc. we lock to whatever model is in use and
+  // show it as a static pill (no dropdown).
+  const isHomeRoute = pathname === '/' || pathname === '/home'
+  const canChooseModel = isHomeRoute && !hasSession && !ghostMode
+  const showLockedModelPill = !ghostMode && !canChooseModel && hasSession
+
   return (
     <div className={`top-bar ${ghostMode ? 'ghost-mode' : ''}`}>
       <div className="top-bar-left">
@@ -57,7 +66,17 @@ function TopBar({
       </div>
 
       <div className="top-bar-right">
-        {!ghostMode && <ModelSelector variant="topbar" />}
+        {canChooseModel && <ModelSelector variant="topbar" />}
+        {showLockedModelPill && (
+          <div
+            className="top-bar-model-locked"
+            title={`This chat is using ${selectedModel.name}. Start a new chat to switch models.`}
+            aria-label={`Model in use: ${selectedModel.name}`}
+          >
+            <img className="model-selector-img" src={selectedModel.icon} alt="" />
+            <span className="model-selector-name">{selectedModel.name}</span>
+          </div>
+        )}
 
         {hasSession && onShare && (
           <button

@@ -12,6 +12,15 @@ import { NotePencilIcon as SquarePen } from '@phosphor-icons/react/NotePencil'
 import { SignOutIcon as LogOut } from '@phosphor-icons/react/SignOut'
 import { TextOutdentIcon as TextOutdent } from '@phosphor-icons/react/TextOutdent'
 import { TextIndentIcon as TextIndent } from '@phosphor-icons/react/TextIndent'
+import { LifebuoyIcon as Lifebuoy } from '@phosphor-icons/react/Lifebuoy'
+import { SparkleIcon as Sparkle } from '@phosphor-icons/react/Sparkle'
+import { CaretRightIcon as CaretRight } from '@phosphor-icons/react/CaretRight'
+import { CaretUpIcon as CaretUp } from '@phosphor-icons/react/CaretUp'
+import { FlagIcon as Flag } from '@phosphor-icons/react/Flag'
+import { QuestionIcon as Question } from '@phosphor-icons/react/Question'
+import { NotepadIcon as Notepad } from '@phosphor-icons/react/Notepad'
+import { UsersThreeIcon as UsersThree } from '@phosphor-icons/react/UsersThree'
+import { LinkSimpleIcon as LinkSimple } from '@phosphor-icons/react/LinkSimple'
 import { FRONTEND_URL } from '../config/api'
 import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -92,11 +101,13 @@ function Sidebar({
   const [editTitle, setEditTitle] = useState('')
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [accountOpen, setAccountOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
 
   const searchInputRef = useRef<HTMLInputElement>(null)
   const editInputRef = useRef<HTMLInputElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const accountRef = useRef<HTMLDivElement>(null)
+  const helpHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendingSearchFocusRef = useRef(false)
 
   const filteredSessions = sessions.filter((session) => {
@@ -117,11 +128,16 @@ function Sidebar({
       }
       if (accountRef.current && !accountRef.current.contains(e.target as Node)) {
         setAccountOpen(false)
+        setHelpOpen(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  useEffect(() => {
+    if (!accountOpen) setHelpOpen(false)
+  }, [accountOpen])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -276,23 +292,35 @@ function Sidebar({
     searchInputRef.current?.focus()
   }
 
+  const closeAccountMenu = () => {
+    setAccountOpen(false)
+    setHelpOpen(false)
+  }
+
+  const openHelpSubmenu = () => {
+    if (helpHoverTimerRef.current) {
+      clearTimeout(helpHoverTimerRef.current)
+      helpHoverTimerRef.current = null
+    }
+    setHelpOpen(true)
+  }
+
+  const scheduleCloseHelpSubmenu = () => {
+    if (helpHoverTimerRef.current) clearTimeout(helpHoverTimerRef.current)
+    helpHoverTimerRef.current = setTimeout(() => setHelpOpen(false), 140)
+  }
+
+  const comingSoon = (label: string) => {
+    closeAccountMenu()
+    showToast(`${label} — coming soon`)
+  }
+
   const renderAccountDropdown = () => (
     <div className="sidebar-account-dropdown">
-      {/* <button
-        className="sidebar-account-item"
-        onClick={() => {
-          setAccountOpen(false)
-          navigate('/settings?tab=general')
-          onCloseMobile?.()
-        }}
-      >
-        <User size={14} />
-        Profile
-      </button> */}
       <button
         className="sidebar-account-item"
         onClick={() => {
-          setAccountOpen(false)
+          closeAccountMenu()
           navigate('/settings')
           onCloseMobile?.()
         }}
@@ -300,16 +328,97 @@ function Sidebar({
         <SettingsIcon size={14} />
         Settings
       </button>
+      <button
+        className={`sidebar-account-item with-submenu ${helpOpen ? 'open' : ''}`}
+        onMouseEnter={openHelpSubmenu}
+        onMouseLeave={scheduleCloseHelpSubmenu}
+        onClick={() => setHelpOpen((p) => !p)}
+        aria-haspopup="menu"
+        aria-expanded={helpOpen}
+      >
+        <Lifebuoy size={14} />
+        Help
+        <CaretRight size={12} className="sidebar-account-item-caret" />
+      </button>
+      {helpOpen && (
+        <div
+          className="sidebar-account-submenu"
+          role="menu"
+          onMouseEnter={openHelpSubmenu}
+          onMouseLeave={scheduleCloseHelpSubmenu}
+        >
+          <a
+            className="sidebar-account-item"
+            href="https://github.com/samueldervishii/cortex/issues/new"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={closeAccountMenu}
+            role="menuitem"
+          >
+            <Flag size={14} />
+            Report Issue
+          </a>
+          <a
+            className="sidebar-account-item"
+            href="https://cortex-al.vercel.app/support.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={closeAccountMenu}
+            role="menuitem"
+          >
+            <Question size={14} />
+            FAQ
+          </a>
+          <a
+            className="sidebar-account-item"
+            href="https://github.com/samueldervishii/cortex/releases"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={closeAccountMenu}
+            role="menuitem"
+          >
+            <Notepad size={14} />
+            Release Notes
+          </a>
+          <a
+            className="sidebar-account-item"
+            href="https://github.com/samueldervishii/cortex/discussions"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={closeAccountMenu}
+            role="menuitem"
+          >
+            <UsersThree size={14} />
+            Community
+          </a>
+          <button
+            className="sidebar-account-item"
+            role="menuitem"
+            onClick={() => {
+              closeAccountMenu()
+              navigate('/settings?tab=data')
+              onCloseMobile?.()
+            }}
+          >
+            <LinkSimple size={14} />
+            Shared Links
+          </button>
+        </div>
+      )}
+      <button className="sidebar-account-item" onClick={() => comingSoon('Upgrade plan')}>
+        <Sparkle size={14} />
+        Upgrade plan
+      </button>
       <div className="sidebar-account-divider" />
       <button
         className="sidebar-account-item danger"
         onClick={() => {
-          setAccountOpen(false)
+          closeAccountMenu()
           logout()
         }}
       >
         <LogOut size={14} />
-        Log out
+        Sign out
       </button>
     </div>
   )
@@ -519,25 +628,18 @@ function Sidebar({
             {user &&
               (() => {
                 const tokens = usageCurrent?.total_tokens || 0
-                const percent = Math.min(
-                  100,
-                  Math.max(0, (tokens / USAGE_LIMIT_TOKENS) * 100)
-                )
+                const percent = Math.min(100, Math.max(0, (tokens / USAGE_LIMIT_TOKENS) * 100))
                 const hasBucket = !!(usageCurrent && usageCurrent.bucket_end)
                 return (
                   <div className="sidebar-usage" aria-label="Usage">
                     <div className="sidebar-usage-header">
                       <span className="sidebar-usage-label">Usage</span>
                       <span className="sidebar-usage-count">
-                        {formatSidebarTokens(tokens)} /{' '}
-                        {formatSidebarTokens(USAGE_LIMIT_TOKENS)}
+                        {formatSidebarTokens(tokens)} / {formatSidebarTokens(USAGE_LIMIT_TOKENS)}
                       </span>
                     </div>
                     <div className="sidebar-usage-bar">
-                      <div
-                        className="sidebar-usage-bar-fill"
-                        style={{ width: `${percent}%` }}
-                      />
+                      <div className="sidebar-usage-bar-fill" style={{ width: `${percent}%` }} />
                     </div>
                     <span className="sidebar-usage-reset">
                       {hasBucket
@@ -560,32 +662,13 @@ function Sidebar({
                   </div>
                   <div className="sidebar-account-copy">
                     <span className="sidebar-account-name">{displayName}</span>
-                    {user.email && (
-                      <span className="sidebar-account-email">{user.email}</span>
-                    )}
+                    {user.email && <span className="sidebar-account-email">{user.email}</span>}
                   </div>
                   <span
-                    className="sidebar-account-settings"
-                    role="button"
-                    tabIndex={0}
-                    title="Settings"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setAccountOpen(false)
-                      navigate('/settings')
-                      onCloseMobile?.()
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        setAccountOpen(false)
-                        navigate('/settings')
-                        onCloseMobile?.()
-                      }
-                    }}
+                    className={`sidebar-account-caret ${accountOpen ? 'open' : ''}`}
+                    aria-hidden="true"
                   >
-                    <SettingsIcon size={14} />
+                    <CaretUp size={14} weight="bold" />
                   </span>
                 </button>
               </div>
@@ -641,8 +724,8 @@ function Sidebar({
               <h3>Delete Chat?</h3>
               <p>
                 Are you sure you want to delete{' '}
-                <strong>"{truncateQuestion(deleteConfirm.title, 30)}"</strong>? This action cannot be
-                undone.
+                <strong>"{truncateQuestion(deleteConfirm.title, 30)}"</strong>? This action cannot
+                be undone.
               </p>
               <div className="delete-modal-actions">
                 <button className="delete-cancel" onClick={cancelDelete}>

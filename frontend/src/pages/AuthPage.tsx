@@ -279,7 +279,7 @@ function AuthPage() {
             <span className="auth-preview-dot" />
           </div>
           <div className="auth-preview-topbar">
-            <span className="auth-preview-model">Claude Sonnet 4.6</span>
+            <span className="auth-preview-model">Claude</span>
           </div>
           <div className="auth-preview-messages">
             <div className="auth-preview-msg user auth-anim-user">

@@ -127,8 +127,11 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       }
     }, [value])
 
+    const MAX_CHARS = 1000
+    const charactersUsed = value.length
+    const isOverLimit = charactersUsed > MAX_CHARS
+    const isNearLimit = charactersUsed >= MAX_CHARS * 0.9
     const hasContent = value.trim() || attachedFile
-    const remainingCharacters = Math.max(0, 1000 - value.length)
 
     const getFileExt = (name: string) => {
       const ext = name.split('.').pop()?.toUpperCase()
@@ -207,7 +210,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
           <textarea
             ref={textareaRef}
             value={value}
-            onChange={(e) => onChange(e.target.value)}
+            onChange={(e) => onChange(e.target.value.slice(0, MAX_CHARS))}
             onKeyDown={handleKeyDown}
             placeholder={
               attachedFile
@@ -215,6 +218,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
                 : placeholder || 'Ask Cortex anything. Type / for commands.'
             }
             rows={1}
+            maxLength={MAX_CHARS}
             disabled={disabled}
             autoFocus={centered}
           />
@@ -242,7 +246,13 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
               hidden
             />
             <div className="input-actions-right">
-              {centered && <span className="input-char-count">{remainingCharacters}/1000</span>}
+              {centered && (
+                <span
+                  className={`input-char-count${isOverLimit ? ' over' : isNearLimit ? ' near' : ''}`}
+                >
+                  {charactersUsed}/{MAX_CHARS}
+                </span>
+              )}
               <span className="input-send-hint">
                 <span className="input-send-hint-model">{selectedModel.name}</span>
                 <kbd className="shortcut-kbd">↵</kbd>
@@ -272,9 +282,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
           </div>
         </div>
 
-        <p className="input-footer-note">
-          Cortex can make mistakes. Verify anything load-bearing.
-        </p>
+        <p className="input-footer-note">Cortex can make mistakes. Verify anything load-bearing.</p>
 
         {dragOver && (
           <div className="drop-overlay">

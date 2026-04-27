@@ -41,7 +41,7 @@ const SUGGESTIONS = [
     description: 'Tighten clarity, flow, and academic tone across your existing writing.',
     prompt:
       'Help me improve the clarity, structure, and academic tone of my draft. I will paste it next.',
-  }
+  },
 ]
 
 function WelcomeScreen({

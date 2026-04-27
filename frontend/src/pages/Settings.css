@@ -789,6 +789,19 @@
   border-color: rgba(184, 84, 44, 0.2);
 }
 
+/* Wrapper that constrains the custom-select used inside `.settings-option`
+   (which is a flex space-between row) to a fixed width on the right side,
+   matching the visual footprint of the previous native `<select>`. */
+.settings-select-wrap {
+  width: 160px;
+  flex-shrink: 0;
+}
+
+.settings-select-wrap .custom-select-trigger {
+  font-size: 0.84rem;
+  padding: 0.45rem 0.75rem;
+}
+
 .settings-action {
   display: flex;
   justify-content: space-between;
@@ -1780,8 +1793,6 @@ html[data-theme='dark'] .settings-nav-item.active {
 
 html[data-theme='dark'] .settings-option,
 html[data-theme='dark'] .settings-action,
-html[data-theme='dark'] .profile-row,
-html[data-theme='dark'] .profile-table,
 html[data-theme='dark'] .usage-card,
 html[data-theme='dark'] .usage-meter,
 html[data-theme='dark'] .about-link-card,
@@ -1789,6 +1800,18 @@ html[data-theme='dark'] .about-keyboard-shortcuts-card,
 html[data-theme='dark'] .export-format-option {
   background: rgba(244, 236, 223, 0.04);
   border-color: var(--rule);
+}
+
+/* Profile is a flat row list, not a card. Keep transparent and only show
+   the horizontal dividers in dark mode (matches the light theme look). */
+html[data-theme='dark'] .profile-table {
+  background: transparent;
+  border-top-color: var(--rule);
+}
+
+html[data-theme='dark'] .profile-row {
+  background: transparent;
+  border-bottom-color: var(--rule);
 }
 
 html[data-theme='dark'] .settings-action.danger {
@@ -1862,4 +1885,22 @@ html[data-theme='dark'] .theme-toggle-option.active {
 
 html[data-theme='dark'] .theme-toggle-swatch {
   border-color: rgba(244, 236, 223, 0.18);
+}
+
+/* Cancel buttons: light-cream hover from the paper theme reads as a glaring
+   pale flash in dark mode. Tint with the inverse instead. */
+html[data-theme='dark'] .profile-inline-cancel,
+html[data-theme='dark'] .settings-cancel-btn,
+html[data-theme='dark'] .modal-btn.cancel {
+  background: transparent;
+  border-color: var(--rule);
+  color: var(--text-secondary);
+}
+
+html[data-theme='dark'] .profile-inline-cancel:hover,
+html[data-theme='dark'] .settings-cancel-btn:hover,
+html[data-theme='dark'] .modal-btn.cancel:hover {
+  background: rgba(244, 236, 223, 0.06);
+  border-color: var(--rule-2);
+  color: var(--text-primary);
 }
