@@ -21,11 +21,21 @@ async def get_database() -> AsyncIOMotorDatabase:
     if _database is None:
         async with _db_lock:
             if _database is None:
+                # Use certifi's CA bundle explicitly. Some PaaS images
+                # (Render, Railway, etc.) ship a trimmed system CA store
+                # that triggers ``TLSV1_ALERT_INTERNAL_ERROR`` on the
+                # MongoDB Atlas load balancer during the TLS handshake.
+                # Pinning the bundle to certifi removes that variable
+                # entirely and is harmless when the system store would
+                # have worked anyway.
+                import certifi
+
                 # Pool settings tuned for moderate load (~10-20 concurrent users).
                 # maxPoolSize=20 handles concurrent API calls with retries.
                 # minPoolSize=5 keeps connections warm to avoid cold-start latency.
                 _client = AsyncIOMotorClient(
                     settings.mongodb_url,
+                    tlsCAFile=certifi.where(),
                     maxPoolSize=20,
                     minPoolSize=5,
                     maxIdleTimeMS=30000,     # Close idle connections after 30s

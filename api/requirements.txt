@@ -5,6 +5,9 @@ httpx==0.28.1
 pydantic>=2.12.5
 pydantic-settings>=2.6.0
 motor>=3.6.0
+# Explicit CA bundle for the Mongo TLS handshake on PaaS hosts that
+# ship a trimmed system CA store (Render in particular).
+certifi>=2024.7.4
 
 # File handling
 python-multipart>=0.0.20
