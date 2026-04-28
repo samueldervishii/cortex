@@ -9,7 +9,7 @@ import httpx
 from config import settings
 from core.circuit_breaker import with_circuit_breaker
 
-logger = logging.getLogger("cortex.ai_client")
+logger = logging.getLogger("etude.ai_client")
 
 
 def _clean_title(raw: str) -> str:
@@ -125,13 +125,24 @@ class AIClient:
     async def chat(
         self,
         model_id: str,
-        prompt: str,
+        prompt: Optional[str] = None,
         system_prompt: Optional[str] = None,
         max_tokens: int = 2048,
         temperature: float = 0.7,
+        messages: Optional[list[dict]] = None,
     ) -> str:
-        """Send a chat request to the Anthropic Messages API."""
+        """Send a chat request to the Anthropic Messages API.
+
+        Pass either ``prompt`` (single user turn — used by callsites that
+        only need a one-shot completion, like title generation) or a fully
+        structured ``messages`` array. ``messages`` wins if both are given.
+        """
         logger.info(f"Anthropic request to model: {model_id}")
+
+        if messages is None:
+            if prompt is None:
+                raise ValueError("AIClient.chat requires either `prompt` or `messages`")
+            messages = [{"role": "user", "content": prompt}]
 
         headers = {
             "x-api-key": self.anthropic_api_key,
@@ -143,7 +154,7 @@ class AIClient:
             "model": model_id,
             "max_tokens": max_tokens,
             "temperature": temperature,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": messages,
         }
 
         if system_prompt:
@@ -216,15 +227,22 @@ class AIClient:
     async def stream_chat(
         self,
         model_id: str,
-        prompt: str,
+        prompt: Optional[str] = None,
         system_prompt: Optional[str] = None,
         max_tokens: int = 2048,
         temperature: float = 0.7,
         thinking_budget: int = 12000,
+        messages: Optional[list[dict]] = None,
     ) -> AsyncGenerator[tuple[str, Any], None]:
         """Stream tokens from the Anthropic Messages API.
 
         Args:
+            messages: structured Anthropic ``messages`` array. Preferred —
+                preserves role boundaries which previously got flattened
+                into a single ``"User: ...\\nAssistant: ..."`` blob, hurting
+                response quality and inflating token usage.
+            prompt: legacy single-user-turn convenience. Used only when
+                ``messages`` is not provided.
             thinking_budget: explicit cap on tokens Claude may spend thinking.
                 Must be >= 1024 and strictly less than max_tokens.
 
@@ -239,6 +257,13 @@ class AIClient:
         check_breaker("anthropic")
 
         logger.info(f"Anthropic streaming request to model: {model_id}")
+
+        if messages is None:
+            if prompt is None:
+                raise ValueError(
+                    "AIClient.stream_chat requires either `prompt` or `messages`"
+                )
+            messages = [{"role": "user", "content": prompt}]
 
         headers = {
             "x-api-key": self.anthropic_api_key,
@@ -259,7 +284,7 @@ class AIClient:
             "max_tokens": max_tokens,
             "temperature": 1,  # required by Anthropic thinking mode
             "stream": True,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": messages,
             "thinking": {"type": "enabled", "budget_tokens": safe_thinking},
             "tools": [
                 {"type": "web_search_20250305", "name": "web_search", "max_uses": 3},

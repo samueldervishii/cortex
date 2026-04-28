@@ -1,18 +1,32 @@
 """
-Input sanitization utilities for security.
+Input sanitization utilities.
 
-Prevents XSS and other injection attacks by cleaning user input.
+Sanitization here is structural (length caps, control-char stripping,
+whitespace normalization). XSS defense lives at the rendering layer:
+the frontend renders user messages through React (text nodes — no
+``dangerouslySetInnerHTML``) and assistant markdown through
+``react-markdown`` with ``rehype-sanitize``, both of which neutralize
+``<script>`` payloads safely.
+
+Earlier versions of this module also tried to strip HTML tags and HTML-
+escape on the way INTO the database. That was actively harmful because:
+
+  * ``html.escape`` mangles every code snippet a user pastes — ``Vec<T>``,
+    ``a > b && c < d``, JSX examples — and feeds the corrupted text both
+    to Claude (poisoning the conversation) and to DOCX/markdown exports
+    (gibberish entities).
+  * The ``<[^>]{0,1000}>`` tag stripper also matches in non-HTML text:
+    ``if a < b and c > d`` becomes ``if a  d`` because ``< b and c >``
+    looks like a tag to the regex.
+
+Both of those have been removed. If you ever need raw-HTML defense for
+a brand-new code path that bypasses the React renderer, write a
+purpose-built sanitizer there — don't push it back into this function.
 """
 
-import html
 import re
 from typing import Optional
 
-# Pre-compiled regex patterns for performance
-_RE_HTML_COMMENT = re.compile(r"<!--[^-]{0,10000}(?:-(?!->)[^-]{0,10000})*-->")
-_RE_HTML_TAG = re.compile(r"<[^>]{0,1000}>")
-_RE_HTML_UNCLOSED = re.compile(r"<[^>]{0,1000}$")
-_RE_URI_SCHEME = re.compile(r"(?i)(javascript|data|vbscript)\s*:")
 _RE_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]")
 _RE_MULTI_SPACES = re.compile(r"[ \t]+")
 _RE_MULTI_NEWLINES = re.compile(r"\n[ \t]*\n(?:[ \t]*\n)+")
@@ -21,60 +35,29 @@ _RE_TITLE_WHITESPACE = re.compile(r"\s+")
 
 
 def sanitize_text(text: Optional[str], max_length: Optional[int] = None) -> str:
-    """
-    Sanitize text input by removing potentially dangerous characters.
+    """Normalize a free-form text input for storage.
 
-    - Strips HTML/XML tags (including unclosed tags and comments)
-    - Escapes remaining HTML entities
-    - Removes control characters (except newlines and tabs)
-    - Strips javascript: and data: URI schemes
-    - Normalizes whitespace
-    - Optionally truncates to max_length
+    - Removes ASCII control characters (except newline, CR, tab)
+    - Collapses runs of horizontal whitespace
+    - Collapses runs of 3+ blank lines to 2 (preserves paragraphs)
+    - Strips leading/trailing whitespace
+    - Optionally truncates to ``max_length`` characters
 
-    Args:
-        text: Input text to sanitize
-        max_length: Maximum length (None for no limit)
-
-    Returns:
-        Sanitized text string
+    Does NOT alter HTML-significant characters or strip tags — the renderer
+    is responsible for that. See module docstring.
     """
     if text is None:
         return ""
 
-    # Convert to string if not already
     text = str(text)
 
-    # Truncate to a safe ceiling before ANY regex runs.
-    # Without this bound, patterns like <!--.*?--> are polynomial (O(n²)) on
-    # inputs that open <!-- but never close -->, allowing ReDoS.
-    _REGEX_SAFE_LIMIT = 100_000
-    if len(text) > _REGEX_SAFE_LIMIT:
-        text = text[:_REGEX_SAFE_LIMIT]
-
-    # Remove HTML comments
-    text = _RE_HTML_COMMENT.sub("", text)
-
-    # Remove HTML/XML tags (including unclosed tags at end of input)
-    text = _RE_HTML_TAG.sub("", text)
-    text = _RE_HTML_UNCLOSED.sub("", text)
-
-    # Remove dangerous URI schemes (javascript:, data:, vbscript:)
-    text = _RE_URI_SCHEME.sub("", text)
-
-    # Escape any remaining HTML entities to prevent XSS
-    text = html.escape(text, quote=True)
-
-    # Remove control characters except newline, carriage return, and tab
     text = _RE_CONTROL_CHARS.sub("", text)
 
-    # Normalize excessive whitespace (but preserve single newlines)
     text = _RE_MULTI_SPACES.sub(" ", text)
     text = _RE_MULTI_NEWLINES.sub("\n\n", text)
 
-    # Strip leading/trailing whitespace
     text = text.strip()
 
-    # Truncate if needed
     if max_length and len(text) > max_length:
         text = text[:max_length].rstrip()
 

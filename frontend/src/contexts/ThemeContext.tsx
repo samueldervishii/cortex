@@ -9,7 +9,7 @@ interface ThemeContextValue {
   setTheme: (t: ThemeMode) => void
 }
 
-const STORAGE_KEY = 'cortex-theme'
+const STORAGE_KEY = 'etude-theme'
 const LIGHT_BG = '#FAFAF7'
 const DARK_BG = '#15110e'
 

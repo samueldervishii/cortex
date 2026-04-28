@@ -25,7 +25,7 @@ async def health_check():
 
     Returns 200 if the application is running.
     """
-    return {"status": "healthy", "service": "cortex-api", "version": VERSION}
+    return {"status": "healthy", "service": "etude-api", "version": VERSION}
 
 
 @router.get("/ready")

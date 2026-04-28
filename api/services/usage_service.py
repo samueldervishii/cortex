@@ -144,6 +144,28 @@ async def try_reserve_tokens(
     return _serialize_bucket(bucket), False
 
 
+async def release_reservation(
+    db: AsyncIOMotorDatabase, user_id: str, amount: int
+) -> None:
+    """Release a previously reserved token allotment without recording usage.
+
+    Used by the SSE stream's ``finally`` cleanup when the client disconnects
+    before the response completes.  We must not call :func:`record_usage`
+    in that path because it bumps ``message_count`` even when no response
+    was produced.
+
+    Idempotent: if no active bucket exists (e.g. it just expired) the
+    update is a no-op.
+    """
+    if amount <= 0:
+        return
+    now = _utcnow()
+    await db["usage_buckets"].update_one(
+        {"user_id": user_id, "bucket_end": {"$gt": now}},
+        {"$inc": {"reserved_tokens": -amount}},
+    )
+
+
 async def record_usage(
     db: AsyncIOMotorDatabase,
     user_id: str,

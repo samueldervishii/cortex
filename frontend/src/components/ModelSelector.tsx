@@ -16,7 +16,7 @@ export const MODELS: ModelDef[] = [
     id: 'claude-sonnet-4-6',
     name: 'Claude Sonnet 4.6',
     shortName: 'Sonnet 4.6',
-    description: 'Balanced · fast · default',
+    description: 'Balanced · fast · default · most efficient',
     tier: 'DEFAULT',
     icon: '/models/icons8-claude-ai-96.png',
   },
@@ -24,7 +24,7 @@ export const MODELS: ModelDef[] = [
     id: 'claude-opus-4-6',
     name: 'Claude Opus 4.6',
     shortName: 'Opus 4.6',
-    description: 'Deepest reasoning · slower',
+    description: 'Deepest reasoning · slower · more expensive',
     tier: 'MAX',
     icon: '/models/icons8-claude-ai-96.png',
   },
@@ -32,15 +32,15 @@ export const MODELS: ModelDef[] = [
     id: 'claude-haiku-4-5',
     name: 'Claude Haiku 4.5',
     shortName: 'Haiku 4.5',
-    description: 'Quick replies · cheapest',
+    description: 'Quick replies · cheapest · less powerful',
     tier: 'FAST',
     icon: '/models/icons8-claude-ai-96.png',
   },
 ]
 
-const STORAGE_KEY = 'cortex-selected-model'
+const STORAGE_KEY = 'etude-selected-model'
 const DEFAULT_MODEL_ID = MODELS[0].id
-const MODEL_CHANGED_EVENT = 'cortex:model-changed'
+const MODEL_CHANGED_EVENT = 'etude:model-changed'
 
 /** Read the selected model id from localStorage, with fallback + validation. */
 export function getSelectedModelId(): string {

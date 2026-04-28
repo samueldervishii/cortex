@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Depends, Request, Query, File, UploadFile, Form
 from fastapi.responses import StreamingResponse
 
-logger = logging.getLogger("cortex.sessions")
+logger = logging.getLogger("etude.sessions")
 
 from clients import AIClient
 from config import CHAT_MODEL, resolve_model
@@ -50,9 +50,18 @@ def get_chat_service(client: AIClient = Depends(get_ai_client)) -> ChatService:
 
 
 def _strip_file_data(session):
-    """Strip data_base64 from session messages before sending to client."""
+    """Strip ``data_base64`` from session messages before sending to client.
+
+    Kept as a defensive belt-and-suspenders pass for code paths where a
+    session was loaded WITHOUT the projection (e.g. constructed from a
+    cached doc, or returned from a method that didn't apply the
+    ``messages.file.data_base64: 0`` projection). For the common path —
+    ``repo.get`` / ``get_by_share_token`` / ``get_all_full`` — the blob
+    is already absent because the projection drops it server-side, so
+    this loop is essentially a no-op there.
+    """
     for msg in session.messages:
-        if msg.file:
+        if msg.file and msg.file.data_base64:
             msg.file.data_base64 = ""
     return session
 
@@ -418,20 +427,41 @@ async def stream_response(
     if not session.messages:
         raise HTTPException(status_code=400, detail="No messages in session")
 
-    # Per-user usage limits: check/record AFTER validating the session exists
-    user_usage.check(user_id)
-    user_usage.record(user_id)
+    # Per-user usage limits: check/record AFTER validating the session exists.
+    # Mongo-backed so 50/day and 3s-cooldown are accurate across all workers.
+    db = repo.collection.database
+    await user_usage.check_and_record(user_id, db)
+
+    # Per-session streaming lock: only one /stream call at a time per session.
+    # Acquired BEFORE the token reservation so a duplicate request doesn't
+    # eat the user's quota just to fail later.  Released in the event_stream
+    # ``finally`` so even client disconnects free the lock.
+    if not await repo.acquire_stream_lock(session_id, user_id):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Another response is already streaming for this session. "
+                "Please wait for it to finish before sending a new request."
+            ),
+        )
 
     # Atomic token reservation: claim RESPONSE_TOKEN_RESERVE tokens *before*
     # the stream starts.  The reservation is released when record_usage runs
     # after the stream finishes, swapping the placeholder for actual counts.
     # This prevents concurrent streams from each seeing "under cap" and
     # collectively exceeding the limit.
-    db = repo.collection.database
-    current_usage, reserved_ok = await usage_service.try_reserve_tokens(
-        db, user_id, usage_service.RESPONSE_TOKEN_RESERVE,
-    )
+    try:
+        current_usage, reserved_ok = await usage_service.try_reserve_tokens(
+            db, user_id, usage_service.RESPONSE_TOKEN_RESERVE,
+        )
+    except Exception:
+        # If the reservation step itself blows up, hand the lock back so the
+        # session isn't bricked until the stale-lock TTL expires.
+        await repo.release_stream_lock(session_id, user_id)
+        raise
+
     if not reserved_ok:
+        await repo.release_stream_lock(session_id, user_id)
         reset = usage_service.format_reset_time(current_usage["resets_in_seconds"])
         raise HTTPException(
             status_code=429,
@@ -548,6 +578,7 @@ async def stream_response(
         )
 
     async def event_stream():
+        import asyncio as _asyncio
         import json as _json
         response_parts: list[str] = []
         full_response = ""
@@ -556,180 +587,236 @@ async def stream_response(
         response_time_ms = None
         input_tokens = 0
         output_tokens = 0
+        cleanup_done = False
+        db = repo.collection.database
 
         if is_artifact:
             yield f"event: artifact_hint\ndata: {_json.dumps({'is_artifact': True})}\n\n"
 
+        # The outer try/finally is what catches client disconnects.  Starlette
+        # closes the generator (raising GeneratorExit / CancelledError) when
+        # the SSE socket drops; ``except Exception`` will NOT catch those, so
+        # without this finally the reserved tokens placed by
+        # ``try_reserve_tokens`` above would never be returned to the user's
+        # bucket and their quota would silently shrink with every disconnect.
         try:
-            async for event in chat_service.stream_response(
-                question=question_text,
-                history=history,
-                system_prompt=system_prompt,
-                remaining_tokens=remaining_tokens,
-                model=selected_model,
-            ):
-                if event.startswith("event: done"):
-                    try:
-                        data_start = event.index("data: ") + 6
-                        done_data = _json.loads(event[data_start:].strip())
-                        input_tokens = int(done_data.get("input_tokens", 0) or 0)
-                        output_tokens = int(done_data.get("output_tokens", 0) or 0)
-                    except (ValueError, _json.JSONDecodeError):
-                        pass
-                    continue
+            try:
+                async for event in chat_service.stream_response(
+                    question=question_text,
+                    history=history,
+                    system_prompt=system_prompt,
+                    remaining_tokens=remaining_tokens,
+                    model=selected_model,
+                ):
+                    if event.startswith("event: done"):
+                        try:
+                            data_start = event.index("data: ") + 6
+                            done_data = _json.loads(event[data_start:].strip())
+                            input_tokens = int(done_data.get("input_tokens", 0) or 0)
+                            output_tokens = int(done_data.get("output_tokens", 0) or 0)
+                        except (ValueError, _json.JSONDecodeError):
+                            pass
+                        continue
 
-                yield event
+                    yield event
 
-                if "event: token" in event:
-                    try:
-                        data_start = event.index("data: ") + 6
-                        data = _json.loads(event[data_start:].strip())
-                        response_parts.append(data.get("content", ""))
-                    except (ValueError, _json.JSONDecodeError):
-                        pass
-                elif "message_end" in event:
-                    try:
-                        data_start = event.index("data: ") + 6
-                        data = _json.loads(event[data_start:].strip())
-                        model_id = data.get("model_id")
-                        response_time_ms = data.get("response_time_ms")
-                    except (ValueError, _json.JSONDecodeError):
-                        pass
-                elif "message_start" in event:
-                    try:
-                        data_start = event.index("data: ") + 6
-                        data = _json.loads(event[data_start:].strip())
-                        model_name = data.get("model_name")
-                    except (ValueError, _json.JSONDecodeError):
-                        pass
+                    if "event: token" in event:
+                        try:
+                            data_start = event.index("data: ") + 6
+                            data = _json.loads(event[data_start:].strip())
+                            response_parts.append(data.get("content", ""))
+                        except (ValueError, _json.JSONDecodeError):
+                            pass
+                    elif "message_end" in event:
+                        try:
+                            data_start = event.index("data: ") + 6
+                            data = _json.loads(event[data_start:].strip())
+                            model_id = data.get("model_id")
+                            response_time_ms = data.get("response_time_ms")
+                        except (ValueError, _json.JSONDecodeError):
+                            pass
+                    elif "message_start" in event:
+                        try:
+                            data_start = event.index("data: ") + 6
+                            data = _json.loads(event[data_start:].strip())
+                            model_name = data.get("model_name")
+                        except (ValueError, _json.JSONDecodeError):
+                            pass
 
-            full_response = "".join(response_parts)
+                full_response = "".join(response_parts)
 
-            # Save assistant message to session using targeted $push
-            # to avoid overwriting concurrent mutations (pin/rename/delete/share)
-            if full_response:
-                # Parse citation references from the response using ALL file chunks
-                parsed_citations = []
-                if has_chunks:
-                    import re as _re
-                    from schemas import CitationRef
-                    # Build lookup from chunk ID to chunk data across all files
-                    chunk_map = {c.id: c for c in all_chunks}
-                    # Find all [source: chunk-id] references
-                    cited_ids = _re.findall(r'\[source:\s*([a-zA-Z0-9\-]+)\]', full_response)
-                    seen = set()
-                    for cid in cited_ids:
-                        if cid in seen or cid not in chunk_map:
-                            continue
-                        seen.add(cid)
-                        chunk = chunk_map[cid]
-                        parsed_citations.append(CitationRef(
-                            id=chunk.id,
-                            text=chunk.text[:300],  # Excerpt, not full chunk
-                            source=chunk.source,
-                            page=chunk.page,
-                        ))
+                # Save assistant message to session using targeted $push
+                # to avoid overwriting concurrent mutations (pin/rename/delete/share)
+                if full_response:
+                    parsed_citations = []
+                    if has_chunks:
+                        import re as _re
+                        from schemas import CitationRef
+                        chunk_map = {c.id: c for c in all_chunks}
+                        cited_ids = _re.findall(r'\[source:\s*([a-zA-Z0-9\-]+)\]', full_response)
+                        seen = set()
+                        for cid in cited_ids:
+                            if cid in seen or cid not in chunk_map:
+                                continue
+                            seen.add(cid)
+                            chunk = chunk_map[cid]
+                            parsed_citations.append(CitationRef(
+                                id=chunk.id,
+                                text=chunk.text[:300],
+                                source=chunk.source,
+                                page=chunk.page,
+                            ))
 
-                assistant_msg = Message(
-                    role="assistant",
-                    content=full_response,
-                    model_id=model_id,
-                    model_name=model_name,
-                    response_time_ms=response_time_ms,
-                    is_artifact=is_artifact,
-                    citations=parsed_citations,
-                )
-                msg_saved = await repo.append_message(session_id, assistant_msg.model_dump(), position=reply_position, user_id=user_id)
+                    assistant_msg = Message(
+                        role="assistant",
+                        content=full_response,
+                        model_id=model_id,
+                        model_name=model_name,
+                        response_time_ms=response_time_ms,
+                        is_artifact=is_artifact,
+                        citations=parsed_citations,
+                    )
+                    msg_saved = await repo.append_message(session_id, assistant_msg.model_dump(), position=reply_position, user_id=user_id)
 
-                # Only create artifact if the message was actually persisted
-                if msg_saved and is_artifact and full_response.strip():
-                    import re as _title_re
-                    title_match = _title_re.match(r'^#+ (.+)', full_response)
-                    artifact_title = title_match.group(1) if title_match else "Generated Document"
-                    artifact_doc = {
-                        "id": str(uuid.uuid4()),
-                        "session_id": session_id,
-                        "message_index": reply_position,
-                        "title": artifact_title,
-                        "content": full_response,
-                        "created_at": utc_iso(),
-                    }
-                    try:
-                        db = repo.collection.database
-                        await db["artifacts"].insert_one(artifact_doc)
-                    except Exception:
-                        logger.debug(f"Failed to save artifact for session {session_id}")
+                    if msg_saved and is_artifact and full_response.strip():
+                        import re as _title_re
+                        title_match = _title_re.match(r'^#+ (.+)', full_response)
+                        artifact_title = title_match.group(1) if title_match else "Generated Document"
+                        artifact_doc = {
+                            "id": str(uuid.uuid4()),
+                            "session_id": session_id,
+                            "message_index": reply_position,
+                            "title": artifact_title,
+                            "content": full_response,
+                            "created_at": utc_iso(),
+                        }
+                        try:
+                            await db["artifacts"].insert_one(artifact_doc)
+                        except Exception:
+                            logger.debug(f"Failed to save artifact for session {session_id}")
 
-                # First exchange → ask the model to name the chat. We do
-                # this inline (not as a background task) so the new title
-                # is already in the DB by the time the frontend refreshes
-                # its session list after `done`. Failure is non-fatal.
-                if msg_saved and is_first_exchange and full_response.strip():
-                    try:
-                        new_title = await chat_service.client.generate_session_title(
-                            question=last_user_msg.content,
-                            answer=full_response,
-                            model_id=selected_model["id"],
-                        )
-                        if new_title:
-                            db = repo.collection.database
-                            # Only rename if the title hasn't been manually
-                            # changed by the user in the meantime.
-                            await db["sessions"].update_one(
-                                {
-                                    "id": session_id,
-                                    "user_id": user_id,
-                                    "title": original_title,
-                                },
-                                {
-                                    "$set": {
-                                        "title": new_title,
-                                        "updated_at": datetime.now(timezone.utc),
-                                    }
-                                },
+                    # First exchange → ask the model to name the chat. This is
+                    # an extra LLM round-trip and used to be awaited inline,
+                    # which delayed every first ``done`` event by ~1–2s. We
+                    # now run it as a detached background task so the user
+                    # sees ``done`` as soon as the answer streams; the title
+                    # appears whenever the sidebar next refreshes.
+                    #
+                    # We capture all the values the closure needs as locals
+                    # (no `nonlocal`, no shared mutable state) so concurrent
+                    # streams in other sessions can't poison each other's
+                    # title generation.
+                    if msg_saved and is_first_exchange and full_response.strip():
+                        _question_for_title = last_user_msg.content
+                        _answer_for_title = full_response
+                        _model_for_title = selected_model["id"]
+                        _original_title = original_title
+
+                        async def _generate_title_bg():
+                            try:
+                                new_title = await chat_service.client.generate_session_title(
+                                    question=_question_for_title,
+                                    answer=_answer_for_title,
+                                    model_id=_model_for_title,
+                                )
+                                if not new_title:
+                                    return
+                                # Only rename if the title hasn't been manually
+                                # changed by the user in the meantime.
+                                await db["sessions"].update_one(
+                                    {
+                                        "id": session_id,
+                                        "user_id": user_id,
+                                        "title": _original_title,
+                                    },
+                                    {
+                                        "$set": {
+                                            "title": new_title,
+                                            "updated_at": datetime.now(timezone.utc),
+                                        }
+                                    },
+                                )
+                            except Exception:
+                                logger.debug(
+                                    f"Background title generation failed for session {session_id}",
+                                    exc_info=True,
+                                )
+
+                        try:
+                            _asyncio.create_task(_generate_title_bg())
+                        except RuntimeError:
+                            logger.debug(
+                                f"Could not schedule title generation for session {session_id}; "
+                                f"event loop closed."
                             )
-                    except Exception:
-                        logger.debug(
-                            f"Title generation failed for session {session_id}",
-                            exc_info=True,
+
+            except Exception:
+                logger.exception(f"Stream error for session {session_id}")
+                yield 'event: error\ndata: {"message": "An internal error has occurred. Please try again."}\n\n'
+
+            # Normal-completion cleanup: record usage (or pure release) and
+            # emit the terminating `done` event. We set `cleanup_done` as the
+            # flag to the outer ``finally`` that no compensation is needed.
+            usage_payload = None
+            try:
+                if input_tokens or output_tokens or full_response:
+                    usage_payload = await usage_service.record_usage(
+                        db,
+                        user_id,
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
+                        release_reserved=usage_service.RESPONSE_TOKEN_RESERVE,
+                        is_artifact=is_artifact,
+                        has_file=bool(last_user_msg.file),
+                    )
+                else:
+                    # Stream produced no output — release the reservation
+                    # without recording real usage or bumping message_count.
+                    await usage_service.release_reservation(
+                        db, user_id, usage_service.RESPONSE_TOKEN_RESERVE,
+                    )
+                cleanup_done = True
+            except Exception:
+                logger.exception("Failed to record usage")
+
+            done_data: dict = {"input_tokens": input_tokens, "output_tokens": output_tokens}
+            if usage_payload is not None:
+                done_data["usage"] = usage_payload
+            yield f"event: done\ndata: {_json.dumps(done_data)}\n\n"
+        finally:
+            # Compensating cleanup for paths that didn't reach the normal
+            # cleanup above (CancelledError / GeneratorExit on client
+            # disconnect, plus any exception escaping the inner try).
+            # We schedule both the reservation release AND the streaming-
+            # lock release as detached tasks: awaiting in finally during a
+            # cancellation can itself be cancelled mid-await, but tasks
+            # spawned via ``create_task`` survive the cancellation and run
+            # to completion on the event loop.
+            if not cleanup_done:
+                try:
+                    _asyncio.create_task(
+                        usage_service.release_reservation(
+                            db, user_id, usage_service.RESPONSE_TOKEN_RESERVE,
                         )
-
-        except Exception:
-            logger.exception(f"Stream error for session {session_id}")
-            yield 'event: error\ndata: {"message": "An internal error has occurred. Please try again."}\n\n'
-
-        # Record usage and emit the final done event with hydrated bucket data.
-        # Wrapped in try/except so failures never block the terminating event.
-        usage_payload = None
-        try:
-            db = repo.collection.database
-            if input_tokens or output_tokens or full_response:
-                usage_payload = await usage_service.record_usage(
-                    db,
-                    user_id,
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                    release_reserved=usage_service.RESPONSE_TOKEN_RESERVE,
-                    is_artifact=is_artifact,
-                    has_file=bool(last_user_msg.file),
+                    )
+                except RuntimeError:
+                    # Event loop already closed — nothing we can do; the
+                    # bucket TTL (30 days) will eventually clean it up.
+                    logger.warning(
+                        f"Could not schedule reservation release for user {user_id}; "
+                        f"event loop closed."
+                    )
+            # Always release the per-session streaming lock so a new
+            # /stream request can proceed.  Stale-lock TTL (3 minutes) is
+            # the safety net if even this fails.
+            try:
+                _asyncio.create_task(
+                    repo.release_stream_lock(session_id, user_id)
                 )
-            else:
-                # Stream produced no output (error/empty) — release the
-                # reservation without recording real usage.
-                usage_payload = await usage_service.record_usage(
-                    db,
-                    user_id,
-                    input_tokens=0,
-                    output_tokens=0,
-                    release_reserved=usage_service.RESPONSE_TOKEN_RESERVE,
+            except RuntimeError:
+                logger.warning(
+                    f"Could not schedule stream lock release for session {session_id}"
                 )
-        except Exception:
-            logger.exception("Failed to record usage")
-
-        done_data: dict = {"input_tokens": input_tokens, "output_tokens": output_tokens}
-        if usage_payload is not None:
-            done_data["usage"] = usage_payload
-        yield f"event: done\ndata: {_json.dumps(done_data)}\n\n"
 
     return StreamingResponse(
         event_stream(),
@@ -777,7 +864,9 @@ async def download_file(
     import base64
     from fastapi.responses import Response
 
-    session = await repo.get(session_id, user_id=user_id)
+    # Need the inline base64 here even when ``file_storage_id`` is set,
+    # so we can fall back to it for legacy messages.
+    session = await repo.get(session_id, user_id=user_id, with_file_blobs=True)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 

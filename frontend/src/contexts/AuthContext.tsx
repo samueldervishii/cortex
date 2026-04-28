@@ -35,8 +35,8 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null)
 
-const TOKEN_KEY = 'cortex-access-token'
-const REFRESH_KEY = 'cortex-refresh-token'
+const TOKEN_KEY = 'etude-access-token'
+const REFRESH_KEY = 'etude-refresh-token'
 
 const SESSION_RETRY_INITIAL_MS = 4000
 const SESSION_RETRY_MAX_MS = 30000

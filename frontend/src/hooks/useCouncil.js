@@ -209,7 +209,12 @@ function useCouncil() {
     // one resolves, the stale response will be discarded.
     const requestId = ++loadRequestIdRef.current
     const startTime = Date.now()
-    const minLoadingTime = 2000
+    // Anti-flicker floor: when the network responds in <250ms the spinner
+    // would flash on and off, which feels jankier than a brief sustained
+    // pause. 400ms is just over the 200-300ms perception threshold —
+    // visible enough to register as "loaded" without feeling sluggish.
+    // (Was 2000ms, which made every cached/local navigation feel slow.)
+    const minLoadingTime = 400
 
     try {
       setIsLoadingSession(true)

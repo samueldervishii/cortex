@@ -9,4 +9,4 @@ def setup_logging() -> None:
     )
 
 
-logger = logging.getLogger("cortex")
+logger = logging.getLogger("etude")

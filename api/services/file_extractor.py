@@ -4,7 +4,7 @@ import io
 import logging
 import zipfile
 
-logger = logging.getLogger("cortex.file_extractor")
+logger = logging.getLogger("etude.file_extractor")
 
 # Max file size: 10MB
 MAX_FILE_SIZE = 10 * 1024 * 1024

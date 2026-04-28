@@ -6,7 +6,7 @@ from pymongo import ASCENDING, DESCENDING
 
 from config import settings
 
-logger = logging.getLogger("cortex.db")
+logger = logging.getLogger("etude.db")
 
 _client: AsyncIOMotorClient | None = None
 _database: AsyncIOMotorDatabase | None = None
@@ -109,6 +109,25 @@ async def ensure_indexes(database: AsyncIOMotorDatabase) -> None:
         sessions, [("user_id", ASCENDING), ("is_deleted", ASCENDING), ("created_at", DESCENDING)],
         name="idx_user_sessions",
     )
+    # Covering index for ``list_recent_page`` — matches the exact predicate
+    # order ``(user_id, is_deleted, is_ghost, is_pinned)`` followed by the
+    # ``created_at`` sort, so MongoDB can stream results from the index
+    # without scanning unmatched documents in memory. This becomes
+    # significant once a user accumulates thousands of sessions: the old
+    # 3-key index forced a post-fetch filter for the ``$ne: True`` checks
+    # on is_ghost / is_pinned, which scaled linearly with the user's
+    # total session count.
+    await _create_index(
+        sessions,
+        [
+            ("user_id", ASCENDING),
+            ("is_deleted", ASCENDING),
+            ("is_ghost", ASCENDING),
+            ("is_pinned", ASCENDING),
+            ("created_at", DESCENDING),
+        ],
+        name="idx_user_recent_sessions",
+    )
 
     # ── User settings ──
     await _create_index(settings_col, [("user_id", ASCENDING)], unique=True, name="idx_user_id")
@@ -205,6 +224,38 @@ async def ensure_indexes(database: AsyncIOMotorDatabase) -> None:
     await _create_index(
         service_checks, [("checked_at", ASCENDING)],
         expireAfterSeconds=90 * 24 * 60 * 60, name="idx_service_checks_ttl",
+    )
+
+    # ── Login attempts (per (email, ip) account-lockout state) ──
+    # Lookup index for the lockout check; TTL keeps the collection from
+    # growing forever (an attempt that hasn't been touched in 1 hour is
+    # well past the 15-minute lockout window and serves no purpose).
+    login_attempts = database["login_attempts"]
+    await _create_index(
+        login_attempts, [("email", ASCENDING), ("ip", ASCENDING)],
+        name="idx_login_attempts_email_ip",
+    )
+    await _create_index(
+        login_attempts, [("updated_at", ASCENDING)],
+        expireAfterSeconds=60 * 60, name="idx_login_attempts_ttl",
+    )
+
+    # ── Mongo-backed rate limiters ──
+    # MongoSlidingWindowLimiter (currently used for registration: 3/hr).
+    # TTL of 2 hours comfortably exceeds the 1-hour window and ensures
+    # entries from inactive IPs don't accumulate.
+    rate_buckets = database["rate_limit_buckets"]
+    await _create_index(
+        rate_buckets, [("updated_at", ASCENDING)],
+        expireAfterSeconds=2 * 60 * 60, name="idx_rate_limit_ttl",
+    )
+    # MongoUserUsageTracker (50 messages/24h, 3s cooldown). 25-hour TTL
+    # lets the sliding window see a full 24h of history before any entry
+    # is reaped.
+    user_usage_col = database["user_message_usage"]
+    await _create_index(
+        user_usage_col, [("updated_at", ASCENDING)],
+        expireAfterSeconds=25 * 60 * 60, name="idx_user_usage_ttl",
     )
 
     if critical_failures:

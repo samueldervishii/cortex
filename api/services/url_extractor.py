@@ -7,7 +7,7 @@ from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 
 import httpx
 
-logger = logging.getLogger("cortex.url_extractor")
+logger = logging.getLogger("etude.url_extractor")
 
 MAX_FETCH_SIZE = 2 * 1024 * 1024  # 2MB max HTML
 MAX_TEXT_LENGTH = 50000
@@ -240,7 +240,7 @@ async def fetch_url(url: str) -> tuple[str, str]:
     import ssl
 
     base_headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; CortexBot/1.0; +https://etude-al.vercel.app)",
+        "User-Agent": "Mozilla/5.0 (compatible; EtudeBot/1.0; +https://etude-al.vercel.app)",
         "Accept": "text/html,application/xhtml+xml,*/*",
         "Accept-Language": "en-US,en;q=0.9",
     }

@@ -12,7 +12,7 @@ from core.auth import decode_token
 from db import get_database, SessionRepository, SettingsRepository
 from db.user_repository import UserRepository
 
-logger = logging.getLogger("cortex.security")
+logger = logging.getLogger("etude.security")
 
 _bearer_scheme = HTTPBearer()
 
@@ -60,6 +60,28 @@ async def get_user_repository() -> UserRepository:
                 database = await get_database()
                 _user_repository = UserRepository(database)
     return _user_repository
+
+
+_optional_bearer_scheme = HTTPBearer(auto_error=False)
+
+
+async def get_current_user_optional(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_optional_bearer_scheme),
+) -> Optional[str]:
+    """Like ``get_current_user`` but returns ``None`` for anonymous callers.
+
+    Used by endpoints that have a richer response for authenticated users
+    (e.g. real availability checks for in-app username changes) but must
+    not leak that data to anonymous callers (which would enable
+    enumeration). Treats any decode/validation failure as "anonymous"
+    rather than raising 401.
+    """
+    if credentials is None:
+        return None
+    try:
+        return await get_current_user(credentials)
+    except HTTPException:
+        return None
 
 
 async def get_current_user(

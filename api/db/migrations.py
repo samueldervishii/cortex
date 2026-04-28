@@ -10,7 +10,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from core.timestamps import utc_iso
 
-logger = logging.getLogger("cortex.migrations")
+logger = logging.getLogger("etude.migrations")
 
 
 async def migrate_inline_file_data(database: AsyncIOMotorDatabase) -> int:

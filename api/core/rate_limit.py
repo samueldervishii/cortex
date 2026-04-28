@@ -1,5 +1,6 @@
 import time
 from collections import defaultdict
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import Request, HTTPException, status
@@ -10,6 +11,26 @@ from config import settings
 # With 1 proxy (Render, Vercel), the real client IP is the rightmost
 # X-Forwarded-For entry.  With 2 (e.g. Cloudflare → Render), use 2.
 _TRUSTED_PROXY_DEPTH = 1
+
+
+def get_client_ip(request: Request) -> str:
+    """Extract the real client IP from a request.
+
+    Centralized so authn lockout, rate limiting, and request logging all
+    use the same trust model (rightmost ``X-Forwarded-For`` entry behind
+    the configured number of trusted proxies in production; raw socket IP
+    otherwise).
+    """
+    client_ip = request.client.host if request.client else "unknown"
+
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded and settings.environment == "production":
+        parts = [p.strip() for p in forwarded.split(",") if p.strip()]
+        if parts:
+            depth = min(_TRUSTED_PROXY_DEPTH, len(parts))
+            return parts[-depth]
+
+    return client_ip
 
 
 class RateLimiter:
@@ -128,24 +149,24 @@ class RateLimiter:
         return max(0, self.requests_per_window - current_count)
 
 
-# Global rate limiter instance (general API rate limit)
+# Global rate limiter instance (general API rate limit).
+# This one stays in-memory because it fires on every request — moving it
+# to MongoDB would be a hot-path write per request. The trade-off: with
+# multiple uvicorn workers the effective limit is N×configured. Since the
+# general limiter is just burst protection (not a security boundary), this
+# is acceptable; the security-critical limiters below DO use MongoDB.
 rate_limiter = RateLimiter(
     requests_per_window=settings.rate_limit_requests,
     window_seconds=settings.rate_limit_window,
 )
 
-# Strict registration rate limiter: 3 registrations per IP per hour
-registration_limiter = RateLimiter(
-    requests_per_window=3,
-    window_seconds=3600,
-)
-
 
 def check_rate_limiter_deployment() -> None:
-    """Log a warning if per-process rate limiting may be ineffective.
+    """Log a warning if the per-process general limiter may be diluted.
 
-    Called at startup. With multiple uvicorn workers each worker gets its
-    own in-memory state, effectively multiplying the allowed rate.
+    Called at startup. Only the GENERAL ``rate_limiter`` is per-process;
+    ``MongoSlidingWindowLimiter`` and ``MongoUserUsageTracker`` are
+    accurate across any number of workers/hosts.
     """
     import os
     workers = os.environ.get("WEB_CONCURRENCY", "1")
@@ -155,49 +176,108 @@ def check_rate_limiter_deployment() -> None:
         n = 1
     if n > 1:
         import logging
-        logging.getLogger("cortex.rate_limit").warning(
-            f"Running {n} workers with in-memory rate limiting. "
-            f"Effective rate limit is {n}x configured value. "
-            "For accurate limits, switch to Redis-backed rate limiting."
+        logging.getLogger("etude.rate_limit").warning(
+            f"Running {n} workers; the GENERAL rate limiter is per-process so "
+            f"its effective rate is {n}x the configured value. Registration "
+            f"and per-user usage limits are MongoDB-backed and unaffected."
         )
 
 
-class UserUsageTracker:
-    """Track per-user daily message usage and enforce cooldowns.
+class MongoSlidingWindowLimiter:
+    """MongoDB-backed sliding-window limiter.
 
-    Prevents API cost abuse by limiting:
-    - Max messages per user per day (default: 50)
-    - Min delay between messages per user (default: 3 seconds)
+    Used for security-sensitive limits (registration spam, etc.) where
+    the per-process in-memory limiter would otherwise be silently
+    multiplied by the number of uvicorn workers / pods.
+
+    State lives in a collection (default: ``rate_limit_buckets``) keyed
+    by ``scope:key`` so multiple limiters can share the same collection
+    without colliding.
     """
+
+    COLLECTION = "rate_limit_buckets"
+
+    def __init__(self, scope: str, limit: int, window_seconds: int):
+        self.scope = scope
+        self.limit = limit
+        self.window_seconds = window_seconds
+
+    def _key(self, key: str) -> str:
+        return f"{self.scope}:{key}"
+
+    async def check_and_record(self, key: str, db) -> None:
+        """Atomically check the limit and record the new attempt.
+
+        Raises ``HTTPException(429)`` when the limit is exceeded. Uses a
+        single round-trip for the typical (allowed) path: read state,
+        compute decision, write back.
+        """
+        if self.limit <= 0:
+            return
+
+        col = db[self.COLLECTION]
+        now = time.time()
+        cutoff = now - self.window_seconds
+
+        doc = await col.find_one({"_id": self._key(key)})
+        attempts = [t for t in (doc.get("attempts") if doc else []) if t > cutoff]
+
+        if len(attempts) >= self.limit:
+            oldest = min(attempts)
+            retry_after = int(oldest + self.window_seconds - now) + 1
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=(
+                    "Too many requests. Please try again later."
+                    if self.scope != "register"
+                    else "Too many registration attempts. Please try again later."
+                ),
+                headers={"Retry-After": str(max(1, retry_after))},
+            )
+
+        # Bound the array size so a noisy attacker can't bloat a doc
+        # past 16MB. We keep at most ``limit*2`` recent timestamps; the
+        # extras let us still surface accurate retry-after values when
+        # the caller is right at the boundary.
+        await col.update_one(
+            {"_id": self._key(key)},
+            {
+                "$push": {
+                    "attempts": {"$each": [now], "$slice": -self.limit * 2}
+                },
+                "$set": {"updated_at": datetime.now(timezone.utc)},
+            },
+            upsert=True,
+        )
+
+
+class MongoUserUsageTracker:
+    """Per-user daily message limit + per-user cooldown, in MongoDB.
+
+    Same contract as the in-memory ``UserUsageTracker`` it replaces, but
+    accurate across workers/pods.
+    """
+
+    COLLECTION = "user_message_usage"
 
     def __init__(self, daily_limit: int = 50, cooldown_seconds: float = 3.0):
         self.daily_limit = daily_limit
         self.cooldown_seconds = cooldown_seconds
-        # user_id -> list of timestamps (messages sent today)
-        self._daily_usage: dict[str, list[float]] = defaultdict(list)
-        # user_id -> timestamp of last message
-        self._last_message: dict[str, float] = {}
-        self._last_cleanup = time.time()
 
-    def _cleanup(self, now: float) -> None:
-        """Remove entries older than 24 hours."""
-        if now - self._last_cleanup < 600:  # cleanup every 10 min
-            return
-        cutoff = now - 86400  # 24 hours
-        stale = [uid for uid, ts in self._daily_usage.items()
-                 if not ts or all(t < cutoff for t in ts)]
-        for uid in stale:
-            del self._daily_usage[uid]
-            self._last_message.pop(uid, None)
-        self._last_cleanup = now
+    async def check_and_record(self, user_id: str, db) -> None:
+        """Combined check+record; raises 429 on cooldown or daily-limit hit.
 
-    def check(self, user_id: str) -> None:
-        """Check if user can send a message. Raises HTTPException if not."""
+        Combined into a single call so the read and the write are a
+        bounded race window — at worst a user squeaking through under
+        contention will be properly capped on their next attempt.
+        """
+        col = db[self.COLLECTION]
         now = time.time()
-        self._cleanup(now)
+        cutoff = now - 86400
 
-        # Check cooldown (min delay between messages)
-        last = self._last_message.get(user_id)
+        doc = await col.find_one({"_id": user_id})
+
+        last = (doc or {}).get("last_message_at")
         if last and (now - last) < self.cooldown_seconds:
             wait = round(self.cooldown_seconds - (now - last), 1)
             raise HTTPException(
@@ -206,31 +286,49 @@ class UserUsageTracker:
                 headers={"Retry-After": str(int(wait) + 1)},
             )
 
-        # Check daily limit
-        cutoff = now - 86400
-        self._daily_usage[user_id] = [t for t in self._daily_usage[user_id] if t > cutoff]
-        if len(self._daily_usage[user_id]) >= self.daily_limit:
+        attempts = [t for t in ((doc or {}).get("attempts") or []) if t > cutoff]
+        if len(attempts) >= self.daily_limit:
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail=f"Daily message limit reached ({self.daily_limit} messages). Resets in 24 hours.",
             )
 
-    def record(self, user_id: str) -> None:
-        """Record a message sent by user."""
-        now = time.time()
-        self._daily_usage[user_id].append(now)
-        self._last_message[user_id] = now
+        await col.update_one(
+            {"_id": user_id},
+            {
+                "$push": {
+                    "attempts": {
+                        "$each": [now],
+                        "$slice": -max(self.daily_limit * 2, 100),
+                    }
+                },
+                "$set": {
+                    "last_message_at": now,
+                    "updated_at": datetime.now(timezone.utc),
+                },
+            },
+            upsert=True,
+        )
 
-    def get_remaining(self, user_id: str) -> int:
-        """Get remaining messages for user today."""
+    async def get_remaining(self, user_id: str, db) -> int:
+        """Get remaining messages for user today (no side effects)."""
+        col = db[self.COLLECTION]
         now = time.time()
         cutoff = now - 86400
-        self._daily_usage[user_id] = [t for t in self._daily_usage[user_id] if t > cutoff]
-        return max(0, self.daily_limit - len(self._daily_usage[user_id]))
+        doc = await col.find_one({"_id": user_id})
+        attempts = [t for t in ((doc or {}).get("attempts") or []) if t > cutoff]
+        return max(0, self.daily_limit - len(attempts))
 
 
-# Global user usage tracker
-user_usage = UserUsageTracker(daily_limit=50, cooldown_seconds=3.0)
+# Global registration limiter — Mongo-backed so the 3/hour cap is real
+# across workers. Used by /auth/register only, so the round-trip cost
+# is negligible vs the bcrypt hashing already in that path.
+registration_limiter = MongoSlidingWindowLimiter(
+    scope="register", limit=3, window_seconds=3600,
+)
+
+# Global user-message tracker — Mongo-backed.
+user_usage = MongoUserUsageTracker(daily_limit=50, cooldown_seconds=3.0)
 
 
 async def check_rate_limit(request: Request) -> None:
@@ -245,11 +343,8 @@ async def check_rate_limit(request: Request) -> None:
 
 
 async def check_registration_limit(request: Request) -> None:
-    """Strict registration rate limit (3 per IP per hour)."""
-    is_allowed, retry_after = registration_limiter.is_allowed(request)
-    if not is_allowed:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Too many registration attempts. Please try again later.",
-            headers={"Retry-After": str(retry_after)},
-        )
+    """Strict registration rate limit (3 per IP per hour, MongoDB-backed)."""
+    from db.connection import get_database
+
+    db = await get_database()
+    await registration_limiter.check_and_record(get_client_ip(request), db)

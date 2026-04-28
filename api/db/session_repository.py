@@ -28,16 +28,37 @@ class SessionRepository:
         return session
 
     async def get(
-        self, session_id: str, include_deleted: bool = False, user_id: Optional[str] = None
+        self,
+        session_id: str,
+        include_deleted: bool = False,
+        user_id: Optional[str] = None,
+        with_file_blobs: bool = False,
     ) -> Optional[ChatSession]:
-        """Get a session by ID, optionally scoped to a user."""
+        """Get a session by ID, optionally scoped to a user.
+
+        ``with_file_blobs`` defaults to ``False`` because the vast majority
+        of callers (list, render, branch, share) only need the message
+        text, not the full base64 file payload. Excluding
+        ``messages.file.data_base64`` in the Mongo projection means
+        Motor never streams those (potentially multi-megabyte) blobs
+        over the wire — a session with five PDFs attached can be 30 MB
+        on disk but ~50 KB to ship to the browser.
+
+        Pass ``with_file_blobs=True`` from the file-download endpoint
+        which actually needs to base64-decode and serve the bytes.
+        """
         query = {"id": session_id}
         if not include_deleted:
             query["is_deleted"] = {"$ne": True}
         if user_id is not None:
             query["user_id"] = user_id
 
-        doc = await self.collection.find_one(query)
+        if with_file_blobs:
+            doc = await self.collection.find_one(query)
+        else:
+            doc = await self.collection.find_one(
+                query, {"messages.file.data_base64": 0}
+            )
         if doc is None:
             return None
         return ChatSession(**doc)
@@ -284,12 +305,18 @@ class SessionRepository:
         return result.deleted_count > 0
 
     async def get_by_share_token(self, share_token: str) -> Optional[ChatSession]:
-        """Get a shared session by its share token."""
+        """Get a shared session by its share token.
+
+        File data_base64 is excluded server-side — the shared view only
+        renders message text, and shipping unbounded file blobs to
+        anonymous viewers is both wasteful and a small data-leak risk.
+        """
         if not share_token or not _SHARE_TOKEN_PATTERN.match(share_token):
             return None
 
         doc = await self.collection.find_one(
-            {"share_token": share_token, "is_shared": True, "is_deleted": {"$ne": True}}
+            {"share_token": share_token, "is_shared": True, "is_deleted": {"$ne": True}},
+            {"messages.file.data_base64": 0},
         )
         if doc is None:
             return None
@@ -344,9 +371,13 @@ class SessionRepository:
         if user_id is not None:
             query["user_id"] = user_id
 
+        # Exports never embed the raw file bytes (just message text +
+        # filenames), so we can drop the (potentially huge) base64 blob
+        # at the database layer rather than ferrying megabytes of data
+        # all the way into Python only to throw it away.
         sessions = []
         cursor = (
-            self.collection.find(query)
+            self.collection.find(query, {"messages.file.data_base64": 0})
             .sort("created_at", -1)
             .limit(limit)
             .batch_size(batch_size)
@@ -420,6 +451,57 @@ class SessionRepository:
             },
         )
         return result.modified_count > 0
+
+    # A session is considered to have a "live" stream while
+    # ``streaming_started_at`` is set and newer than this threshold.  Older
+    # values are treated as stale (worker crashed mid-stream, dropped
+    # process, etc.) so the slot can be reclaimed.  Generous because the
+    # Anthropic stream itself may take ~2 minutes for long answers + thinking.
+    STREAM_LOCK_STALE_SECONDS = 180
+
+    async def acquire_stream_lock(
+        self, session_id: str, user_id: str
+    ) -> bool:
+        """Atomically claim the streaming slot on a session.
+
+        Returns True if the caller now owns the lock and may stream a reply.
+        Returns False if another stream is already running for this session.
+
+        The lock is implemented as a timestamped field on the session
+        document so it works across uvicorn workers, hosts, and process
+        restarts.  A stale lock (older than ``STREAM_LOCK_STALE_SECONDS``)
+        is treated as abandoned and reclaimable — this prevents a worker
+        crash from permanently bricking a session.
+        """
+        now = datetime.now(timezone.utc)
+        stale_cutoff = now - timedelta(seconds=self.STREAM_LOCK_STALE_SECONDS)
+        result = await self.collection.update_one(
+            {
+                "id": session_id,
+                "user_id": user_id,
+                "is_deleted": {"$ne": True},
+                "$or": [
+                    {"streaming_started_at": {"$exists": False}},
+                    {"streaming_started_at": None},
+                    {"streaming_started_at": {"$lt": stale_cutoff}},
+                ],
+            },
+            {"$set": {"streaming_started_at": now}},
+        )
+        return result.modified_count > 0
+
+    async def release_stream_lock(
+        self, session_id: str, user_id: str
+    ) -> None:
+        """Release the streaming slot.
+
+        Clears the timestamp unconditionally; safe to call even if the lock
+        was never acquired or was already cleared (idempotent).
+        """
+        await self.collection.update_one(
+            {"id": session_id, "user_id": user_id},
+            {"$set": {"streaming_started_at": None}},
+        )
 
     async def update_pin(
         self, session_id: str, is_pinned: bool, pinned_at: Optional[str] = None,

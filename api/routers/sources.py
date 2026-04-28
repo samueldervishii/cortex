@@ -26,7 +26,7 @@ from schemas.source import (
     CitationResponse,
 )
 
-logger = logging.getLogger("cortex.sources")
+logger = logging.getLogger("etude.sources")
 
 router = APIRouter(prefix="/session", tags=["sources"])
 

@@ -251,7 +251,7 @@
   border-radius: 8px;
   color: var(--text-primary);
   font-size: 0.875rem;
-  cursor: default;
+  cursor: pointer;
   text-align: left;
 }
 
@@ -6674,7 +6674,7 @@ button.message-file-badge:hover {
   border-radius: 10px;
   border: 1px solid transparent;
   background: transparent;
-  color: white;
+  color: inherit;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -6687,14 +6687,14 @@ button.message-file-badge:hover {
 .sidebar-rail-session:hover,
 .sidebar-rail-profile:hover {
   background: rgba(255, 255, 255, 0.82);
-  color: white;
+  color: inherit;
 }
 
 .sidebar-rail-btn-primary,
 .sidebar-rail-session.active {
   background: rgba(184, 84, 44, 0.1);
   border-color: rgba(184, 84, 44, 0.12);
-  color: white;
+  color: inherit;
 }
 
 .sidebar-collapsed-sessions {
@@ -8687,7 +8687,7 @@ a.sidebar-account-item {
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--radius-btn);
-  color: white;
+  color: inherit;
   padding: 8px;
   display: flex;
   align-items: center;

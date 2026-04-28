@@ -2,7 +2,7 @@
 
 import json
 import time
-from typing import AsyncGenerator, List, Optional
+from typing import AsyncGenerator, List, Optional, Tuple
 
 from clients import AIClient
 from config import CHAT_MODEL
@@ -33,43 +33,87 @@ class ChatService:
     def __init__(self, client: AIClient):
         self.client = client
 
-    def _truncate_history(self, history: List[dict]) -> List[dict]:
+    def _truncate_history(
+        self, history: List[dict]
+    ) -> Tuple[List[dict], Optional[str]]:
         """Truncate conversation history to stay within context limits.
 
-        Keeps the first message (original context) + a truncation notice +
-        the most recent messages so the total never exceeds
-        ``MAX_HISTORY_MESSAGES``.
+        Keeps the first message (original context) and the most recent
+        messages. When truncation actually happens we also return a short
+        notice string that the caller can append to the system prompt — we
+        do NOT inject a synthetic ``role: system`` entry into the messages
+        list because Anthropic only accepts ``user`` / ``assistant`` there.
+
+        Returns ``(history, notice)`` where ``notice`` is ``None`` if no
+        truncation was needed.
         """
         if len(history) <= MAX_HISTORY_MESSAGES:
-            return history
+            return history, None
 
-        # first (1) + notice (1) + recent (N) = MAX_HISTORY_MESSAGES
-        recent_count = MAX_HISTORY_MESSAGES - 2
+        # first (1) + recent (N) = MAX_HISTORY_MESSAGES
+        recent_count = MAX_HISTORY_MESSAGES - 1
         first = history[:1]
         recent = history[-recent_count:]
-        return first + [{"role": "system", "content": "[Earlier messages truncated for brevity]"}] + recent
+        notice = (
+            "Note: the earlier middle of this conversation has been omitted "
+            "for brevity. The first message and the most recent exchanges "
+            "are preserved verbatim."
+        )
+        return first + recent, notice
 
-    def _build_prompt(self, question: str, history: List[dict]) -> str:
-        """Build a prompt with conversation history."""
-        if not history:
-            return question
+    def _build_messages(
+        self, question: str, history: List[dict]
+    ) -> Tuple[List[dict], Optional[str]]:
+        """Build a clean Anthropic messages array from history + new question.
 
-        # Truncate if too long
-        history = self._truncate_history(history)
+        Anthropic's Messages API requires that messages strictly alternate
+        between ``user`` and ``assistant`` and start with ``user``. Real
+        session data should always satisfy this, but we defensively
+        normalize because:
 
-        parts = []
+          * Branching/continue endpoints could in theory leave two
+            consecutive user messages.
+          * Older sessions migrated from a prior schema may contain
+            unexpected role values.
+
+        Returns ``(messages, truncation_notice_or_None)``.
+        """
+        history, notice = self._truncate_history(list(history))
+
+        # Drop anything that isn't user/assistant — and skip empties.
+        cleaned: List[dict] = []
         for msg in history:
-            role = msg.get("role", "user")
+            role = msg.get("role")
             content = msg.get("content", "")
-            if role == "user":
-                parts.append(f"User: {content}")
-            elif role == "system":
-                parts.append(f"[{content}]")
-            else:
-                parts.append(f"Assistant: {content}")
+            if role not in ("user", "assistant") or not content:
+                continue
+            cleaned.append({"role": role, "content": content})
 
-        parts.append(f"User: {question}")
-        return "\n\n".join(parts)
+        # Collapse consecutive same-role messages by joining their content
+        # with a blank line. This keeps Anthropic's alternation rule happy
+        # without losing any user-visible information.
+        merged: List[dict] = []
+        for msg in cleaned:
+            if merged and merged[-1]["role"] == msg["role"]:
+                merged[-1]["content"] = merged[-1]["content"] + "\n\n" + msg["content"]
+            else:
+                merged.append(dict(msg))
+
+        # Drop a trailing assistant message if for some reason history ends
+        # there but we're about to append the user's new question; keep it
+        # if the last entry is already user (will be merged below).
+        # Then append the current question as a user message.
+        if merged and merged[-1]["role"] == "user":
+            merged[-1]["content"] = merged[-1]["content"] + "\n\n" + question
+        else:
+            merged.append({"role": "user", "content": question})
+
+        # The first message must be ``user``. If history somehow began with
+        # an assistant turn, prepend a placeholder so Anthropic accepts it.
+        if merged and merged[0]["role"] != "user":
+            merged.insert(0, {"role": "user", "content": "(start of conversation)"})
+
+        return merged, notice
 
     def _compute_response_budget(self, remaining_tokens: Optional[int]) -> tuple[int, int]:
         """Decide max_tokens and thinking budget for the upcoming response.
@@ -117,7 +161,16 @@ class ChatService:
         Tokens are batched for snappier UI rendering.
         """
         model = model or CHAT_MODEL
-        prompt = self._build_prompt(question, history or [])
+        messages, truncation_notice = self._build_messages(question, history or [])
+        # Truncation is communicated to the model via the system prompt
+        # rather than via a synthetic message role (Anthropic only accepts
+        # user/assistant in the messages array).
+        if truncation_notice:
+            system_prompt = (
+                f"{system_prompt}\n\n{truncation_notice}"
+                if system_prompt
+                else truncation_notice
+            )
         start_time = time.time()
         response_parts: list[str] = []
         token_buffer = ""
@@ -135,7 +188,7 @@ class ChatService:
         try:
             async for event_type, content in self.client.stream_chat(
                 model_id=model["id"],
-                prompt=prompt,
+                messages=messages,
                 system_prompt=system_prompt,
                 max_tokens=max_tokens,
                 thinking_budget=thinking_budget,

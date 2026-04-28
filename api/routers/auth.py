@@ -1,8 +1,9 @@
 import logging
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, Request, status
 
 from core.auth import (
     hash_password,
@@ -11,9 +12,13 @@ from core.auth import (
     create_refresh_token,
     decode_token,
 )
-from core.dependencies import get_user_repository, get_current_user
+from core.dependencies import (
+    get_user_repository,
+    get_current_user,
+    get_current_user_optional,
+)
 from core.timestamps import utc_iso
-from core.rate_limit import check_rate_limit, check_registration_limit
+from core.rate_limit import check_rate_limit, check_registration_limit, get_client_ip
 from db.user_repository import UserRepository
 from schemas.user import (
     UserCreate,
@@ -27,7 +32,7 @@ from schemas.user import (
 )
 from services.avatar import generate_avatar
 
-logger = logging.getLogger("cortex.auth")
+logger = logging.getLogger("etude.auth")
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -35,8 +40,19 @@ _MAX_FAILED_ATTEMPTS = 5
 _LOCKOUT_DURATION = 900  # 15 minutes in seconds
 
 
-async def _check_lockout(email: str) -> None:
-    """Check if account is locked out due to too many failed attempts.
+def _attempt_key(email: str, ip: str) -> dict:
+    """Build the composite lookup key for a login-attempt record.
+
+    Lockout is keyed on ``(email, ip)`` so an attacker who knows a victim's
+    email can NOT lock them out from elsewhere on the internet — the
+    attacker's own IP locks itself out, but the victim's IP is unaffected.
+    Single-IP password guessing is still bounded to ``_MAX_FAILED_ATTEMPTS``.
+    """
+    return {"email": email, "ip": ip}
+
+
+async def _check_lockout(email: str, ip: str) -> None:
+    """Reject the request if this (email, ip) pair has too many recent failures.
 
     Uses MongoDB so lockout state survives restarts and is consistent
     across multiple workers.
@@ -47,7 +63,7 @@ async def _check_lockout(email: str) -> None:
     col = db["login_attempts"]
     now = datetime.now(timezone.utc)
 
-    doc = await col.find_one({"_id": email})
+    doc = await col.find_one(_attempt_key(email, ip))
     if doc is None:
         return
 
@@ -60,34 +76,37 @@ async def _check_lockout(email: str) -> None:
         remaining = int(_LOCKOUT_DURATION - (now.timestamp() - oldest))
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"Account temporarily locked due to too many failed attempts. Try again in {remaining // 60} minutes.",
+            detail=f"Too many failed login attempts. Try again in {max(1, remaining // 60)} minutes.",
         )
 
 
-async def _record_failed_attempt(email: str) -> None:
-    """Record a failed login attempt in MongoDB."""
+async def _record_failed_attempt(email: str, ip: str) -> None:
+    """Record a failed login attempt scoped to the (email, ip) pair."""
     from db.connection import get_database
 
     db = await get_database()
     now = datetime.now(timezone.utc)
-    cutoff = now.timestamp() - _LOCKOUT_DURATION
 
     await db["login_attempts"].update_one(
-        {"_id": email},
+        _attempt_key(email, ip),
         {
             "$push": {"attempts": {"$each": [now.timestamp()], "$slice": -_MAX_FAILED_ATTEMPTS * 2}},
-            "$set": {"updated_at": now},
+            "$set": {"updated_at": now, "email": email, "ip": ip},
         },
         upsert=True,
     )
 
 
 async def _clear_failed_attempts(email: str) -> None:
-    """Clear failed attempts after successful login."""
+    """Clear all failed attempts for an email after a successful login.
+
+    Cleared across every IP since the user has now proven they own the
+    account — no reason to keep penalizing other in-flight sessions.
+    """
     from db.connection import get_database
 
     db = await get_database()
-    await db["login_attempts"].delete_one({"_id": email})
+    await db["login_attempts"].delete_many({"email": email})
 
 
 def _build_user_response(user: dict) -> UserResponse:
@@ -157,13 +176,15 @@ async def register(
 @router.post("/login", response_model=TokenResponse)
 async def login(
     request: UserLogin,
+    http_request: Request,
     user_repo: UserRepository = Depends(get_user_repository),
     _rate_limit: None = Depends(check_rate_limit),
 ):
     """Authenticate and receive access + refresh tokens."""
     email_lower = request.email.lower()
+    client_ip = get_client_ip(http_request)
 
-    await _check_lockout(email_lower)
+    await _check_lockout(email_lower, client_ip)
 
     user = await user_repo.get_by_email(request.email)
 
@@ -174,7 +195,7 @@ async def login(
         password_valid = False
 
     if not password_valid:
-        await _record_failed_attempt(email_lower)
+        await _record_failed_attempt(email_lower, client_ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
@@ -337,16 +358,38 @@ async def delete_account(
 async def check_username(
     username: str,
     user_repo: UserRepository = Depends(get_user_repository),
+    current_user_id: Optional[str] = Depends(get_current_user_optional),
     _rate_limit: None = Depends(check_rate_limit),
 ):
-    """Check if a username is available."""
+    """Validate username format and (for authenticated callers) availability.
+
+    Anonymous callers always receive ``available: true`` for well-formed
+    usernames so this endpoint can't be abused to enumerate registered
+    accounts. Real uniqueness is enforced at registration time, backed by
+    a unique DB index on ``username`` — a colliding ``POST /register``
+    will fail loudly with the same generic error returned by email
+    collisions, so legitimate signup UX is preserved.
+
+    Authenticated callers (e.g. the profile-rename UI) get a real
+    availability check, including whether the username is their own
+    current value (treated as available so they can re-submit unchanged).
+    """
+    import re
+
     if not username or len(username) < 3:
         return {"available": False, "reason": "Username must be at least 3 characters"}
-    import re
-    if not re.match(r'^[a-zA-Z0-9_]+$', username):
+    if not re.match(r"^[a-zA-Z0-9_]+$", username):
         return {"available": False, "reason": "Only letters, numbers, and underscores"}
+
+    if current_user_id is None:
+        return {"available": True}
+
     existing = await user_repo.get_by_username(username)
-    return {"available": existing is None}
+    if existing is None:
+        return {"available": True}
+    if existing.get("id") == current_user_id:
+        return {"available": True}
+    return {"available": False, "reason": "Username is taken"}
 
 
 @router.get("/check-email/{email}")

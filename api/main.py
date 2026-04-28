@@ -30,7 +30,7 @@ from routers.health import router as health_router
 
 # Configure logging
 setup_logging()
-logger = logging.getLogger("cortex.requests")
+logger = logging.getLogger("etude.requests")
 
 
 async def run_auto_delete_cleanup(silent: bool = False):
@@ -219,9 +219,16 @@ app = FastAPI(
     openapi_url=None if is_production else "/openapi.json",
 )
 
-# CORS middleware
-# Default development origins + any production origins from env
-cors_origins = ["http://localhost:5173", "http://localhost:3000"]
+# CORS middleware.
+# In non-production we whitelist the standard Vite/Next dev ports so
+# `npm run dev` works out of the box. In production we ONLY trust the
+# origins explicitly listed in CORS_ORIGINS — leaving localhost in the
+# list there would let an attacker on the same machine make
+# credentialed cross-origin requests to a deployed backend, which is
+# never something we want.
+cors_origins: list[str] = []
+if settings.environment != "production":
+    cors_origins.extend(["http://localhost:5173", "http://localhost:3000"])
 if settings.cors_origins:
     cors_origins.extend(
         [
@@ -229,6 +236,12 @@ if settings.cors_origins:
             for origin in settings.cors_origins.split(",")
             if origin.strip()
         ]
+    )
+
+if not cors_origins:
+    logger.warning(
+        "No CORS origins configured. Set CORS_ORIGINS in the environment "
+        "to enable cross-origin requests from your frontend."
     )
 
 app.add_middleware(
@@ -299,9 +312,20 @@ async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
-    response.headers["X-XSS-Protection"] = "1; mode=block"
+    # The legacy XSS auditor that ``X-XSS-Protection: 1`` enabled has been
+    # removed from every modern browser AND has known auditor-induced
+    # XSS bugs in older Chromes (it can rewrite safe responses into
+    # unsafe ones). Modern guidance: send ``0`` to explicitly disable
+    # the legacy auditor, and rely on CSP / output escaping for actual
+    # XSS defense (see the ``Content-Security-Policy`` header below).
+    response.headers["X-XSS-Protection"] = "0"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["X-Permitted-Cross-Domain-Policies"] = "none"
+    # Cross-origin isolation primitives — defend against Spectre-style
+    # cross-process leaks. ``same-origin`` is the strictest tier, fine
+    # because the SPA only loads same-origin assets.
+    response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+    response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
         "script-src 'self'; "

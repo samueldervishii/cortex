@@ -13,7 +13,7 @@ import time
 from functools import wraps
 from typing import Callable
 
-logger = logging.getLogger("cortex.metrics")
+logger = logging.getLogger("etude.metrics")
 
 # Global metrics objects
 _metrics_initialized = False

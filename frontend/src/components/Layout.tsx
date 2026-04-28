@@ -5,12 +5,12 @@ const MOBILE_BREAKPOINT = 768
 
 function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(() => {
-    return localStorage.getItem('cortex-sidebar') === 'open'
+    return localStorage.getItem('etude-sidebar') === 'open'
   })
   const [rightPanelOpen, setRightPanelOpen] = useState(false)
 
   useEffect(() => {
-    localStorage.setItem('cortex-sidebar', sidebarOpen ? 'open' : 'closed')
+    localStorage.setItem('etude-sidebar', sidebarOpen ? 'open' : 'closed')
     if (sidebarOpen && window.innerWidth <= MOBILE_BREAKPOINT) {
       document.body.classList.add('sidebar-open')
     } else {

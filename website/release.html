@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Release notes — Étude</title>
+    <title>Release notes - Étude</title>
     <meta
       name="description"
-      content="Release notes for Étude — a calm AI workspace for thinking, writing, and research."
+      content="Release notes for Étude - a calm AI workspace for thinking, writing, and research."
     />
     <link rel="icon" type="image/png" href="assets/logo.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -202,17 +202,141 @@
 
     <div class="article-content">
       <p>
-        Étude is built in the open. Every change shipped to production is summarized below. For the
-        full diff of any release, follow the GitHub link at the bottom of each entry.
+        Étude is built in the open. Every change shipped to production is summarized below.
       </p>
 
       <div class="release-list">
-        <!-- v1.0.0 — Stable, current -->
-        <article class="release-card is-latest" id="v1-0-0">
+        <!-- v1.0.1 — Latest, stable -->
+        <article class="release-card is-latest" id="v1-0-1">
+          <header class="release-head">
+            <h2 class="release-version">v1.0.1</h2>
+            <span class="release-date">April 28, 2026</span>
+            <span class="release-tag latest">Latest</span>
+            <span class="release-tag stable">Stable</span>
+          </header>
+          <p class="release-summary">
+            A reliability and security pass. No new features; the focus was on
+            making concurrent use — multiple tabs, multiple devices, multiple
+            simultaneous requests — behave correctly, and on closing a handful
+            of small but real security gaps. Most of this is invisible day to
+            day; you should mainly notice that things feel a little snappier.
+          </p>
+
+          <p class="release-section-title">Reliability &amp; concurrency</p>
+          <ul>
+            <li>
+              <strong>No more lost quota on cancelled streams.</strong> If you
+              navigate away mid-response, the reserved tokens are now reliably
+              released instead of being held until the next bucket rolls over.
+            </li>
+            <li>
+              <strong>Per-session streaming lock.</strong> Two requests to the
+              same chat (e.g. a double-tap on Send, or two tabs hitting the
+              same session) can no longer both kick off responses — the second
+              one gets a friendly 409 instead of two LLM calls running in
+              parallel.
+            </li>
+            <li>
+              <strong>Cross-tab session sync.</strong> When two tabs both
+              notice an expired access token at the same instant, they
+              coordinate via the Web Locks API instead of racing each other
+              and getting both signed out. Logging out in one tab now also
+              redirects sibling tabs to the login screen instead of letting
+              them keep firing requests.
+            </li>
+          </ul>
+
+          <p class="release-section-title">Security</p>
+          <ul>
+            <li>
+              <strong>Login lockouts are now per (email, IP).</strong>
+              Previously a remote attacker who knew your email could lock you
+              out of your own account by failing five logins from anywhere.
+              Lockouts now apply only to the IP that produced the failures.
+            </li>
+            <li>
+              <strong>Username check no longer leaks account presence.</strong>
+              Anonymous callers always see "available" for well-formed names;
+              real availability is only returned to signed-in users editing
+              their own profile.
+            </li>
+            <li>
+              <strong>Stored messages are no longer HTML-escaped.</strong>
+              Code snippets and angle-bracket characters are preserved verbatim
+              now — XSS protection lives at the render layer where it belongs
+              (sanitised React Markdown).
+            </li>
+            <li>
+              <strong>Production CORS</strong> no longer trusts
+              <code>localhost</code> origins; only the explicitly configured
+              hosts are allowed.
+            </li>
+            <li>
+              The deprecated <code>X-XSS-Protection</code> header is now sent
+              as <code>0</code> (its old auditor mode could itself introduce
+              XSS), and <code>Cross-Origin-Opener-Policy</code> /
+              <code>Cross-Origin-Resource-Policy</code> are set to
+              <code>same-origin</code>.
+            </li>
+            <li>
+              Failed-login records get a one-hour TTL instead of accumulating
+              forever, with a compound index on <code>(email, ip)</code>.
+            </li>
+          </ul>
+
+          <p class="release-section-title">Multi-worker correctness</p>
+          <ul>
+            <li>
+              <strong>Registration limit (3/hour per IP)</strong> and the
+              <strong>per-user daily message cap</strong> are now enforced
+              through MongoDB instead of in-process memory, so they remain
+              accurate across any number of backend workers or pods.
+            </li>
+          </ul>
+
+          <p class="release-section-title">Performance</p>
+          <ul>
+            <li>
+              <strong>Faster end-of-stream.</strong> The little background LLM
+              call that picks a chat title now runs in the background instead
+              of blocking the final "done" event, so the response feels
+              complete sooner.
+            </li>
+            <li>
+              <strong>Smaller responses for chats with attachments.</strong>
+              Raw file bytes are stripped at the database layer rather than in
+              Python. A session with several PDFs that used to ship ~30&nbsp;MB
+              over the wire now ships in the tens of kilobytes.
+            </li>
+            <li>
+              New compound index on
+              <code>(user_id, is_deleted, is_ghost, is_pinned, created_at)</code>
+              — once your sidebar history grows into the thousands, listing it
+              stays fast.
+            </li>
+            <li>
+              The session-loader's anti-flicker floor dropped from 2&nbsp;s to
+              400&nbsp;ms, so cached / fast navigations no longer feel slow.
+            </li>
+          </ul>
+
+          <p class="release-section-title">AI integration</p>
+          <ul>
+            <li>
+              Conversation history is now sent to Anthropic as a structured
+              <code>messages[]</code> array rather than being flattened into a
+              single <code>"User: …\nAssistant: …"</code> blob. The model
+              parses turn boundaries directly — slightly fewer input tokens,
+              and follow-up questions stay better grounded in context.
+            </li>
+          </ul>
+        </article>
+
+        <!-- v1.0.0 — Stable -->
+        <article class="release-card" id="v1-0-0">
           <header class="release-head">
             <h2 class="release-version">v1.0.0</h2>
             <span class="release-date">April 27, 2026</span>
-            <span class="release-tag latest">Latest</span>
             <span class="release-tag stable">Stable</span>
           </header>
           <p class="release-summary">
@@ -276,21 +400,6 @@
           <ul>
             <li>Bumped <code>python-dotenv</code> from 1.2.1 to 1.2.2.</li>
           </ul>
-
-          <div class="release-meta-row">
-            <a
-              href="https://github.com/samueldervishii/cortex/releases/tag/v1.0.0"
-              target="_blank"
-              rel="noopener noreferrer"
-              >View on GitHub</a
-            >
-            <a
-              href="https://github.com/samueldervishii/cortex/commits/v1.0.0"
-              target="_blank"
-              rel="noopener noreferrer"
-              >Full changelog</a
-            >
-          </div>
         </article>
 
         <!-- v0.2 — Preview -->
@@ -319,15 +428,6 @@
             <li>Fixed the dark-mode user bubble and a cold-start auth bypass.</li>
             <li>Bumped <code>python-dotenv</code> from 1.2.1 to 1.2.2.</li>
           </ul>
-
-          <div class="release-meta-row">
-            <a
-              href="https://github.com/samueldervishii/cortex/commits/v0.2"
-              target="_blank"
-              rel="noopener noreferrer"
-              >Full changelog</a
-            >
-          </div>
         </article>
       </div>
 

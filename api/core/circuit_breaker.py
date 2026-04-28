@@ -21,7 +21,7 @@ from typing import Optional, Callable, Any
 
 from config import settings
 
-logger = logging.getLogger("cortex.circuit_breaker")
+logger = logging.getLogger("etude.circuit_breaker")
 
 _breakers: dict[str, Any] = {}
 _breaker_lock = threading.Lock()
