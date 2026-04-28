@@ -10534,7 +10534,6 @@ html[data-theme='dark'] .top-bar-model-locked {
 
 .message-avatar-cortex {
   background: var(--ink);
-  color: var(--paper);
 }
 .message-avatar-cortex img {
   width: 60%;
@@ -10543,7 +10542,6 @@ html[data-theme='dark'] .top-bar-model-locked {
   /* Force the logo to white regardless of its source fill color:
      `brightness(0)` collapses all channels to black, then `invert(1)`
      flips black → white. */
-  filter: brightness(0) invert(1);
 }
 
 .message-body {

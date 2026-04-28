@@ -57,9 +57,6 @@ async def send_email(
             to_address,
             subject,
         )
-        if settings.log_unsent_email_bodies:
-            logger.info(f"Email to {to_address} subject={subject} body={text_body}")
-        return False
 
     try:
         # aiosmtplib is imported lazily so the dependency stays optional

@@ -204,6 +204,23 @@
         </div>
       </div>
     </footer>
+    <script>
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              entry.target.classList.add("visible");
+              observer.unobserve(entry.target);
+            }
+          });
+        },
+        { threshold: 0.15 },
+      );
+
+      document
+        .querySelectorAll(".anim-scroll")
+        .forEach((el) => observer.observe(el));
+    </script>
     <script src="assets/nav.js" defer></script>
   </body>
 </html>

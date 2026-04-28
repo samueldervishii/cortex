@@ -23,7 +23,7 @@ def format_as_markdown(sessions: List[ChatSession]) -> str:
     lines = [
         "# Chat Export",
         "",
-        f"**Export Date:** {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC",
+        f"**Export Date:** {utc_iso()}",
         f"**Total Sessions:** {len(sessions)}",
         "",
         "---",
