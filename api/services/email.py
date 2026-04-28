@@ -43,14 +43,36 @@ async def send_email(
     leak whether an account exists via differential error responses.
     """
     if not is_configured():
-        # Dev/test fallback: log the link so the developer can copy it
-        # out of stderr instead of needing a real SMTP server.
-        logger.warning(
-            "SMTP not configured; would have sent email\nto=%s\nsubject=%s\nbody=\n%s",
-            to_address,
-            subject,
-            text_body,
-        )
+        # SMTP isn't configured. In production this is a misconfiguration
+        # and we must NOT log the body — it contains the password-reset
+        # link, which is effectively a bearer credential for the next
+        # 30 minutes. Anyone with log read access could complete the
+        # reset before the user does. Log only the recipient + subject
+        # so operators know mail was attempted, and shout loudly so
+        # they know to fix the SMTP settings.
+        #
+        # In a dev environment we DO log the body — that's the whole
+        # point of the fallback (no mail server, copy the link out of
+        # stderr) — but only when ``ENVIRONMENT`` is explicitly not
+        # production. The CodeQL warning still flags this branch, but
+        # it's a deliberate, environment-gated dev affordance rather
+        # than a leak path on a deployed service.
+        if settings.environment == "production":
+            logger.error(
+                "SMTP not configured in production; password-reset email "
+                "to=%s subject=%r was DROPPED. Configure SMTP_HOST / "
+                "SMTP_FROM_EMAIL to deliver these.",
+                to_address,
+                subject,
+            )
+        else:
+            logger.warning(
+                "SMTP not configured (dev); would have sent email\n"
+                "to=%s\nsubject=%s\nbody=\n%s",
+                to_address,
+                subject,
+                text_body,
+            )
         return False
 
     try:
