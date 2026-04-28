@@ -15,6 +15,7 @@ from .session import (
     Artifact,
     ArtifactListResponse,
     BranchRequest,
+    EditMessageRequest,
     ShareResponse,
 )
 from .user_settings import (
@@ -58,6 +59,7 @@ __all__ = [
     "Artifact",
     "ArtifactListResponse",
     "BranchRequest",
+    "EditMessageRequest",
     "ShareResponse",
     "UserSettings",
     "UserSettingsUpdate",

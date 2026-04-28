@@ -1,6 +1,6 @@
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Request, status
@@ -29,8 +29,11 @@ from schemas.user import (
     ProfileUpdate,
     PasswordChange,
     DeleteAccount,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
 )
 from services.avatar import generate_avatar
+from services import email as email_service
 
 logger = logging.getLogger("etude.auth")
 
@@ -38,6 +41,11 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 _MAX_FAILED_ATTEMPTS = 5
 _LOCKOUT_DURATION = 900  # 15 minutes in seconds
+
+# Password-reset tokens are single-use, short-lived, and stored hashed
+# server-side so a DB leak doesn't yield ready-to-use reset links.
+_RESET_TOKEN_TTL_MINUTES = 30
+_RESET_REQUEST_COOLDOWN_SECONDS = 60
 
 
 def _attempt_key(email: str, ip: str) -> dict:
@@ -548,3 +556,175 @@ async def logout(
     )
 
     return {"message": "Logged out"}
+
+
+def _hash_reset_token(token: str) -> str:
+    """Hash a reset token for at-rest storage.
+
+    SHA-256 is sufficient here because the token is high-entropy
+    (32 bytes from ``secrets.token_urlsafe``), so we don't need a
+    slow KDF — we just need the DB row to be unusable on its own.
+    """
+    import hashlib
+
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+@router.post("/forgot-password")
+async def forgot_password(
+    request: ForgotPasswordRequest,
+    http_request: Request,
+    user_repo: UserRepository = Depends(get_user_repository),
+    _rate_limit: None = Depends(check_rate_limit),
+):
+    """Issue a password-reset link by email.
+
+    To avoid leaking whether an email is registered we ALWAYS return
+    the same generic 200 response, regardless of whether a user
+    actually exists. The expensive work (sending the mail, writing
+    the token) only happens for real accounts.
+
+    A short per-account cooldown prevents an attacker from using this
+    endpoint to spam a victim's inbox.
+    """
+    import secrets
+    from db.connection import get_database
+    from config import settings as _settings
+
+    generic_response = {
+        "message": "If that account exists, a reset link has been sent.",
+    }
+
+    email_lower = request.email.lower().strip()
+    if not email_lower:
+        return generic_response
+
+    user = await user_repo.get_by_email(email_lower)
+    if not user:
+        return generic_response
+
+    user_id = user["id"]
+    db = await get_database()
+    resets = db["password_resets"]
+    now = datetime.now(timezone.utc)
+
+    # Cooldown — best-effort, not a hard guarantee under heavy concurrency.
+    recent = await resets.find_one(
+        {"user_id": user_id},
+        sort=[("created_at", -1)],
+    )
+    if recent and recent.get("created_at"):
+        last = recent["created_at"]
+        if isinstance(last, datetime):
+            elapsed = (now - last).total_seconds()
+            if elapsed < _RESET_REQUEST_COOLDOWN_SECONDS:
+                return generic_response
+
+    # Generate a fresh token, hash it for storage, and email the plain
+    # value to the user. Old tokens for the same user are invalidated
+    # so only the most recent link works.
+    plain_token = secrets.token_urlsafe(32)
+    token_hash = _hash_reset_token(plain_token)
+    expires_at = now + timedelta(minutes=_RESET_TOKEN_TTL_MINUTES)
+
+    await resets.update_many(
+        {"user_id": user_id, "used": {"$ne": True}},
+        {"$set": {"used": True, "used_at": now, "invalidated_by_new_request": True}},
+    )
+    await resets.insert_one({
+        "user_id": user_id,
+        "token_hash": token_hash,
+        "created_at": now,
+        "expires_at": expires_at,
+        "used": False,
+        "ip": get_client_ip(http_request),
+    })
+
+    base = (_settings.frontend_public_url or "").rstrip("/")
+    reset_link = f"{base}/reset-password?token={plain_token}" if base else (
+        # Fall back to a relative path so it's still copyable from the dev log.
+        f"/reset-password?token={plain_token}"
+    )
+
+    text_body, html_body = email_service.build_password_reset_email(
+        display_name=user.get("display_name", "") or user.get("username", ""),
+        reset_link=reset_link,
+        expires_minutes=_RESET_TOKEN_TTL_MINUTES,
+    )
+
+    # Fire-and-forget: errors here must NOT alter the response shape,
+    # otherwise we'd leak existence-of-account information via timing
+    # or status differences.
+    try:
+        await email_service.send_email(
+            to_address=email_lower,
+            subject="Reset your Étude password",
+            text_body=text_body,
+            html_body=html_body,
+        )
+    except Exception:
+        logger.exception("Password reset email send failed (swallowed)")
+
+    return generic_response
+
+
+@router.post("/reset-password")
+async def reset_password(
+    request: ResetPasswordRequest,
+    user_repo: UserRepository = Depends(get_user_repository),
+    _rate_limit: None = Depends(check_rate_limit),
+):
+    """Consume a password-reset token and set a new password.
+
+    The token can only be used once and must not be expired. On success
+    every existing refresh-token family for the account is revoked so
+    that any sessions opened by an attacker are immediately killed.
+    """
+    from db.connection import get_database
+
+    db = await get_database()
+    resets = db["password_resets"]
+    now = datetime.now(timezone.utc)
+
+    token_hash = _hash_reset_token(request.token.strip())
+    record = await resets.find_one_and_update(
+        {
+            "token_hash": token_hash,
+            "used": False,
+            "expires_at": {"$gt": now},
+        },
+        {"$set": {"used": True, "used_at": now}},
+    )
+
+    if record is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This reset link is invalid or has expired. Please request a new one.",
+        )
+
+    user_id = record.get("user_id")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Reset link is invalid.",
+        )
+
+    user = await user_repo.get_by_id(user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Reset link is invalid.",
+        )
+
+    new_hash = await hash_password(request.new_password)
+    await user_repo.update_password(user_id, new_hash)
+
+    # Revoke every session for this user — including the one being
+    # used right now — so a stolen reset link can't outlive the reset.
+    await db["refresh_tokens"].update_many(
+        {"user_id": user_id, "revoked": False},
+        {"$set": {"revoked": True, "revoked_at": now}},
+    )
+
+    logger.info(f"User reset password via email link: {user_id}")
+    return {"message": "Password has been reset. Please log in with your new password."}

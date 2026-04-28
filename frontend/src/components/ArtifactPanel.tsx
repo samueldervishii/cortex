@@ -15,9 +15,7 @@ import { CircleNotchIcon as Loader2 } from '@phosphor-icons/react/CircleNotch'
 import { EyeIcon as Eye } from '@phosphor-icons/react/Eye'
 import { ArrowLeftIcon as ArrowLeft } from '@phosphor-icons/react/ArrowLeft'
 import { apiClient, API_BASE, getAccessToken } from '../config/api'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import rehypeSanitize from 'rehype-sanitize'
+import MarkdownRenderer from './MarkdownRenderer'
 
 // ─── Types ───
 
@@ -503,11 +501,9 @@ function ArtifactPanel({ sessionId, isOpen, onClose }: ArtifactPanelProps) {
                   <Download size={14} /> MD
                 </button>
               </div>
-              <div className="right-panel-artifact-body">
-                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
-                  {selectedArtifact.content}
-                </ReactMarkdown>
-              </div>
+              <MarkdownRenderer className="right-panel-artifact-body">
+                {selectedArtifact.content}
+              </MarkdownRenderer>
             </div>
           )}
         </div>

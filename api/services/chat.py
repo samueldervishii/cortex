@@ -21,6 +21,10 @@ def _sse_event(event: str, data: dict) -> str:
 # We use 40 as a safe limit (leaves room for system prompt + file content).
 MAX_HISTORY_MESSAGES = 40
 
+# How many recent messages to always preserve verbatim. Anything older
+# gets compressed into the conversation summary when truncation triggers.
+RECENT_MESSAGES_VERBATIM = MAX_HISTORY_MESSAGES - 1
+
 # Flush every token immediately. The frontend runs a requestAnimationFrame
 # drain loop that smooths burst arrivals into a steady typewriter effect,
 # so there's no point batching on the server — it only adds latency.
@@ -35,35 +39,76 @@ class ChatService:
 
     def _truncate_history(
         self, history: List[dict]
-    ) -> Tuple[List[dict], Optional[str]]:
+    ) -> Tuple[List[dict], Optional[str], List[dict], int]:
         """Truncate conversation history to stay within context limits.
 
         Keeps the first message (original context) and the most recent
-        messages. When truncation actually happens we also return a short
-        notice string that the caller can append to the system prompt — we
-        do NOT inject a synthetic ``role: system`` entry into the messages
-        list because Anthropic only accepts ``user`` / ``assistant`` there.
+        messages. When truncation actually happens we also return:
 
-        Returns ``(history, notice)`` where ``notice`` is ``None`` if no
-        truncation was needed.
+          * a short notice string the caller can append to the system
+            prompt (we do NOT inject a synthetic ``role: system`` entry
+            into the messages list because Anthropic only accepts
+            ``user`` / ``assistant`` there),
+          * the dropped middle messages, so the caller can summarize
+            them out-of-band, and
+          * how many leading messages of ``history`` are now represented
+            outside the active context window (first message + dropped
+            middle), to be passed to the summary cache as ``through``.
+
+        Returns ``(history, notice, dropped, through)``. When no
+        truncation is needed, ``notice`` is ``None``, ``dropped`` is
+        empty and ``through`` is ``0``.
         """
         if len(history) <= MAX_HISTORY_MESSAGES:
-            return history, None
+            return history, None, [], 0
 
         # first (1) + recent (N) = MAX_HISTORY_MESSAGES
-        recent_count = MAX_HISTORY_MESSAGES - 1
+        recent_count = RECENT_MESSAGES_VERBATIM
         first = history[:1]
         recent = history[-recent_count:]
+        dropped = history[1:-recent_count]
+        # Number of leading messages now outside the verbatim window:
+        # the first message + every dropped middle message.
+        through = 1 + len(dropped)
         notice = (
             "Note: the earlier middle of this conversation has been omitted "
             "for brevity. The first message and the most recent exchanges "
             "are preserved verbatim."
         )
-        return first + recent, notice
+        return first + recent, notice, dropped, through
+
+    @staticmethod
+    def _is_block_list(content) -> bool:
+        return isinstance(content, list)
+
+    @staticmethod
+    def _content_to_blocks(content) -> List[dict]:
+        """Coerce a string or block-list into Anthropic block-list form."""
+        if isinstance(content, list):
+            return list(content)
+        return [{"type": "text", "text": str(content or "")}]
+
+    @staticmethod
+    def _content_is_empty(content) -> bool:
+        if isinstance(content, list):
+            return len(content) == 0
+        return not bool(content)
+
+    @classmethod
+    def _merge_contents(cls, a, b):
+        """Merge two same-role contents into one.
+
+        Plain strings stay strings (cheaper for the model to tokenize),
+        but as soon as either side contains structured blocks (images
+        etc) the result is a unified block list.
+        """
+        if isinstance(a, str) and isinstance(b, str):
+            return a + "\n\n" + b
+        return cls._content_to_blocks(a) + cls._content_to_blocks(b)
 
     def _build_messages(
-        self, question: str, history: List[dict]
-    ) -> Tuple[List[dict], Optional[str]]:
+        self, question, history: List[dict]
+    ) -> Tuple[List[dict], Optional[str], List[dict], int]:
         """Build a clean Anthropic messages array from history + new question.
 
         Anthropic's Messages API requires that messages strictly alternate
@@ -76,26 +121,30 @@ class ChatService:
           * Older sessions migrated from a prior schema may contain
             unexpected role values.
 
-        Returns ``(messages, truncation_notice_or_None)``.
+        Returns ``(messages, truncation_notice_or_None, dropped_middle, summary_through)``.
         """
-        history, notice = self._truncate_history(list(history))
+        history, notice, dropped, through = self._truncate_history(list(history))
 
         # Drop anything that isn't user/assistant — and skip empties.
         cleaned: List[dict] = []
         for msg in history:
             role = msg.get("role")
             content = msg.get("content", "")
-            if role not in ("user", "assistant") or not content:
+            if role not in ("user", "assistant") or self._content_is_empty(content):
                 continue
             cleaned.append({"role": role, "content": content})
 
-        # Collapse consecutive same-role messages by joining their content
-        # with a blank line. This keeps Anthropic's alternation rule happy
-        # without losing any user-visible information.
+        # Collapse consecutive same-role messages. This keeps Anthropic's
+        # alternation rule happy without losing any user-visible info.
+        # ``_merge_contents`` handles both plain-string and block-list
+        # content shapes (a single user turn with an attached image
+        # produces block-list content; everything else is a string).
         merged: List[dict] = []
         for msg in cleaned:
             if merged and merged[-1]["role"] == msg["role"]:
-                merged[-1]["content"] = merged[-1]["content"] + "\n\n" + msg["content"]
+                merged[-1]["content"] = self._merge_contents(
+                    merged[-1]["content"], msg["content"]
+                )
             else:
                 merged.append(dict(msg))
 
@@ -104,7 +153,9 @@ class ChatService:
         # if the last entry is already user (will be merged below).
         # Then append the current question as a user message.
         if merged and merged[-1]["role"] == "user":
-            merged[-1]["content"] = merged[-1]["content"] + "\n\n" + question
+            merged[-1]["content"] = self._merge_contents(
+                merged[-1]["content"], question
+            )
         else:
             merged.append({"role": "user", "content": question})
 
@@ -113,7 +164,7 @@ class ChatService:
         if merged and merged[0]["role"] != "user":
             merged.insert(0, {"role": "user", "content": "(start of conversation)"})
 
-        return merged, notice
+        return merged, notice, dropped, through
 
     def _compute_response_budget(self, remaining_tokens: Optional[int]) -> tuple[int, int]:
         """Decide max_tokens and thinking budget for the upcoming response.
@@ -141,11 +192,13 @@ class ChatService:
 
     async def stream_response(
         self,
-        question: str,
+        question,
         history: Optional[List[dict]] = None,
         system_prompt: Optional[str] = None,
         remaining_tokens: Optional[int] = None,
         model: Optional[dict] = None,
+        prior_summary: Optional[str] = None,
+        prior_summary_through: int = 0,
     ) -> AsyncGenerator[str, None]:
         """Stream a response from the AI model with token batching.
 
@@ -156,20 +209,60 @@ class ChatService:
             model: optional model registry entry to use instead of the
                 default. The caller is responsible for resolving/validating
                 the client-supplied model key before passing it here.
+            prior_summary: cached summary of earlier-conversation turns,
+                if any. Used to keep long conversations coherent after
+                older turns fall outside the active window.
+            prior_summary_through: number of leading messages already
+                represented by ``prior_summary`` — used to decide whether
+                we need to extend the summary with newly-dropped turns.
 
         Yields SSE events: message_start, token, message_end, done.
-        Tokens are batched for snappier UI rendering.
+        When the summary cache is refreshed inline, also yields an
+        internal ``summary_update`` event with the new summary text so
+        the caller can persist it.
         """
         model = model or CHAT_MODEL
-        messages, truncation_notice = self._build_messages(question, history or [])
+        messages, truncation_notice, dropped, through = self._build_messages(
+            question, history or []
+        )
+
+        # Truncation triggered: extend or build the conversation summary
+        # so the model still sees a compact representation of what was
+        # dropped. Failure here is non-fatal — we fall back to the plain
+        # truncation notice below.
+        active_summary: Optional[str] = prior_summary or None
+        if dropped:
+            # The cached summary already covers everything up to
+            # ``prior_summary_through``. Anything past that index in the
+            # dropped slice still needs to be incorporated.
+            new_drop_start = max(0, prior_summary_through - 1)
+            new_dropped_segment = dropped[new_drop_start:] if dropped else []
+            if not active_summary or new_dropped_segment:
+                refreshed = await self.client.summarize_conversation(
+                    model_id=model["id"],
+                    messages=new_dropped_segment or dropped,
+                    previous_summary=active_summary,
+                )
+                if refreshed and refreshed != active_summary:
+                    active_summary = refreshed
+                    # Surface the new summary so the caller can persist it.
+                    yield _sse_event(
+                        "summary_update",
+                        {"summary": refreshed, "through": through},
+                    )
+
         # Truncation is communicated to the model via the system prompt
         # rather than via a synthetic message role (Anthropic only accepts
         # user/assistant in the messages array).
         if truncation_notice:
+            extra = truncation_notice
+            if active_summary:
+                extra = (
+                    f"{truncation_notice}\n\n"
+                    f"Summary of the earlier conversation:\n{active_summary}"
+                )
             system_prompt = (
-                f"{system_prompt}\n\n{truncation_notice}"
-                if system_prompt
-                else truncation_notice
+                f"{system_prompt}\n\n{extra}" if system_prompt else extra
             )
         start_time = time.time()
         response_parts: list[str] = []

@@ -2,6 +2,7 @@ import logging
 import secrets
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Request, Query, File, UploadFile, Form
 from fastapi.responses import StreamingResponse
@@ -35,6 +36,7 @@ from schemas import (
     Artifact,
     ArtifactListResponse,
     BranchRequest,
+    EditMessageRequest,
     ShareResponse,
     FeedbackCreate,
     FeedbackResponse,
@@ -269,10 +271,12 @@ async def upload_file_to_session(
     user_id: str = Depends(get_current_user),
     _rate_limit: None = Depends(check_rate_limit),
 ):
-    """Upload a file (PDF, DOCX, TXT) and add it as context to the conversation."""
+    """Upload a file (PDF, DOCX, TXT, or image) and add it as context to the conversation."""
     import os
-    import base64
-    from services.file_extractor import validate_file, extract_text, chunk_text
+    from services.file_extractor import (
+        validate_file, extract_text, chunk_text, is_image_file, IMAGE_EXTENSIONS,
+    )
+    from services import file_storage
     from core.sanitization import sanitize_filename
     from schemas import FileAttachment, SourceChunk
 
@@ -284,12 +288,14 @@ async def upload_file_to_session(
     safe_name = sanitize_filename(file.filename or "upload")
     safe_content_type = file.content_type or "application/octet-stream"
 
-    # Read file in chunks to enforce size limit without trusting Content-Length
-    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+    # Read file in chunks to enforce size limit without trusting Content-Length.
+    # 10MB universal cap; image-specific tighter cap is enforced inside
+    # ``validate_file`` once we know the extension.
+    MAX_FILE_SIZE = 10 * 1024 * 1024
     chunks_buf = []
     bytes_read = 0
     while True:
-        chunk = await file.read(64 * 1024)  # 64KB chunks
+        chunk = await file.read(64 * 1024)
         if not chunk:
             break
         bytes_read += len(chunk)
@@ -305,8 +311,16 @@ async def upload_file_to_session(
 
     import asyncio
     ext = os.path.splitext(safe_name)[1].lower()
+    is_image = ext in IMAGE_EXTENSIONS or is_image_file(safe_name, safe_content_type)
+
     try:
-        if ext == ".pdf":
+        if is_image:
+            # Vision uploads: bytes are forwarded to the model as an
+            # image content block, so we skip text extraction and
+            # chunking entirely.
+            extracted_text = ""
+            pages = None
+        elif ext == ".pdf":
             from services.file_extractor import extract_pdf_with_pages
             extracted_text, pages = await asyncio.to_thread(extract_pdf_with_pages, content)
         else:
@@ -316,25 +330,29 @@ async def upload_file_to_session(
         logger.exception(f"File extraction failed for {safe_name}")
         raise HTTPException(status_code=400, detail="Could not process this file. Please ensure it is a valid PDF, DOCX, or text file.")
 
-    try:
-        chunk_dicts = await asyncio.to_thread(chunk_text, extracted_text, safe_name, pages)
-        chunks = [SourceChunk(**c) for c in chunk_dicts]
-    except Exception:
-        logger.debug(f"Chunking failed for {safe_name}, proceeding without chunks")
+    if is_image:
         chunks = []
+    else:
+        try:
+            chunk_dicts = await asyncio.to_thread(chunk_text, extracted_text, safe_name, pages)
+            chunks = [SourceChunk(**c) for c in chunk_dicts]
+        except Exception:
+            logger.debug(f"Chunking failed for {safe_name}, proceeding without chunks")
+            chunks = []
 
     db = repo.collection.database
-    storage_id = str(uuid.uuid4())
-    data_b64 = await asyncio.to_thread(lambda: base64.b64encode(content).decode("ascii"))
-    await db["file_storage"].insert_one({
-        "id": storage_id,
-        "session_id": session_id,
-        "data_base64": data_b64,
-        "filename": safe_name,
-        "content_type": safe_content_type,
-        "size": len(content),
-        "created_at": utc_iso(),
-    })
+    # Backend-agnostic write: switches to S3-compatible object storage
+    # automatically when ``S3_BUCKET`` is configured, otherwise stores
+    # the blob in Mongo as before. Falls back to Mongo on remote-write
+    # failure so a misconfigured bucket can't take uploads down.
+    storage_id = await file_storage.store_file(
+        db,
+        session_id=session_id,
+        user_id=user_id,
+        content=content,
+        filename=safe_name,
+        content_type=safe_content_type,
+    )
 
     attachment = FileAttachment(
         filename=safe_name,
@@ -346,7 +364,11 @@ async def upload_file_to_session(
         chunks=chunks,
     )
 
-    raw_text = question.strip() if question.strip() else f"I've uploaded a file: {safe_name}. Please analyze it."
+    if is_image:
+        default_prompt = f"I've attached an image: {safe_name}. Please describe and analyze it."
+    else:
+        default_prompt = f"I've uploaded a file: {safe_name}. Please analyze it."
+    raw_text = question.strip() if question.strip() else default_prompt
     user_text = sanitize_text(raw_text, max_length=10000)
     user_message = Message(role="user", content=user_text, file=attachment)
 
@@ -372,7 +394,14 @@ async def upload_file_to_session(
             raise HTTPException(status_code=404, detail="Session not found or was deleted")
         session.messages.append(user_message)
 
-    # Auto-register uploaded file as a session source (dedup enforced by unique index)
+    # Auto-register uploaded file as a session source (dedup enforced by unique index).
+    # Skip for images — they're handed straight to the vision model and don't have
+    # citable text chunks that the source manager can search through.
+    if is_image:
+        return SessionResponse(
+            session=_strip_file_data(session),
+            message=f"Image '{file.filename}' uploaded.",
+        )
     try:
         from pymongo.errors import DuplicateKeyError
         db = repo.collection.database
@@ -516,49 +545,85 @@ async def stream_response(
             all_chunks.extend(msg.file.chunks)
     has_chunks = len(all_chunks) > 0
 
-    # Build the question — include file content if the current message has a file
-    question_text = last_user_msg.content
-    if last_user_msg.file and last_user_msg.file.extracted_text:
-        if last_user_msg.file.chunks:
+    # ------------------------------------------------------------------
+    # Build messages for the model. Vision (image) attachments need to be
+    # forwarded as Anthropic content blocks rather than as text, so we
+    # construct rich content lists here when an image is involved and
+    # fall back to plain strings otherwise. The chat service merger
+    # tolerates either shape per message.
+    # ------------------------------------------------------------------
+    import base64 as _base64
+    from services.file_extractor import (
+        is_image_file,
+        normalize_image_media_type,
+    )
+    from services import file_storage
+
+    db = repo.collection.database
+
+    async def _image_block_for(msg) -> Optional[dict]:
+        """Build an Anthropic image content block for a message attachment."""
+        if not msg.file or not is_image_file(msg.file.filename, msg.file.content_type):
+            return None
+        data_b64: Optional[str] = None
+        if msg.file.file_storage_id:
+            raw = await file_storage.load_file_bytes(db, msg.file.file_storage_id)
+            if raw:
+                data_b64 = _base64.b64encode(raw).decode("ascii")
+        if not data_b64 and msg.file.data_base64:
+            data_b64 = msg.file.data_base64
+        if not data_b64:
+            return None
+        media_type = normalize_image_media_type(
+            msg.file.content_type, msg.file.filename
+        )
+        return {
+            "type": "image",
+            "source": {"type": "base64", "media_type": media_type, "data": data_b64},
+        }
+
+    def _text_with_file_context(msg) -> str:
+        """Render a message's text with any non-image file context inlined."""
+        if not msg.file or not msg.file.extracted_text:
+            return msg.content
+        if is_image_file(msg.file.filename, msg.file.content_type):
+            return msg.content
+        if msg.file.chunks:
             chunk_sections = []
-            for chunk in last_user_msg.file.chunks:
+            for chunk in msg.file.chunks:
                 label = f"[{chunk.id}]"
                 if chunk.page:
                     label = f"[{chunk.id}, page {chunk.page}]"
                 chunk_sections.append(f"{label}\n{chunk.text}")
-            question_text = (
-                f"{last_user_msg.content}\n\n"
-                f"--- Source: {last_user_msg.file.filename} ---\n"
+            return (
+                f"{msg.content}\n\n"
+                f"--- Source: {msg.file.filename} ---\n"
                 + "\n\n".join(chunk_sections)
             )
-        else:
-            question_text = (
-                f"{last_user_msg.content}\n\n"
-                f"--- Attached File: {last_user_msg.file.filename} ---\n"
-                f"{last_user_msg.file.extracted_text}"
-            )
+        return (
+            f"{msg.content}\n\n"
+            f"--- Attached File: {msg.file.filename} ---\n"
+            f"{msg.file.extracted_text}"
+        )
 
-    # Build conversation history (all messages except the last user message)
-    # For file messages in history, include chunks with labels so the model can cite them
-    history = []
+    # Current user turn — possibly with an inline image block.
+    last_image_block = await _image_block_for(last_user_msg)
+    last_text = _text_with_file_context(last_user_msg)
+    if last_image_block is not None:
+        question_payload: object = [last_image_block, {"type": "text", "text": last_text}]
+    else:
+        question_payload = last_text
+
+    # History — same idea, per turn.
+    history: list[dict] = []
     for msg in session.messages[:-1]:
-        msg_content = msg.content
-        if msg.file and msg.file.extracted_text:
-            if msg.file.chunks:
-                chunk_sections = []
-                for chunk in msg.file.chunks:
-                    label = f"[{chunk.id}]"
-                    if chunk.page:
-                        label = f"[{chunk.id}, page {chunk.page}]"
-                    chunk_sections.append(f"{label}\n{chunk.text}")
-                msg_content = (
-                    f"{msg.content}\n\n"
-                    f"--- Source: {msg.file.filename} ---\n"
-                    + "\n\n".join(chunk_sections)
-                )
-            else:
-                msg_content = f"{msg.content}\n\n--- Attached File: {msg.file.filename} ---\n{msg.file.extracted_text}"
-        history.append({"role": msg.role, "content": msg_content})
+        text_part = _text_with_file_context(msg)
+        img_block = await _image_block_for(msg) if msg.role == "user" else None
+        if img_block is not None:
+            content: object = [img_block, {"type": "text", "text": text_part}]
+        else:
+            content = text_part
+        history.append({"role": msg.role, "content": content})
 
     # Build system prompt — add citation instructions when file chunks are available
     system_prompt = (
@@ -601,13 +666,33 @@ async def stream_response(
         # bucket and their quota would silently shrink with every disconnect.
         try:
             try:
+                _events_since_cancel_poll = 0
+                _cancelled = False
                 async for event in chat_service.stream_response(
-                    question=question_text,
+                    question=question_payload,
                     history=history,
                     system_prompt=system_prompt,
                     remaining_tokens=remaining_tokens,
                     model=selected_model,
+                    prior_summary=session.conversation_summary,
+                    prior_summary_through=session.summary_through,
                 ):
+                    # Cooperative cancellation. We poll the session doc every
+                    # ~16 events (roughly every few hundred ms of generation —
+                    # cheap on the database side, fast enough that the user
+                    # perceives the stop button as instant). The cancel flag
+                    # is just a timestamp set by ``POST /stop``.
+                    _events_since_cancel_poll += 1
+                    if _events_since_cancel_poll >= 16:
+                        _events_since_cancel_poll = 0
+                        try:
+                            if await repo.is_stream_cancelled(session_id):
+                                _cancelled = True
+                                yield 'event: cancelled\ndata: {"reason": "user_stopped"}\n\n'
+                                break
+                        except Exception:
+                            logger.debug("Cancel-poll failed", exc_info=True)
+
                     if event.startswith("event: done"):
                         try:
                             data_start = event.index("data: ") + 6
@@ -616,6 +701,29 @@ async def stream_response(
                             output_tokens = int(done_data.get("output_tokens", 0) or 0)
                         except (ValueError, _json.JSONDecodeError):
                             pass
+                        continue
+
+                    # Internal: chat service refreshed the conversation
+                    # summary cache. Persist it but don't forward to the
+                    # browser — it's a server-side concern.
+                    if event.startswith("event: summary_update"):
+                        try:
+                            data_start = event.index("data: ") + 6
+                            payload = _json.loads(event[data_start:].strip())
+                            new_summary = payload.get("summary") or ""
+                            through_val = int(payload.get("through", 0) or 0)
+                            if new_summary and through_val > 0:
+                                await repo.update_summary(
+                                    session_id=session_id,
+                                    user_id=user_id,
+                                    summary=new_summary,
+                                    through=through_val,
+                                )
+                        except Exception:
+                            logger.debug(
+                                "Failed to persist conversation summary update",
+                                exc_info=True,
+                            )
                         continue
 
                     yield event
@@ -862,10 +970,13 @@ async def download_file(
 ):
     """Download an attached file from a message."""
     import base64
+    import asyncio
     from fastapi.responses import Response
+    from core.sanitization import sanitize_filename
+    from services import file_storage
 
-    # Need the inline base64 here even when ``file_storage_id`` is set,
-    # so we can fall back to it for legacy messages.
+    # Need the inline base64 here for legacy messages where the bytes
+    # are still embedded in the message itself (no ``file_storage_id``).
     session = await repo.get(session_id, user_id=user_id, with_file_blobs=True)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -877,25 +988,23 @@ async def download_file(
     if not msg.file:
         raise HTTPException(status_code=404, detail="No file attached to this message")
 
-    # Try external file_storage first, fall back to legacy inline data_base64
-    data_b64 = None
+    db = repo.collection.database
+
+    # Path 1: modern messages reference ``file_storage`` — works for
+    # both Mongo-backed and S3-backed blobs because file_storage.load
+    # transparently dispatches on the stored ``backend`` field.
+    file_bytes: Optional[bytes] = None
     if msg.file.file_storage_id:
-        db = repo.collection.database
-        storage_doc = await db["file_storage"].find_one(
-            {"id": msg.file.file_storage_id}, {"data_base64": 1}
-        )
-        if storage_doc:
-            data_b64 = storage_doc.get("data_base64")
+        file_bytes = await file_storage.load_file_bytes(db, msg.file.file_storage_id)
 
-    if not data_b64 and msg.file.data_base64:
-        data_b64 = msg.file.data_base64
+    # Path 2: legacy fallback for very old messages that inlined the
+    # base64 blob directly into the message document.
+    if file_bytes is None and msg.file.data_base64:
+        file_bytes = await asyncio.to_thread(base64.b64decode, msg.file.data_base64)
 
-    if not data_b64:
+    if not file_bytes:
         raise HTTPException(status_code=404, detail="File data not found")
 
-    import asyncio
-    from core.sanitization import sanitize_filename
-    file_bytes = await asyncio.to_thread(base64.b64decode, data_b64)
     safe_filename = sanitize_filename(msg.file.filename)
     return Response(
         content=file_bytes,
@@ -1052,6 +1161,156 @@ async def branch_session(
         await db["artifacts"].insert_many(source_artifacts)
 
     return SessionResponse(session=_strip_file_data(new_session), message="Session branched successfully")
+
+
+@router.post("/{session_id}/stop")
+async def stop_stream(
+    session_id: str,
+    repo: SessionRepository = Depends(get_session_repository),
+    user_id: str = Depends(get_current_user),
+):
+    """Request cancellation of an in-flight stream for this session.
+
+    The endpoint is fire-and-forget: it sets a flag on the session and
+    returns immediately. The active SSE generator polls the flag between
+    tokens and tears down the upstream connection cleanly, recording
+    usage for whatever was already produced.
+
+    Returns 200 ``{"cancelled": true}`` if a stream was running, or
+    ``{"cancelled": false}`` if there was nothing to stop (still 200,
+    because the desired end state — "no stream running" — is already
+    true and the client doesn't need to retry).
+    """
+    requested = await repo.request_stream_cancel(session_id, user_id)
+    return {"cancelled": requested}
+
+
+@router.patch("/{session_id}/message/{message_index}", response_model=SessionResponse)
+async def edit_user_message(
+    session_id: str,
+    message_index: int,
+    body: EditMessageRequest,
+    repo: SessionRepository = Depends(get_session_repository),
+    user_id: str = Depends(get_current_user),
+    _rate_limit: None = Depends(check_rate_limit),
+):
+    """Edit a user message in place and discard everything after it.
+
+    The conversation is rewound to (and including) the edited message;
+    the caller is then expected to call ``/stream`` to produce a fresh
+    assistant reply for the new content. Refuses to edit assistant
+    messages — they're a record of what was actually generated and
+    rewriting them would silently misrepresent model output.
+    """
+    session = await repo.get(session_id, user_id=user_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    if message_index < 0 or message_index >= len(session.messages):
+        raise HTTPException(status_code=400, detail="Message index out of range")
+
+    if session.messages[message_index].role != "user":
+        raise HTTPException(
+            status_code=400,
+            detail="Only user messages can be edited.",
+        )
+
+    new_content = sanitize_text(body.content, max_length=10000)
+    if not new_content:
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+
+    success = await repo.edit_user_message_and_truncate(
+        session_id=session_id,
+        message_index=message_index,
+        new_content=new_content,
+        user_id=user_id,
+    )
+    if not success:
+        raise HTTPException(
+            status_code=409,
+            detail="Could not edit message (session changed concurrently or message no longer exists).",
+        )
+
+    # Tidy up artifacts that referenced messages we just discarded — they'd
+    # be orphaned references in the UI otherwise. Best-effort: a failure
+    # here doesn't undo the edit.
+    try:
+        db = repo.collection.database
+        await db["artifacts"].delete_many(
+            {"session_id": session_id, "message_index": {"$gt": message_index}}
+        )
+    except Exception:
+        logger.debug(
+            f"Failed to clean up artifacts after edit on session {session_id}",
+            exc_info=True,
+        )
+
+    refreshed = await repo.get(session_id, user_id=user_id)
+    if refreshed is None:
+        raise HTTPException(status_code=404, detail="Session disappeared")
+    return SessionResponse(
+        session=_strip_file_data(refreshed),
+        message="Message edited. Call /stream to regenerate.",
+    )
+
+
+@router.post("/{session_id}/message/{message_index}/regenerate", response_model=SessionResponse)
+async def regenerate_assistant_message(
+    session_id: str,
+    message_index: int,
+    repo: SessionRepository = Depends(get_session_repository),
+    user_id: str = Depends(get_current_user),
+    _rate_limit: None = Depends(check_rate_limit),
+):
+    """Discard an assistant message (and anything after it) so it can be
+    regenerated.
+
+    Truncates the session so that the previous user turn becomes the
+    last message; the client then calls ``/stream`` to get a fresh
+    answer. Refuses if the target index isn't an assistant message.
+    """
+    session = await repo.get(session_id, user_id=user_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    if message_index < 0 or message_index >= len(session.messages):
+        raise HTTPException(status_code=400, detail="Message index out of range")
+
+    if session.messages[message_index].role != "assistant":
+        raise HTTPException(
+            status_code=400,
+            detail="Only assistant messages can be regenerated.",
+        )
+
+    success = await repo.truncate_at(
+        session_id=session_id,
+        keep_count=message_index,
+        user_id=user_id,
+    )
+    if not success:
+        raise HTTPException(
+            status_code=409,
+            detail="Could not regenerate (session changed concurrently).",
+        )
+
+    try:
+        db = repo.collection.database
+        await db["artifacts"].delete_many(
+            {"session_id": session_id, "message_index": {"$gte": message_index}}
+        )
+    except Exception:
+        logger.debug(
+            f"Failed to clean up artifacts before regenerate on session {session_id}",
+            exc_info=True,
+        )
+
+    refreshed = await repo.get(session_id, user_id=user_id)
+    if refreshed is None:
+        raise HTTPException(status_code=404, detail="Session disappeared")
+    return SessionResponse(
+        session=_strip_file_data(refreshed),
+        message="Ready for regeneration. Call /stream to produce a new reply.",
+    )
 
 
 @router.delete("s/all")

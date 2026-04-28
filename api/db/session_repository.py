@@ -503,6 +503,152 @@ class SessionRepository:
             {"$set": {"streaming_started_at": None}},
         )
 
+    async def request_stream_cancel(
+        self, session_id: str, user_id: str
+    ) -> bool:
+        """Signal an in-flight stream to stop generating.
+
+        Sets ``stream_cancel_requested_at`` on the session document. The
+        SSE generator polls this field between tokens and tears the
+        upstream connection down cleanly when it appears, recording
+        usage for whatever was already produced. Idempotent and safe
+        to call whether or not a stream is currently running.
+        """
+        result = await self.collection.update_one(
+            {
+                "id": session_id,
+                "user_id": user_id,
+                "is_deleted": {"$ne": True},
+                "streaming_started_at": {"$ne": None},
+            },
+            {"$set": {"stream_cancel_requested_at": datetime.now(timezone.utc)}},
+        )
+        return result.modified_count > 0
+
+    async def is_stream_cancelled(
+        self, session_id: str
+    ) -> bool:
+        """Has the in-flight stream for this session been asked to stop?
+
+        Cheap read used inside the SSE event loop. We compare against
+        ``streaming_started_at`` so that a stale cancel request from a
+        previous stream cannot bleed into the current one.
+        """
+        doc = await self.collection.find_one(
+            {"id": session_id},
+            {"stream_cancel_requested_at": 1, "streaming_started_at": 1},
+        )
+        if not doc:
+            return False
+        cancel_at = doc.get("stream_cancel_requested_at")
+        started_at = doc.get("streaming_started_at")
+        if cancel_at is None or started_at is None:
+            return False
+        return cancel_at >= started_at
+
+    async def edit_user_message_and_truncate(
+        self,
+        session_id: str,
+        message_index: int,
+        new_content: str,
+        user_id: str,
+    ) -> bool:
+        """Edit a user message and discard everything after it.
+
+        Used by the "edit and regenerate" flow. The caller is then
+        expected to kick off a new ``/stream`` call which will produce
+        a fresh assistant reply. Atomic: rewrites the message contents
+        and slices the array in a single update, so a concurrent
+        ``append_message`` cannot land between the two halves.
+
+        Returns False if the index is out of range, the message at that
+        index isn't a user message, or the session doesn't exist.
+        """
+        result = await self.collection.update_one(
+            {
+                "id": session_id,
+                "user_id": user_id,
+                "is_deleted": {"$ne": True},
+                # Refuse to edit anything other than user turns —
+                # assistant edits would silently misrepresent output.
+                f"messages.{message_index}.role": "user",
+            },
+            {
+                "$set": {
+                    f"messages.{message_index}.content": new_content,
+                    "updated_at": datetime.now(timezone.utc),
+                },
+                # ``$slice`` keeps elements [0, message_index] so
+                # everything after the edited message is discarded.
+                "$push": {
+                    "messages": {"$each": [], "$slice": message_index + 1}
+                },
+                "$inc": {"version": 1},
+            },
+        )
+        return result.modified_count > 0
+
+    async def update_summary(
+        self,
+        session_id: str,
+        user_id: str,
+        summary: str,
+        through: int,
+    ) -> bool:
+        """Persist a freshly generated conversation summary on the session.
+
+        Best-effort: callers proceed even if this fails (the next turn will
+        regenerate). We use a ``$max`` style guard so we never overwrite a
+        more-recent summary written concurrently — only write if the new
+        ``through`` is greater than what's already stored.
+        """
+        result = await self.collection.update_one(
+            {
+                "id": session_id,
+                "user_id": user_id,
+                "is_deleted": {"$ne": True},
+                # Don't clobber a more-recent summary written by a parallel
+                # branch — extremely unlikely given the per-session stream
+                # lock, but cheap insurance.
+                "$or": [
+                    {"summary_through": {"$exists": False}},
+                    {"summary_through": {"$lte": through}},
+                ],
+            },
+            {
+                "$set": {
+                    "conversation_summary": summary,
+                    "summary_through": through,
+                },
+            },
+        )
+        return result.modified_count > 0
+
+    async def truncate_at(
+        self, session_id: str, keep_count: int, user_id: str
+    ) -> bool:
+        """Drop trailing messages, keeping the first ``keep_count``.
+
+        Used by the regenerate-assistant flow: discard the last
+        assistant message (and anything after it) so a fresh stream
+        can produce a new reply for the same prior user turn.
+        """
+        if keep_count < 0:
+            return False
+        result = await self.collection.update_one(
+            {
+                "id": session_id,
+                "user_id": user_id,
+                "is_deleted": {"$ne": True},
+            },
+            {
+                "$push": {"messages": {"$each": [], "$slice": keep_count}},
+                "$set": {"updated_at": datetime.now(timezone.utc)},
+                "$inc": {"version": 1},
+            },
+        )
+        return result.modified_count > 0
+
     async def update_pin(
         self, session_id: str, is_pinned: bool, pinned_at: Optional[str] = None,
         user_id: Optional[str] = None

@@ -17,6 +17,8 @@ const ChatsPage = lazy(() => import('./pages/ChatsPage'))
 const SharedSession = lazy(() => import('./pages/SharedSession'))
 const StatusPage = lazy(() => import('./pages/StatusPage'))
 const AuthPage = lazy(() => import('./pages/AuthPage'))
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'))
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'))
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'))
 
 createRoot(document.getElementById('root')!).render(
@@ -32,6 +34,8 @@ createRoot(document.getElementById('root')!).render(
                     {/* Public routes */}
                     <Route path="/login" element={<AuthPage />} />
                     <Route path="/register" element={<AuthPage />} />
+                    <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+                    <Route path="/reset-password" element={<ResetPasswordPage />} />
                     <Route path="/shared/:shareToken" element={<SharedSession />} />
                     <Route path="/status" element={<StatusPage />} />
 

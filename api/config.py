@@ -45,6 +45,33 @@ class Settings(BaseSettings):
     circuit_breaker_fail_max: int = 5  # Open circuit after 5 failures
     circuit_breaker_timeout: int = 60  # Try again after 60 seconds
 
+    # Object storage (S3-compatible). All optional — when unset, file
+    # uploads keep using the legacy in-Mongo ``file_storage`` collection.
+    # Setting ``s3_bucket`` flips uploads to write the binary blob to the
+    # bucket; the Mongo doc only stores the small metadata + key. Works
+    # with AWS S3, Cloudflare R2, Backblaze B2, MinIO, etc.
+    s3_endpoint_url: str = ""  # Leave blank for AWS S3
+    s3_region: str = ""
+    s3_bucket: str = ""
+    s3_access_key_id: str = ""
+    s3_secret_access_key: str = ""
+    # Force path-style addressing — required by MinIO and some R2 setups.
+    s3_path_style: bool = False
+
+    # SMTP / email — used for password-reset (and future) flows. When unset
+    # in non-production, password-reset endpoints log the reset link to
+    # stderr instead of sending an email so local dev still works.
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from_email: str = ""
+    smtp_from_name: str = "Étude"
+    smtp_use_tls: bool = True
+    # Public base URL the user clicks on in the reset email — typically
+    # the frontend's URL so the link lands on the reset-password page.
+    frontend_public_url: str = ""
+
     class Config:
         env_file = ".env"
         extra = "ignore"

@@ -243,7 +243,13 @@ function useCouncil() {
         ...(msg.model_name && { modelName: msg.model_name }),
         ...(msg.response_time_ms && { responseTime: msg.response_time_ms }),
         ...(msg.is_artifact && { isArtifact: true }),
-        ...(msg.file && { file: { filename: msg.file.filename, size: msg.file.size } }),
+        ...(msg.file && {
+          file: {
+            filename: msg.file.filename,
+            size: msg.file.size,
+            contentType: msg.file.content_type,
+          },
+        }),
         ...(msg.citations && msg.citations.length > 0 && { citations: msg.citations }),
       }))
 
@@ -334,7 +340,13 @@ function useCouncil() {
         ...(msg.model_name && { modelName: msg.model_name }),
         ...(msg.response_time_ms && { responseTime: msg.response_time_ms }),
         ...(msg.is_artifact && { isArtifact: true }),
-        ...(msg.file && { file: { filename: msg.file.filename, size: msg.file.size } }),
+        ...(msg.file && {
+          file: {
+            filename: msg.file.filename,
+            size: msg.file.size,
+            contentType: msg.file.content_type,
+          },
+        }),
         ...(msg.citations && msg.citations.length > 0 && { citations: msg.citations }),
       }))
       setMessages(loadedMessages)
@@ -499,6 +511,33 @@ function useCouncil() {
           ])
           break
 
+        case 'cancelled': {
+          // Server confirmed user-requested stop. Flush whatever's left
+          // in the typewriter buffer onto the message and mark it as
+          // not-streaming so the action bar (copy/regenerate/etc) shows.
+          const idx = streamingIndexRef.current
+          const remainingBuffer = typeBufferRef.current
+          typeBufferRef.current = ''
+          if (drainRafRef.current !== null) {
+            cancelAnimationFrame(drainRafRef.current)
+            drainRafRef.current = null
+          }
+          streamingIndexRef.current = null
+          setMessages((prev) => {
+            if (idx === null || idx >= prev.length) return prev
+            const updated = [...prev]
+            const existing = updated[idx]
+            updated[idx] = {
+              ...existing,
+              content: existing.content + remainingBuffer,
+              streaming: false,
+              wasCancelled: true,
+            }
+            return updated
+          })
+          break
+        }
+
         case 'done':
           if (data && data.usage) {
             applyUsageUpdate(data.usage)
@@ -576,7 +615,7 @@ function useCouncil() {
       {
         role: 'user',
         content: userText,
-        file: { filename: file.name, size: file.size },
+        file: { filename: file.name, size: file.size, contentType: file.type },
       },
     ])
     setCurrentStep('Thinking...')
@@ -700,6 +739,114 @@ function useCouncil() {
     }
   }
 
+  /**
+   * Ask the backend to stop generating the in-flight reply. The backend
+   * persists whatever was already produced and sends a final `cancelled`
+   * SSE event, so we don't abort the local fetch — letting the SSE
+   * parser drain that event and finalize the assistant message in place.
+   */
+  const stopStreaming = useCallback(async () => {
+    if (!sessionId) return
+    try {
+      await apiClient.post(`/session/${sessionId}/stop`)
+    } catch (error) {
+      // Best-effort. If the cancel POST fails (e.g. stream just ended),
+      // there's nothing for the user to do — the stream will finish on
+      // its own. We deliberately don't surface this as an error.
+      console.debug('Stop request failed:', error)
+    }
+  }, [sessionId])
+
+  /**
+   * Edit a previously sent user message and regenerate the answer.
+   *
+   * Backend rewrites the message, drops everything after it, then we
+   * kick off a fresh /stream call so the model sees the new prompt.
+   * The optimistic local truncation keeps the UI in lockstep with what
+   * the server did, so the user doesn't see stale follow-ups flicker.
+   */
+  const editMessage = useCallback(
+    async (messageIndex, newContent) => {
+      if (!sessionId) return
+      const trimmed = (newContent || '').trim()
+      if (!trimmed) return
+      setLoading(true)
+      setCurrentStep('Editing...')
+      try {
+        await apiClient.patch(`/session/${sessionId}/message/${messageIndex}`, {
+          content: trimmed,
+        })
+
+        setMessages((prev) => {
+          const updated = prev.slice(0, messageIndex + 1)
+          if (updated[messageIndex]) {
+            updated[messageIndex] = {
+              ...updated[messageIndex],
+              content: trimmed,
+            }
+          }
+          return updated
+        })
+
+        setCurrentStep('Thinking...')
+        await streamResponse(sessionId)
+        if (!ghostMode) {
+          await fetchSessions()
+        }
+      } catch (error) {
+        if (error.name === 'AbortError') return
+        console.error('Edit failed:', error)
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: 'error',
+            content: error.response?.data?.detail || 'Could not edit message. Please try again.',
+          },
+        ])
+      } finally {
+        setLoading(false)
+        setCurrentStep('')
+      }
+    },
+    [sessionId, ghostMode, fetchSessions]
+  )
+
+  /**
+   * Regenerate an assistant message: drop it, then ask the server to
+   * stream a new reply. Mirrors `editMessage`'s flow without any user
+   * content change.
+   */
+  const regenerateMessage = useCallback(
+    async (messageIndex) => {
+      if (!sessionId) return
+      setLoading(true)
+      setCurrentStep('Regenerating...')
+      try {
+        await apiClient.post(`/session/${sessionId}/message/${messageIndex}/regenerate`)
+        setMessages((prev) => prev.slice(0, messageIndex))
+        setCurrentStep('Thinking...')
+        await streamResponse(sessionId)
+        if (!ghostMode) {
+          await fetchSessions()
+        }
+      } catch (error) {
+        if (error.name === 'AbortError') return
+        console.error('Regenerate failed:', error)
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: 'error',
+            content: error.response?.data?.detail || 'Could not regenerate. Please try again.',
+          },
+        ])
+      } finally {
+        setLoading(false)
+        setCurrentStep('')
+      }
+    },
+    [sessionId, ghostMode, fetchSessions]
+  )
+
   const hasMessages = messages.length > 0
 
   return {
@@ -730,6 +877,9 @@ function useCouncil() {
     unshareSession,
     getShareInfo,
     exportSession,
+    stopStreaming,
+    editMessage,
+    regenerateMessage,
     sessionLoadError,
     isLoadingSession,
     quotedText,

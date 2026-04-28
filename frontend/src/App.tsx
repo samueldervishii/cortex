@@ -53,6 +53,9 @@ function App() {
     branchSession,
     shareSession,
     exportSession,
+    stopStreaming,
+    editMessage,
+    regenerateMessage,
     sessionLoadError,
     isLoadingSession,
     quotedText,
@@ -309,6 +312,9 @@ function App() {
               onFileUpload={sendFileMessage}
               sessionId={sessionId}
               onBranch={handleBranch}
+              onStopStreaming={stopStreaming}
+              onEditMessage={editMessage}
+              onRegenerateMessage={regenerateMessage}
               quotedText={quotedText}
               onClearQuote={handleClearQuote}
             />

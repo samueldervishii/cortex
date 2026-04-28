@@ -190,6 +190,98 @@ class AIClient:
         logger.info(f"Anthropic response from {model_id}: {len(content)} chars")
         return content
 
+    async def summarize_conversation(
+        self,
+        model_id: str,
+        messages: list[dict],
+        previous_summary: Optional[str] = None,
+        max_tokens: int = 500,
+    ) -> str:
+        """Compress a chunk of conversation into a few bullet points.
+
+        Used when a session grows past the active-context window: instead
+        of dropping the earlier turns silently, we replace them with a
+        summary in the system prompt. ``previous_summary`` lets us extend
+        an existing summary rather than re-summarizing from scratch each
+        time the user keeps chatting.
+
+        Failures are non-fatal — the caller falls back to the plain
+        truncation notice.
+        """
+        if not messages:
+            return previous_summary or ""
+
+        system_prompt = (
+            "You compress conversation history. Given a chat between a user "
+            "and an assistant, produce a compact summary capturing: the "
+            "user's overall goal, key facts established, decisions made, and "
+            "any open questions. Use 4-8 short bullet points. Be specific "
+            "(names, numbers, file references) and skip pleasantries. Output "
+            "ONLY the bullet list, no preamble."
+        )
+
+        # Per-message truncation keeps the input bounded even when the
+        # caller hands us a long stretch of verbose turns. Content may be
+        # a plain string OR an Anthropic block list (when the turn had
+        # an image attachment) — flatten to a textual representation.
+        def _flatten(content) -> str:
+            if isinstance(content, list):
+                parts: list[str] = []
+                for block in content:
+                    btype = block.get("type") if isinstance(block, dict) else None
+                    if btype == "text":
+                        parts.append(str(block.get("text") or ""))
+                    elif btype == "image":
+                        parts.append("[image attachment]")
+                return "\n".join(p for p in parts if p)
+            return str(content or "")
+
+        rendered = []
+        for msg in messages:
+            role = msg.get("role", "")
+            content = _flatten(msg.get("content")).strip()
+            if not role or not content:
+                continue
+            if len(content) > 2000:
+                content = content[:2000] + " ..."
+            label = "User" if role == "user" else "Assistant"
+            rendered.append(f"{label}: {content}")
+        joined = "\n\n".join(rendered)
+
+        if previous_summary:
+            prompt = (
+                "Earlier summary of the conversation so far:\n"
+                f"{previous_summary.strip()}\n\n"
+                "Additional turns to incorporate:\n"
+                f"{joined}\n\n"
+                "Produce an updated combined summary in the same format."
+            )
+        else:
+            prompt = (
+                "Conversation to summarize:\n\n"
+                f"{joined}\n\n"
+                "Produce the summary now."
+            )
+
+        try:
+            raw = await self.chat(
+                model_id=model_id,
+                prompt=prompt,
+                system_prompt=system_prompt,
+                max_tokens=max_tokens,
+                temperature=0.2,
+            )
+        except Exception as e:
+            logger.warning(f"Conversation summarization failed: {e}")
+            return previous_summary or ""
+
+        text = (raw or "").strip()
+        # The chat() call's circuit-breaker fallback returns a sentinel
+        # string instead of raising; treat that as a soft failure.
+        if not text or text.lower().startswith("service temporarily unavailable"):
+            return previous_summary or ""
+        return text
+
     async def generate_session_title(
         self, question: str, answer: str, model_id: str
     ) -> str:

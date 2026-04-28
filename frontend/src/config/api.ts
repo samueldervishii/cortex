@@ -48,8 +48,7 @@ apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 let refreshPromise: Promise<string> | null = null
 
 const hasWebLocks =
-  typeof navigator !== 'undefined' &&
-  typeof (navigator as any).locks?.request === 'function'
+  typeof navigator !== 'undefined' && typeof (navigator as any).locks?.request === 'function'
 
 async function performRefresh(): Promise<string> {
   // Snapshot the access token we know about. If after winning the lock

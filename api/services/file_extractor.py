@@ -17,14 +17,77 @@ MAX_PDF_PAGES = 500
 MAX_DOCX_UNCOMPRESSED = 50 * 1024 * 1024  # 50 MB uncompressed ceiling
 MAX_DOCX_FILES = 500  # max entries inside the DOCX zip
 
-ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md", ".csv"}
+ALLOWED_EXTENSIONS = {
+    ".pdf", ".docx", ".txt", ".md", ".csv",
+    # Images for vision-capable models
+    ".png", ".jpg", ".jpeg", ".gif", ".webp",
+}
 ALLOWED_MIME_TYPES = {
     "application/pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "text/plain",
     "text/markdown",
     "text/csv",
+    "image/png",
+    "image/jpeg",
+    "image/jpg",
+    "image/gif",
+    "image/webp",
 }
+
+# Image-specific subset, used by callers that need to special-case the
+# vision flow (skip text extraction, base64 the bytes directly into the
+# Anthropic content block, etc).
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+IMAGE_MIME_TYPES = {
+    "image/png",
+    "image/jpeg",
+    "image/jpg",
+    "image/gif",
+    "image/webp",
+}
+
+# Max image dimension: keep prompts cheap and within Anthropic's 8000px
+# guideline. Images larger than this are downscaled before sending.
+MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB raw bytes ceiling for vision uploads
+
+
+def is_image_file(filename: str, content_type: str = "") -> bool:
+    """True if the filename or MIME type identifies an image.
+
+    Either input being recognised is sufficient — we don't require both
+    because browsers occasionally send ``application/octet-stream`` for
+    drag-and-dropped images.
+    """
+    import os
+    ext = os.path.splitext(filename or "")[1].lower()
+    if ext in IMAGE_EXTENSIONS:
+        return True
+    return (content_type or "").lower() in IMAGE_MIME_TYPES
+
+
+def normalize_image_media_type(content_type: str, filename: str = "") -> str:
+    """Return an Anthropic-compatible ``image/*`` MIME type.
+
+    Anthropic vision blocks reject ``image/jpg`` (must be ``image/jpeg``)
+    and reject ``application/octet-stream``, so we normalize both here.
+    """
+    import os
+    ct = (content_type or "").lower().strip()
+    if ct in {"image/png", "image/jpeg", "image/gif", "image/webp"}:
+        return ct
+    if ct == "image/jpg":
+        return "image/jpeg"
+    ext = os.path.splitext(filename or "")[1].lower()
+    if ext == ".png":
+        return "image/png"
+    if ext in (".jpg", ".jpeg"):
+        return "image/jpeg"
+    if ext == ".gif":
+        return "image/gif"
+    if ext == ".webp":
+        return "image/webp"
+    return "image/jpeg"
 
 
 def validate_file(filename: str, content_type: str, size: int, content: bytes = b"") -> None:
@@ -41,11 +104,22 @@ def validate_file(filename: str, content_type: str, size: int, content: bytes = 
             f"Unsupported content type '{content_type}'. "
             f"Allowed: {', '.join(sorted(ALLOWED_MIME_TYPES))}"
         )
-    if size > MAX_FILE_SIZE:
-        raise ValueError(f"File too large ({size / 1024 / 1024:.1f}MB). Maximum is 10MB.")
+    # Images get a tighter size cap because the bytes ride along inline
+    # in every subsequent prompt (Anthropic vision messages embed the
+    # base64 directly in the content block).
+    is_image = ext in IMAGE_EXTENSIONS
+    cap = MAX_IMAGE_SIZE if is_image else MAX_FILE_SIZE
+    if size > cap:
+        raise ValueError(
+            f"File too large ({size / 1024 / 1024:.1f}MB). "
+            f"Maximum is {cap / 1024 / 1024:.0f}MB"
+            f"{' for images' if is_image else ''}."
+        )
 
     if content and ext in (".pdf", ".docx"):
         _validate_magic_bytes(content, ext)
+    if content and is_image:
+        _validate_image_magic_bytes(content, ext)
 
 
 def _validate_magic_bytes(content: bytes, ext: str) -> None:
@@ -59,8 +133,31 @@ def _validate_magic_bytes(content: bytes, ext: str) -> None:
             raise ValueError("File content does not match DOCX format")
 
 
+def _validate_image_magic_bytes(content: bytes, ext: str) -> None:
+    """Verify image content matches its extension using magic bytes."""
+    if not content or len(content) < 12:
+        raise ValueError("Image file is too small to be valid")
+    head = content[:12]
+    # PNG: 89 50 4E 47 0D 0A 1A 0A
+    # JPEG: FF D8 FF
+    # GIF: 47 49 46 38 (GIF8)
+    # WEBP: 'RIFF' .... 'WEBP'
+    if ext == ".png" and not head.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise ValueError("File content does not match PNG format")
+    if ext in (".jpg", ".jpeg") and not head.startswith(b"\xff\xd8\xff"):
+        raise ValueError("File content does not match JPEG format")
+    if ext == ".gif" and not (head.startswith(b"GIF87a") or head.startswith(b"GIF89a")):
+        raise ValueError("File content does not match GIF format")
+    if ext == ".webp" and not (head[0:4] == b"RIFF" and head[8:12] == b"WEBP"):
+        raise ValueError("File content does not match WebP format")
+
+
 def extract_text(filename: str, content: bytes) -> str:
-    """Extract text from file content based on extension."""
+    """Extract text from file content based on extension.
+
+    Images return an empty string — they're forwarded to the model as
+    a vision content block instead of OCR'd text.
+    """
     import os
 
     ext = os.path.splitext(filename)[1].lower()
@@ -71,6 +168,8 @@ def extract_text(filename: str, content: bytes) -> str:
         return _extract_docx(content)
     elif ext in (".txt", ".md", ".csv"):
         return _extract_text(content)
+    elif ext in IMAGE_EXTENSIONS:
+        return ""
     else:
         raise ValueError(f"Unsupported file type: {ext}")
 

@@ -17,6 +17,7 @@ interface ChatMessage {
   streaming?: boolean
   file?: FileInfo
   isArtifact?: boolean
+  wasCancelled?: boolean
 }
 
 interface ChatMessagesProps {
@@ -31,6 +32,9 @@ interface ChatMessagesProps {
   sessionId?: string
   onBranch?: (messageIndex: number) => void
   onOpenArtifact?: (messageIndex: number) => void
+  onStopStreaming?: () => void
+  onEditMessage?: (messageIndex: number, newContent: string) => Promise<void> | void
+  onRegenerateMessage?: (messageIndex: number) => Promise<void> | void
   quotedText?: string
   onClearQuote?: () => void
 }
@@ -47,6 +51,9 @@ function ChatMessages({
   sessionId,
   onBranch,
   onOpenArtifact,
+  onStopStreaming,
+  onEditMessage,
+  onRegenerateMessage,
   quotedText,
   onClearQuote,
 }: ChatMessagesProps) {
@@ -104,17 +111,46 @@ function ChatMessages({
     }
   }
 
-  // Stable onBranch ref — the prop from App changes identity on every
-  // keystroke (because its dependencies inside useCouncil aren't memoized),
+  // Stable callback refs — the props from App change identity on every
+  // keystroke (because their dependencies inside useCouncil aren't memoized),
   // which would invalidate the useMemo below and re-parse every message's
-  // markdown on every character typed. This pattern keeps the identity
-  // pinned while still calling the latest callback when invoked.
+  // markdown on every character typed. This pattern keeps the identities
+  // pinned while still calling the latest callbacks when invoked.
   const onBranchRef = useRef(onBranch)
   onBranchRef.current = onBranch
+  const onEditRef = useRef(onEditMessage)
+  onEditRef.current = onEditMessage
+  const onRegenerateRef = useRef(onRegenerateMessage)
+  onRegenerateRef.current = onRegenerateMessage
+
   const stableOnBranch = useMemo<typeof onBranch>(
     () => (readOnly ? undefined : (messageIndex: number) => onBranchRef.current?.(messageIndex)),
     [readOnly]
   )
+  const stableOnEdit = useMemo<typeof onEditMessage>(
+    () =>
+      readOnly
+        ? undefined
+        : (messageIndex: number, newContent: string) =>
+            onEditRef.current?.(messageIndex, newContent),
+    [readOnly]
+  )
+  const stableOnRegenerate = useMemo<typeof onRegenerateMessage>(
+    () =>
+      readOnly ? undefined : (messageIndex: number) => onRegenerateRef.current?.(messageIndex),
+    [readOnly]
+  )
+
+  // Index of the most recent streaming assistant message, if any.
+  // Receives the live ``currentStep`` so the status renders inline
+  // beside the model name instead of as a centered floating block.
+  const lastStreamingIdx = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const m = messages[i]
+      if (m.role === 'assistant' && m.streaming) return i
+    }
+    return -1
+  }, [messages])
 
   // Memoize the rendered message list so it doesn't re-parse markdown on
   // every keystroke in the input. Without this, typing one character
@@ -130,18 +166,35 @@ function ChatMessages({
           modelName={msg.modelName}
           responseTime={msg.responseTime}
           streaming={msg.streaming}
+          streamingStep={
+            idx === lastStreamingIdx && loading && !msg.content ? currentStep : undefined
+          }
+          wasCancelled={msg.wasCancelled}
           file={msg.file}
           isArtifact={msg.isArtifact}
           messageIndex={idx}
           sessionId={sessionId}
           onBranch={stableOnBranch}
+          onEdit={stableOnEdit}
+          onRegenerate={stableOnRegenerate}
           citations={(msg as any).citations}
           userAvatar={userAvatar}
           userInitial={userInitial}
           userDisplayName="You"
         />
       )),
-    [messages, sessionId, stableOnBranch, userAvatar, userInitial]
+    [
+      messages,
+      sessionId,
+      stableOnBranch,
+      stableOnEdit,
+      stableOnRegenerate,
+      userAvatar,
+      userInitial,
+      lastStreamingIdx,
+      loading,
+      currentStep,
+    ]
   )
 
   return (
@@ -149,16 +202,13 @@ function ChatMessages({
       <div className="chat-messages" ref={chatContainerRef} onScroll={handleScroll}>
         {renderedMessages}
 
-        {loading && currentStep && (
-          <div className="thinking-indicator">
-            <div className="thinking-dots">
-              <span />
-              <span />
-              <span />
-            </div>
-            <span className="thinking-text">{currentStep}</span>
-          </div>
-        )}
+        {/* The streaming-status text lives inline next to the model
+            name on the streaming assistant bubble (see ``streamingStep``
+            above). The brief moment before that bubble exists is
+            covered by the floating "Stop generating" button below,
+            so we no longer render a separate centered indicator —
+            it duplicated the inline pill once the bubble appeared
+            and looked detached from the conversation. */}
 
         {!loading && sessionId && messages.some((m) => m.isArtifact) && (
           <div className="session-actions">
@@ -187,6 +237,22 @@ function ChatMessages({
 
         <div ref={messagesEndRef} />
       </div>
+
+      {loading && onStopStreaming && !readOnly && (
+        <div className="stop-stream-wrap">
+          <button
+            type="button"
+            className="stop-stream-btn"
+            onClick={onStopStreaming}
+            title="Stop generating"
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <rect x="6" y="6" width="12" height="12" rx="1.5" />
+            </svg>
+            <span>Stop generating</span>
+          </button>
+        </div>
+      )}
 
       {showScrollBtn && (
         <button className="scroll-to-bottom" onClick={scrollToBottom} title="Scroll to bottom">

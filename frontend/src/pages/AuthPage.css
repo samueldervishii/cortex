@@ -728,6 +728,47 @@
   color: var(--accent-dark);
 }
 
+/* Forgot-password link sits flush right under the password field. */
+.auth-forgot-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -4px;
+}
+.auth-forgot-link {
+  font-size: 13px;
+  text-decoration: none;
+}
+.auth-forgot-link:hover {
+  text-decoration: underline;
+}
+
+/* Confirmation copy used by the forgot/reset success states. */
+.auth-confirmation {
+  margin: 0;
+  line-height: 1.5;
+  color: var(--ink, #222);
+}
+.auth-confirmation-secondary {
+  margin: 0;
+  line-height: 1.5;
+  font-size: 13px;
+  color: var(--muted, #666);
+}
+.auth-submit-secondary {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  text-align: center;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.auth-submit-secondary:hover {
+  background: var(--accent);
+  color: var(--paper);
+}
+
 .auth-right {
   background: var(--paper-2);
   border-left: 1px solid var(--rule);

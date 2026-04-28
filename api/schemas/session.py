@@ -65,6 +65,18 @@ class ChatSession(BaseModel):
         default=False,
         description="Ghost/temporary chat: persisted but hidden from history listings",
     )
+    # Long-conversation summary cache. Generated lazily when a turn would
+    # otherwise drop earlier messages off the context window. ``summary_through``
+    # is the (exclusive) message index this summary covers — so on the next
+    # turn we know whether to reuse or refresh it.
+    conversation_summary: Optional[str] = Field(
+        default=None,
+        description="Cached summary of earlier-conversation turns that fall outside the active context window",
+    )
+    summary_through: int = Field(
+        default=0,
+        description="Number of leading messages already represented by ``conversation_summary``",
+    )
 
 
 class QueryRequest(BaseModel):
@@ -178,6 +190,22 @@ class BranchRequest(BaseModel):
     """Request to branch a session from a specific message."""
 
     message_index: int = Field(..., ge=0, description="Branch after this message index (inclusive)")
+
+
+class EditMessageRequest(BaseModel):
+    """Request to edit a user message and truncate everything after it.
+
+    The caller is expected to call ``/stream`` afterwards to produce a
+    fresh assistant reply — we don't auto-stream so the client retains
+    full control of model selection and abort behaviour.
+    """
+
+    content: str = Field(
+        ...,
+        min_length=1,
+        max_length=10000,
+        description="New content for the user message",
+    )
 
 
 class ShareResponse(BaseModel):

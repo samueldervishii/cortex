@@ -8943,6 +8943,67 @@ a.sidebar-account-item {
   background: var(--paper-2);
 }
 
+/* While the lazy markdown bundle is loading, fall back to preserved
+ * whitespace text so the assistant's reply is still readable. The
+ * pre-warm in MarkdownRenderer.tsx normally lands these <pre> blocks
+ * for less than a frame on first paint. */
+.markdown-fallback-pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+/* Image thumbnail attached to a user message — clicks open full-size in a new tab. */
+.message-image-thumb {
+  display: inline-block;
+  max-width: 280px;
+  max-height: 280px;
+  border-radius: var(--radius-btn, 8px);
+  overflow: hidden;
+  border: 1px solid var(--rule, var(--border-color, #ddd));
+  background: var(--paper-2, var(--bg-primary, #f3f3f3));
+  line-height: 0;
+  transition: border-color 0.12s;
+}
+.message-image-thumb:hover {
+  border-color: var(--ink-2, var(--text-muted));
+}
+.message-image-thumb img {
+  display: block;
+  max-width: 280px;
+  max-height: 280px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+.message-image-thumb-loading {
+  width: 140px;
+  height: 96px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.message-image-thumb-spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--rule, #ddd);
+  border-top-color: var(--accent-color, #1a5c5c);
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .message-action-btn {
   color: var(--muted);
   background: transparent;
@@ -10425,9 +10486,17 @@ html[data-theme='dark'] .top-bar-model-locked {
   flex-direction: row;
   align-items: flex-start;
   gap: 12px;
-  max-width: 100%;
-  margin-left: 0;
-  margin-right: 0;
+  /* Constrain the column to a comfortable reading width and center
+     it within the chat scroller (which already sets
+     ``align-items: center``). Mirrors the layout ChatGPT uses: the
+     chat content column floats in the middle of the viewport with
+     generous breathing room on both sides on wider displays. The
+     parent ``.chat-messages`` enforces side padding for narrow
+     screens so this max-width never bumps the edge. */
+  width: 100%;
+  max-width: 768px;
+  margin-left: auto;
+  margin-right: auto;
   background: transparent;
   border: none;
   padding: 0;
@@ -10591,6 +10660,11 @@ html[data-theme='dark'] .top-bar-model-locked {
   padding: 1.5rem 2rem;
   gap: 2rem;
   background: transparent;
+  /* Match the live chat layout: column flex + ``align-items: center``
+     so each placeholder row is centered within the scroller, not
+     pinned to the left edge. The width cap below mirrors
+     ``.message.user, .message.assistant``. */
+  align-items: center;
 }
 
 .skeleton-message {
@@ -10599,8 +10673,8 @@ html[data-theme='dark'] .top-bar-model-locked {
   align-items: flex-start;
   gap: 12px;
   width: 100%;
-  max-width: 100%;
-  margin: 0;
+  max-width: 768px;
+  margin: 0 auto;
   animation: fadeIn 0.3s ease;
 }
 
@@ -11456,4 +11530,230 @@ html[data-theme='dark'] .message-content a:hover {
 /* Mobile sidebar overlay backdrop, when sidebar slides in over content */
 html[data-theme='dark'] .sidebar.expanded {
   box-shadow: 0 0 60px rgba(0, 0, 0, 0.5);
+}
+
+/* ============================================================
+   v1.1.0 — Edit / regenerate / stop UI
+   ============================================================ */
+
+/* Inline editor for user messages */
+.message-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.message-edit-textarea {
+  width: 100%;
+  min-height: 64px;
+  max-height: 320px;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+  box-sizing: border-box;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+
+.message-edit-textarea:focus {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 3px rgba(120, 90, 50, 0.15);
+}
+
+.message-edit-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.message-edit-btn {
+  padding: 0.4rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    opacity 0.15s;
+}
+
+.message-edit-btn-cancel {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.message-edit-btn-cancel:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.message-edit-btn-save {
+  background: var(--accent-color);
+  border-color: var(--accent-color);
+  color: #fff;
+}
+
+.message-edit-btn-save:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.message-edit-btn-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* "stopped" badge on cancelled assistant replies */
+.message-cancelled-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.45rem;
+  margin-left: 0.4rem;
+  border-radius: 6px;
+  background: rgba(180, 80, 60, 0.12);
+  color: rgba(150, 60, 40, 0.9);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+html[data-theme='dark'] .message-cancelled-badge {
+  background: rgba(220, 140, 110, 0.18);
+  color: rgba(230, 170, 140, 0.95);
+}
+
+/* Inline streaming-status pill: appears next to the model name on the
+   currently-streaming assistant message ("Thinking", "Searching the
+   web", etc). Replaces the older centered floating indicator so the
+   status reads naturally as part of the message header. */
+.message-streaming-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--paper-2, rgba(0, 0, 0, 0.04));
+  color: var(--muted, #6b6b6b);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  font-family: var(--font-serif, inherit);
+  white-space: nowrap;
+}
+.message-streaming-dots {
+  display: inline-flex;
+  gap: 3px;
+}
+.message-streaming-dots span {
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.5;
+  animation: msg-streaming-dot 1.1s infinite ease-in-out;
+}
+.message-streaming-dots span:nth-child(1) {
+  animation-delay: 0s;
+}
+.message-streaming-dots span:nth-child(2) {
+  animation-delay: 0.18s;
+}
+.message-streaming-dots span:nth-child(3) {
+  animation-delay: 0.36s;
+}
+@keyframes msg-streaming-dot {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+html[data-theme='dark'] .message-streaming-step {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Floating "Stop generating" pill shown while a stream is in flight.
+   Sits centered ABOVE the chat input (with a comfortable gap) so it
+   never overlaps the input border. The wrap itself doesn't capture
+   pointer events — only the inner button does — so clicks on empty
+   space around the pill still pass through to whatever is underneath. */
+.stop-stream-wrap {
+  position: absolute;
+  /* Input row sits at the bottom and is roughly 80–96px tall depending
+     on whether the helper hint is shown; 150px keeps the pill clear
+     of both the input border and the "Étude can make mistakes…"
+     subtitle line below it. */
+  bottom: 150px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 11;
+  pointer-events: none;
+}
+
+@media (max-width: 768px) {
+  .stop-stream-wrap {
+    bottom: 130px;
+  }
+}
+
+.stop-stream-btn {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+  transition:
+    background 0.15s,
+    color 0.15s,
+    transform 0.1s,
+    box-shadow 0.15s;
+}
+
+.stop-stream-btn:hover {
+  background: var(--bg-hover);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+}
+
+.stop-stream-btn:active {
+  transform: translateY(1px);
+}
+
+.stop-stream-btn svg {
+  color: rgba(180, 80, 60, 0.9);
+}
+
+html[data-theme='dark'] .stop-stream-btn {
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+}
+
+html[data-theme='dark'] .stop-stream-btn svg {
+  color: rgba(230, 140, 110, 0.95);
 }

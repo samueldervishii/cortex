@@ -8,8 +8,18 @@ const ALLOWED_TYPES = [
   'text/plain',
   'text/markdown',
   'text/csv',
+  // Vision uploads — model decides what to do with them, no OCR.
+  'image/png',
+  'image/jpeg',
+  'image/jpg',
+  'image/gif',
+  'image/webp',
 ]
-const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
+const ALLOWED_EXT_RE = /\.(pdf|docx|txt|md|csv|png|jpe?g|gif|webp)$/i
+const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'])
+const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp)$/i
+const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB documents
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024 // 5MB images (matches backend cap)
 
 interface ChatInputProps {
   value: string
@@ -77,12 +87,18 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       setFileError('')
       if (!file) return
 
-      if (!ALLOWED_TYPES.includes(file.type) && !file.name.match(/\.(pdf|docx|txt|md|csv)$/i)) {
-        setFileError('Unsupported file type. Use PDF, DOCX, TXT, MD, or CSV.')
+      const isImage = IMAGE_TYPES.has(file.type) || IMAGE_EXT_RE.test(file.name)
+
+      if (!ALLOWED_TYPES.includes(file.type) && !ALLOWED_EXT_RE.test(file.name)) {
+        setFileError('Unsupported file type. Use PDF, DOCX, TXT, MD, CSV, PNG, JPG, GIF, or WebP.')
         return
       }
-      if (file.size > MAX_FILE_SIZE) {
-        setFileError(`File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Max 10MB.`)
+      const cap = isImage ? MAX_IMAGE_SIZE : MAX_FILE_SIZE
+      if (file.size > cap) {
+        const capMb = (cap / 1024 / 1024).toFixed(0)
+        setFileError(
+          `File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Max ${capMb}MB${isImage ? ' for images' : ''}.`
+        )
         return
       }
 
@@ -229,7 +245,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
                 className={`attach-btn ${centered ? 'attach-btn-centered' : ''}`}
                 onClick={() => fileInputRef.current?.click()}
                 disabled={disabled}
-                title="Attach file (PDF, DOCX, TXT)"
+                title="Attach file or image (PDF, DOCX, TXT, MD, CSV, PNG, JPG, GIF, WebP)"
               >
                 <Paperclip size={18} weight="regular" />
                 {centered && <span>Attach file</span>}
@@ -238,7 +254,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,.docx,.txt,.md,.csv"
+              accept=".pdf,.docx,.txt,.md,.csv,.png,.jpg,.jpeg,.gif,.webp,image/*"
               onChange={handleFileSelect}
               hidden
             />

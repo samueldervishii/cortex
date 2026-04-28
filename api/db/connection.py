@@ -258,6 +258,23 @@ async def ensure_indexes(database: AsyncIOMotorDatabase) -> None:
         expireAfterSeconds=25 * 60 * 60, name="idx_user_usage_ttl",
     )
 
+    # Password reset tokens: lookups happen on the SHA-256 hash of the
+    # token, and a TTL on ``expires_at`` keeps used/expired rows from
+    # accumulating forever.
+    password_resets = database["password_resets"]
+    await _create_index(
+        password_resets, [("token_hash", ASCENDING)],
+        unique=True, name="idx_pwreset_token_hash",
+    )
+    await _create_index(
+        password_resets, [("user_id", ASCENDING), ("created_at", ASCENDING)],
+        name="idx_pwreset_user_created",
+    )
+    await _create_index(
+        password_resets, [("expires_at", ASCENDING)],
+        expireAfterSeconds=0, name="idx_pwreset_ttl",
+    )
+
     if critical_failures:
         raise RuntimeError(
             f"{critical_failures} critical index(es) failed to create. "

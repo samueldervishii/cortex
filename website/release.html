@@ -206,12 +206,114 @@
       </p>
 
       <div class="release-list">
-        <!-- v1.0.1 — Latest, stable -->
-        <article class="release-card is-latest" id="v1-0-1">
+        <!-- v1.1.0 — Latest, stable -->
+        <article class="release-card is-latest" id="v1-1-0">
+          <header class="release-head">
+            <h2 class="release-version">v1.1.0</h2>
+            <span class="release-date">April 28, 2026</span>
+            <span class="release-tag latest">Latest</span>
+            <span class="release-tag stable">Stable</span>
+          </header>
+          <p class="release-summary">
+            A feature release. You can now edit your messages, regenerate
+            assistant replies, stop a response mid-stream, attach images for
+            the model to look at, and reset a forgotten password by email.
+            Behind the scenes, long conversations stay coherent past the
+            context window, and uploads can optionally live in S3-compatible
+            object storage instead of MongoDB.
+          </p>
+
+          <p class="release-section-title">Conversation controls</p>
+          <ul>
+            <li>
+              <strong>Edit your messages.</strong> Hover any message you sent
+              and click the pencil — the conversation truncates at that point
+              and the assistant replies again from the new wording.
+            </li>
+            <li>
+              <strong>Regenerate replies.</strong> Hover an assistant reply
+              and click the regenerate button to roll a new answer to the
+              same prompt.
+            </li>
+            <li>
+              <strong>Stop generating.</strong> A floating "Stop" button is
+              now shown while a response is streaming; it cancels the
+              backend stream cooperatively, releases reserved tokens, and
+              tags the partial response as "stopped".
+            </li>
+          </ul>
+
+          <p class="release-section-title">Vision / images</p>
+          <ul>
+            <li>
+              <strong>Image input.</strong> Attach PNG, JPG, GIF, or WebP
+              files (up to 5&nbsp;MB) and the model can see and describe
+              them. Images are sent as native vision content blocks rather
+              than passed through OCR — the model decides what to do with
+              them.
+            </li>
+            <li>
+              Magic-byte validation rejects mislabelled files at upload time
+              instead of feeding garbage to the model.
+            </li>
+          </ul>
+
+          <p class="release-section-title">Long conversations</p>
+          <ul>
+            <li>
+              <strong>Smart history truncation.</strong> When a chat grows
+              past the active context window, the older middle is now
+              compressed into a short bullet-point summary that's injected
+              into the system prompt — the model still "remembers" the goal
+              and key facts instead of dropping them on the floor.
+            </li>
+            <li>
+              The summary is cached on the session and extended incrementally
+              as the conversation continues, so we don't re-summarize
+              everything on every turn.
+            </li>
+          </ul>
+
+          <p class="release-section-title">Account management</p>
+          <ul>
+            <li>
+              <strong>Forgot-password flow.</strong> A "Forgot your password?"
+              link on the login screen sends a single-use, 30-minute reset
+              link to the registered email. Tokens are stored hashed
+              server-side, expire on a TTL index, and a successful reset
+              revokes every existing session for the account.
+            </li>
+            <li>
+              SMTP is environment-gated: when it's not configured the
+              endpoint logs the reset link instead of crashing, so dev
+              environments still work without a real mail server.
+            </li>
+          </ul>
+
+          <p class="release-section-title">Storage &amp; performance</p>
+          <ul>
+            <li>
+              <strong>Optional S3-compatible object storage.</strong> Setting
+              <code>S3_BUCKET</code> (and friends) routes file blobs to AWS
+              S3, Cloudflare R2, Backblaze B2, MinIO, etc. — keeping MongoDB
+              lean. When unset, uploads keep using the existing in-Mongo
+              storage so existing deployments are unaffected.
+            </li>
+            <li>
+              <strong>Lazy-loaded markdown renderer.</strong> The
+              <code>react-markdown</code> bundle (≈120&nbsp;KB) is now split
+              out of the main chunk and loaded in the background, so the
+              initial paint of the login screen and chat UI is noticeably
+              faster on slow connections.
+            </li>
+          </ul>
+        </article>
+
+        <!-- v1.0.1 -->
+        <article class="release-card" id="v1-0-1">
           <header class="release-head">
             <h2 class="release-version">v1.0.1</h2>
             <span class="release-date">April 28, 2026</span>
-            <span class="release-tag latest">Latest</span>
             <span class="release-tag stable">Stable</span>
           </header>
           <p class="release-summary">
