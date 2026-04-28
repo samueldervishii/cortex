@@ -71,6 +71,12 @@ class Settings(BaseSettings):
     # Public base URL the user clicks on in the reset email — typically
     # the frontend's URL so the link lands on the reset-password page.
     frontend_public_url: str = ""
+    # Opt-in: when SMTP isn't configured, log the would-be email body
+    # (including the reset link) to stderr so local dev can still copy
+    # the link without a mail server. Off by default — the link is a
+    # bearer credential and we don't want it ending up in shipped logs
+    # just because ``ENVIRONMENT`` was left at the default.
+    log_unsent_email_bodies: bool = False
 
     class Config:
         env_file = ".env"
